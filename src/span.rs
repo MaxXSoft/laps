@@ -70,8 +70,8 @@ impl<T> From<Error> for Result<T, Error> {
 /// Used to print error messages.
 #[derive(Clone, Copy)]
 pub struct Span {
-  start: Pos,
-  end: Pos,
+  start: Location,
+  end: Location,
 }
 
 /// Gets the string of the given line.
@@ -118,8 +118,8 @@ impl Span {
     });
   }
 
-  /// Creates a new span from [`Pos`].
-  pub fn new(start: Pos) -> Self {
+  /// Creates a new span from [`Location`].
+  pub fn new(start: Location) -> Self {
     Self { start, end: start }
   }
 
@@ -280,20 +280,20 @@ impl Span {
   }
 
   /// Converts the current span into a new one
-  /// where the end position has been updated.
-  pub fn into_updated(self, end: Pos) -> Self {
+  /// where the end location has been updated.
+  pub fn into_updated(self, end: Location) -> Self {
     Self {
       start: self.start,
       end,
     }
   }
 
-  /// Updates the end position.
-  pub fn update(&mut self, end: Pos) {
+  /// Updates the end location.
+  pub fn update(&mut self, end: Location) {
     self.end = end;
   }
 
-  /// Converts the current span into a new one where the end position
+  /// Converts the current span into a new one where the end location
   /// has been updated according to another span.
   pub fn into_updated_span(self, span: Span) -> Self {
     Self {
@@ -302,7 +302,7 @@ impl Span {
     }
   }
 
-  /// Updates the end position according to another span.
+  /// Updates the end location according to another span.
   pub fn update_span(&mut self, span: Span) {
     self.end = span.end;
   }
@@ -409,7 +409,7 @@ impl Span {
 impl Default for Span {
   /// Creates a span with the default source code locations.
   fn default() -> Self {
-    Self::new(Pos::default())
+    Self::new(Location::default())
   }
 }
 
@@ -421,12 +421,12 @@ impl fmt::Debug for Span {
 
 /// A line-column mark.
 #[derive(Clone, Copy)]
-pub struct Pos {
+pub struct Location {
   line: u32,
   col: u32,
 }
 
-impl Pos {
+impl Location {
   /// Creates a new mark.
   pub fn new() -> Self {
     Self { line: 1, col: 0 }
@@ -443,13 +443,13 @@ impl Pos {
   }
 }
 
-impl Default for Pos {
+impl Default for Location {
   fn default() -> Self {
     Self::new()
   }
 }
 
-impl fmt::Display for Pos {
+impl fmt::Display for Location {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
     write!(f, "{}:{}", self.line, self.col)
   }
@@ -543,27 +543,27 @@ mod test {
   use super::*;
 
   #[test]
-  fn pos_update() {
-    let mut pos = Pos::new();
-    assert_eq!(format!("{pos}"), "1:0");
-    pos.update(' ');
-    pos.update(' ');
-    assert_eq!(format!("{pos}"), "1:2");
-    pos.update('\n');
-    assert_eq!(format!("{pos}"), "2:0");
-    pos.update('\n');
-    pos.update('\n');
-    assert_eq!(format!("{pos}"), "4:0");
+  fn location_update() {
+    let mut location = Location::new();
+    assert_eq!(format!("{location}"), "1:0");
+    location.update(' ');
+    location.update(' ');
+    assert_eq!(format!("{location}"), "1:2");
+    location.update('\n');
+    assert_eq!(format!("{location}"), "2:0");
+    location.update('\n');
+    location.update('\n');
+    assert_eq!(format!("{location}"), "4:0");
   }
 
   #[test]
   fn span_update() {
-    let mut pos = Pos::new();
-    pos.update(' ');
-    let sp1 = Span::new(pos);
-    pos.update(' ');
-    pos.update(' ');
-    let sp2 = sp1.into_updated(pos);
+    let mut location = Location::new();
+    location.update(' ');
+    let sp1 = Span::new(location);
+    location.update(' ');
+    location.update(' ');
+    let sp2 = sp1.into_updated(location);
     assert!(sp1.is_in_same_line_as(&sp2));
     log_error!(sp2, "test error");
     log_warning!(sp2, "test warning");
@@ -571,8 +571,8 @@ mod test {
     Span::log_summary();
     assert_eq!(format!("{}", sp2.start), "1:1");
     assert_eq!(format!("{}", sp2.end), "1:3");
-    let mut sp = Span::new(Pos { line: 10, col: 10 });
-    sp.update(Pos { line: 10, col: 15 });
+    let mut sp = Span::new(Location { line: 10, col: 10 });
+    sp.update(Location { line: 10, col: 15 });
     assert!(!sp2.is_in_same_line_as(&sp));
     let sp3 = sp2.into_updated_span(sp);
     assert!(sp2.is_in_same_line_as(&sp3));
