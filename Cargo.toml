@@ -5,4 +5,9 @@ authors = ["MaxXing <x@MaxXSoft.net>"]
 edition = "2021"
 description = "Lexer and parser collections."
 
-[dependencies]
+[features]
+# Disable the logger, returns error messages as strings.
+no-logger = []
+
+[target.'cfg(not(feature = "no-logger"))'.dependencies]
+colored = "2.0.0"
