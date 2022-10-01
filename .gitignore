@@ -1,2 +1,12 @@
+# macOS
+*.DS_Store
+
+# Cargo
 /target
 /Cargo.lock
+
+# VS Code
+.vscode
+
+# Debugging
+debug
