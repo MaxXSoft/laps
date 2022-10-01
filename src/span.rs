@@ -79,11 +79,11 @@ pub struct Span {
 macro_rules! get_line_str {
   ($line:expr) => {
     $line
-      .map_or("".into(), |r| r.unwrap())
+      .map_or_else(String::new, |r| r.unwrap())
       .replace('\t', &format!("{:w$}", "", w = Span::TAB_WIDTH))
   };
   ($line:expr, $col:expr) => {{
-    let line = $line.map_or("".into(), |r| r.unwrap());
+    let line = $line.map_or_else(String::new, |r| r.unwrap());
     let col = $col as usize;
     let tabs = (&line[..col]).matches('\t').count();
     (
@@ -92,7 +92,7 @@ macro_rules! get_line_str {
     )
   }};
   ($line:expr, $col1:expr, $col2:expr) => {{
-    let line = $line.map_or("".into(), |r| r.unwrap());
+    let line = $line.map_or_else(String::new, |r| r.unwrap());
     let col1 = $col1 as usize;
     let col2 = $col2 as usize;
     let tabs1 = (&line[..col1]).matches('\t').count();
@@ -139,7 +139,7 @@ impl Span {
   pub fn log_raw_error(args: Arguments) -> Error {
     // update error number
     Self::STATE.with(|gs| gs.borrow_mut().err_num += 1);
-    Error::Normal(format!("{}", args))
+    Error::Normal(format!("{args}"))
   }
 
   /// Logs normal error with no span provided.
@@ -149,7 +149,7 @@ impl Span {
       // update error number
       gs.borrow_mut().err_num += 1;
       // print message to stderr
-      eprintln!("{}: {}", "error".bright_red(), args);
+      eprintln!("{}: {args}", "error".bright_red());
     });
     Error::Normal
   }
@@ -159,7 +159,7 @@ impl Span {
   pub fn log_raw_fatal_error(args: Arguments) -> Error {
     // update error number
     Self::STATE.with(|gs| gs.borrow_mut().err_num += 1);
-    Error::Fatal(format!("{}", args))
+    Error::Fatal(format!("{args}"))
   }
 
   /// Logs fatal error with no span provided.
@@ -169,7 +169,7 @@ impl Span {
       // update error number
       gs.borrow_mut().err_num += 1;
       // print message to stderr
-      eprintln!("{}: {}", "error".bright_red(), args);
+      eprintln!("{}: {args}", "error".bright_red());
     });
     Error::Fatal
   }
@@ -188,17 +188,17 @@ impl Span {
       // update warning number
       gs.borrow_mut().warn_num += 1;
       // print message to stderr
-      eprintln!("{}: {}", "warning".yellow(), args);
+      eprintln!("{}: {args}", "warning".yellow());
     });
   }
 
-  /// Logs global information (total error/warning number).
+  /// Logs summary information (total error/warning number).
   #[cfg(feature = "no-logger")]
-  pub fn log_global() {}
+  pub fn log_summary() {}
 
-  /// Logs global information (total error/warning number).
+  /// Logs summary information (total error/warning number).
   #[cfg(not(feature = "no-logger"))]
-  pub fn log_global() {
+  pub fn log_summary() {
     Self::STATE.with(|gs| {
       let gs = gs.borrow();
       let mut msg = String::new();
@@ -315,13 +315,13 @@ impl Span {
   /// Returns the error message.
   #[cfg(feature = "no-logger")]
   fn error_message(&self, args: Arguments) -> String {
-    Self::STATE.with(|gs| format!("{}:{}: {}", gs.borrow().file, self.start, args))
+    Self::STATE.with(|gs| format!("{}:{}: {args}", gs.borrow().file, self.start))
   }
 
   /// Prints the file information.
   #[cfg(not(feature = "no-logger"))]
   fn print_file_info(&self, file: &FileType, color: Color) {
-    eprintln!("  {} {}:{}", "at".blue(), file, self.start);
+    eprintln!("  {} {file}:{}", "at".blue(), self.start);
     if self.start.col > 0 && self.end.col > 0 {
       if let FileType::File(path) = file {
         // open file and get lines
@@ -351,11 +351,11 @@ impl Span {
     let leading = c1 - 1;
     let len = c2 - c1 + 1;
     // print the current line to stderr
-    eprintln!("{:w$} {}", "", "|".blue(), w = width);
-    eprint!("{} ", format!("{:w$}", line_num, w = width).blue());
+    eprintln!("{:width$} {}", "", "|".blue());
+    eprint!("{} ", format!("{:width$}", line_num).blue());
     eprintln!("{} {}", "|".blue(), line);
-    eprint!("{:w$} {} {:l$}", "", "|".blue(), "", w = width, l = leading);
-    eprintln!("{}", format!("{:^>w$}", "", w = len).color(color));
+    eprint!("{:width$} {} {:leading$}", "", "|".blue(), "");
+    eprintln!("{}", format!("{:^>len$}", "").color(color));
   }
 
   /// Prints the multi-line information.
@@ -372,37 +372,37 @@ impl Span {
     let line_num = self.start.line as usize;
     let mut lines = lines.skip(line_num - 1);
     let (line, start) = get_line_str!(lines.next(), self.start.col);
-    eprintln!("{:w$} {}", "", "|".blue(), w = width);
-    eprint!("{} ", format!("{:w$}", line_num, w = width).blue());
-    eprintln!("{}   {}", "|".blue(), line);
-    eprint!("{:w$} {}  ", "", "|".blue(), w = width);
-    eprintln!("{}", format!("{:_>w$}^", "", w = start).color(color));
+    eprintln!("{:width$} {}", "", "|".blue());
+    eprint!("{} ", format!("{:width$}", line_num).blue());
+    eprintln!("{}   {line}", "|".blue());
+    eprint!("{:width$} {}  ", "", "|".blue());
+    eprintln!("{}", format!("{:_>start$}^", "").color(color));
     // print the middle lines to stderr
     let mid_lines = (self.end.line - self.start.line) as usize - 1;
     if mid_lines <= 4 {
       for i in 0..mid_lines {
         let line = get_line_str!(lines.next());
-        eprint!("{} ", format!("{:w$}", line_num + i + 1, w = width).blue());
-        eprintln!("{} {} {}", "|".blue(), "|".color(color), line);
+        eprint!("{} ", format!("{:width$}", line_num + i + 1).blue());
+        eprintln!("{} {} {line}", "|".blue(), "|".color(color));
       }
     } else {
       for i in 0..2usize {
         let line = get_line_str!(lines.next());
-        eprint!("{} ", format!("{:w$}", line_num + i + 1, w = width).blue());
-        eprintln!("{} {} {}", "|".blue(), "|".color(color), line);
+        eprint!("{} ", format!("{:width$}", line_num + i + 1).blue());
+        eprintln!("{} {} {line}", "|".blue(), "|".color(color));
       }
-      eprint!("{:.>w$} {} {}", "", "|".blue(), "|".color(color), w = width);
+      eprint!("{:.>width$} {} {}", "", "|".blue(), "|".color(color));
       let line = get_line_str!(lines.nth(mid_lines - 3));
-      eprint!("{} ", format!("{:w$}", self.end.line - 1, w = width).blue());
-      eprintln!("{} {} {}", "|".blue(), "|".color(color), line);
+      eprint!("{} ", format!("{:width$}", self.end.line - 1).blue());
+      eprintln!("{} {} {line}", "|".blue(), "|".color(color));
     }
     // print the last line to stderr
     let line_num = self.end.line as usize;
     let (line, end) = get_line_str!(lines.next(), self.end.col);
-    eprint!("{} ", format!("{:w$}", line_num, w = width).blue());
-    eprintln!("{} {} {}", "|".blue(), "|".color(color), line);
-    eprint!("{:w$} {} {}", "", "|".blue(), "|".color(color), w = width);
-    eprintln!("{}", format!("{:_>w$}^", "", w = end).color(color));
+    eprint!("{} ", format!("{:width$}", line_num).blue());
+    eprintln!("{} {} {line}", "|".blue(), "|".color(color));
+    eprint!("{:width$} {} {}", "", "|".blue(), "|".color(color));
+    eprintln!("{}", format!("{:_>end$}^", "").color(color));
   }
 }
 
@@ -434,12 +434,11 @@ impl Pos {
 
   /// Updates the line number ans column number based on the given character.
   pub fn update(&mut self, c: char) {
-    match c {
-      '\n' => {
-        self.col = 0;
-        self.line += 1;
-      }
-      _ => self.col += 1,
+    if c == '\n' {
+      self.col = 0;
+      self.line += 1;
+    } else {
+      self.col += 1;
     }
   }
 }
@@ -546,15 +545,15 @@ mod test {
   #[test]
   fn pos_update() {
     let mut pos = Pos::new();
-    assert_eq!(format!("{}", pos), "1:0");
+    assert_eq!(format!("{pos}"), "1:0");
     pos.update(' ');
     pos.update(' ');
-    assert_eq!(format!("{}", pos), "1:2");
+    assert_eq!(format!("{pos}"), "1:2");
     pos.update('\n');
-    assert_eq!(format!("{}", pos), "2:0");
+    assert_eq!(format!("{pos}"), "2:0");
     pos.update('\n');
     pos.update('\n');
-    assert_eq!(format!("{}", pos), "4:0");
+    assert_eq!(format!("{pos}"), "4:0");
   }
 
   #[test]
@@ -569,7 +568,7 @@ mod test {
     log_error!(sp2, "test error");
     log_warning!(sp2, "test warning");
     log_warning!(sp2, "test warning 2");
-    Span::log_global();
+    Span::log_summary();
     assert_eq!(format!("{}", sp2.start), "1:1");
     assert_eq!(format!("{}", sp2.end), "1:3");
     let mut sp = Span::new(Pos { line: 10, col: 10 });
