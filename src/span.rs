@@ -1,14 +1,14 @@
 //! Span ([`Span`]) and error ([`Error`]) related implementations.
 
 use std::cell::Cell;
-use std::fmt::{self, Arguments, Write};
+use std::fmt::{self, Arguments};
 use std::path::Path;
 use std::rc::Rc;
 
 #[cfg(not(feature = "no-logger"))]
 use colored::{Color, Colorize};
 #[cfg(not(feature = "no-logger"))]
-use std::{fs::File, io::BufRead, io::BufReader, io::Result as IoResult};
+use std::{fmt::Write, fs::File, io::BufRead, io::BufReader, io::Result as IoResult};
 
 /// The type of error returned by logger methods of [`Span`].
 #[cfg(feature = "no-logger")]
