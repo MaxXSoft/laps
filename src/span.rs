@@ -427,6 +427,12 @@ impl fmt::Display for Span {
   }
 }
 
+impl fmt::Debug for Span {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    write!(f, "Span({self})")
+  }
+}
+
 /// A line-column mark.
 #[derive(Clone, Copy)]
 struct Location {
