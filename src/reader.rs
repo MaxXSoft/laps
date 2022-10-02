@@ -124,6 +124,10 @@ where
     self.buf.push(last);
   }
 
+  fn span(&self) -> &Span {
+    &self.span
+  }
+
   fn peek(&mut self) -> Result<Option<char>, Error> {
     if let Some((c, _)) = self.buf.last() {
       Ok(*c)
