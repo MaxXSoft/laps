@@ -44,20 +44,6 @@ impl Error {
   }
 }
 
-impl Default for Error {
-  /// Creates a normal error.
-  #[cfg(feature = "no-logger")]
-  fn default() -> Self {
-    Self::Normal(String::default())
-  }
-
-  /// Creates a normal error.
-  #[cfg(not(feature = "no-logger"))]
-  fn default() -> Self {
-    Self::Normal
-  }
-}
-
 impl<T> From<Error> for Result<T, Error> {
   /// Creates a result from the given error,
   /// which the value is always [`Err`].
