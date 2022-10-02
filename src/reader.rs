@@ -9,7 +9,7 @@ use std::path::Path;
 pub struct Reader<T> {
   reader: T,
   span: Span,
-  buf: Vec<(Option<char>, Location)>,
+  buf: Vec<Option<char>>,
 }
 
 impl<T> Reader<T> {
@@ -113,15 +113,20 @@ where
   T: Read,
 {
   fn next_char_loc(&mut self) -> Result<(Option<char>, Location), Error> {
-    match self.buf.pop() {
-      Some(char_loc) => Ok(char_loc),
-      None => self.next_char_loc_from_reader(),
+    if let Some(buffered) = self.buf.pop() {
+      let loc = self.span.start();
+      if let Some(c) = buffered {
+        self.span.update(c);
+      }
+      Ok((buffered, loc))
+    } else {
+      self.next_char_loc_from_reader()
     }
   }
 
   fn unread(&mut self, last: (Option<char>, Location)) {
     self.span.update_loc(last.1);
-    self.buf.push(last);
+    self.buf.push(last.0);
   }
 
   fn span(&self) -> &Span {
@@ -129,8 +134,8 @@ where
   }
 
   fn peek(&mut self) -> Result<Option<char>, Error> {
-    if let Some((c, _)) = self.buf.last() {
-      Ok(*c)
+    if let Some(buffered) = self.buf.last() {
+      Ok(*buffered)
     } else {
       let char_loc = self.next_char_loc_from_reader()?;
       self.unread(char_loc);
