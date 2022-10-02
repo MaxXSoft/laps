@@ -68,7 +68,7 @@ impl<T> From<Error> for Result<T, Error> {
 /// A span that records source code locations.
 ///
 /// Used to print error messages.
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct Span {
   start: Location,
   end: Location,
@@ -563,7 +563,7 @@ mod test {
     let sp1 = Span::new(location);
     location.update(' ');
     location.update(' ');
-    let sp2 = sp1.into_updated(location);
+    let sp2 = sp1.clone().into_updated(location);
     assert!(sp1.is_in_same_line_as(&sp2));
     log_error!(sp2, "test error");
     log_warning!(sp2, "test warning");
@@ -574,7 +574,7 @@ mod test {
     let mut sp = Span::new(Location { line: 10, col: 10 });
     sp.update(Location { line: 10, col: 15 });
     assert!(!sp2.is_in_same_line_as(&sp));
-    let sp3 = sp2.into_updated_span(sp);
+    let sp3 = sp2.clone().into_updated_span(sp);
     assert!(sp2.is_in_same_line_as(&sp3));
     assert_eq!(format!("{}", sp3.start), "1:1");
     assert_eq!(format!("{}", sp3.end), "10:15");
