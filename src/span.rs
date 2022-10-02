@@ -1,7 +1,7 @@
 //! Span ([`Span`]) and error ([`Error`]) related implementations.
 
 use std::cell::RefCell;
-use std::fmt::{self, Arguments};
+use std::fmt::{self, Arguments, Write};
 use std::path::PathBuf;
 
 #[cfg(not(feature = "no-logger"))]
@@ -79,11 +79,11 @@ pub struct Span {
 macro_rules! get_line_str {
   ($line:expr) => {
     $line
-      .map_or_else(String::new, |r| r.unwrap())
+      .map_or_else(|| Ok("".into()), |r| r.map_err(|_| fmt::Error))?
       .replace('\t', &format!("{:w$}", "", w = Span::TAB_WIDTH))
   };
   ($line:expr, $col:expr) => {{
-    let line = $line.map_or_else(String::new, |r| r.unwrap());
+    let line = $line.map_or_else(|| Ok("".into()), |r| r.map_err(|_| fmt::Error))?;
     let col = $col as usize;
     let tabs = (&line[..col]).matches('\t').count();
     (
@@ -92,7 +92,7 @@ macro_rules! get_line_str {
     )
   }};
   ($line:expr, $col1:expr, $col2:expr) => {{
-    let line = $line.map_or_else(String::new, |r| r.unwrap());
+    let line = $line.map_or_else(|| Ok("".into()), |r| r.map_err(|_| fmt::Error))?;
     let col1 = $col1 as usize;
     let col2 = $col2 as usize;
     let tabs1 = (&line[..col1]).matches('\t').count();
@@ -332,13 +332,15 @@ impl Span {
     eprintln!("  {} {file}:{}", "at".blue(), self.start);
     if self.start.col > 0 && self.end.col > 0 {
       if let FileType::File(path) = file {
-        // open file and get lines
-        let mut lines = BufReader::new(File::open(path).unwrap()).lines();
-        if self.start.line == self.end.line {
-          self.print_single_line_info(&mut lines, color);
-        } else {
-          self.print_multi_line_info(&mut lines, color);
-        }
+        // open file and get lines, ignore all errors
+        let _ = File::open(path).map_err(|_| fmt::Error).and_then(|file| {
+          let mut lines = BufReader::new(file).lines();
+          if self.start.line == self.end.line {
+            self.print_single_line_info(&mut lines, color)
+          } else {
+            self.print_multi_line_info(&mut lines, color)
+          }
+        });
       }
     }
     eprintln!();
@@ -348,7 +350,7 @@ impl Span {
   ///
   /// Used by method `print_file_info`.
   #[cfg(not(feature = "no-logger"))]
-  fn print_single_line_info<T>(&self, lines: &mut T, color: Color)
+  fn print_single_line_info<T>(&self, lines: &mut T, color: Color) -> fmt::Result
   where
     T: Iterator<Item = IoResult<String>>,
   {
@@ -364,53 +366,58 @@ impl Span {
     eprintln!("{} {}", "|".blue(), line);
     eprint!("{:width$} {} {:leading$}", "", "|".blue(), "");
     eprintln!("{}", format!("{:^>len$}", "").color(color));
+    Ok(())
   }
 
   /// Prints the multi-line information.
   ///
   /// Used by method `print_file_info`.
   #[cfg(not(feature = "no-logger"))]
-  fn print_multi_line_info<T>(&self, lines: &mut T, color: Color)
+  fn print_multi_line_info<T>(&self, lines: &mut T, color: Color) -> fmt::Result
   where
     T: Iterator<Item = IoResult<String>>,
   {
+    let mut buf = String::new();
     // get some parameters
     let width = ((self.end.line + 1) as f32).log10().ceil() as usize;
-    // print the first line to stderr
+    // write the first line to buffer
     let line_num = self.start.line as usize;
     let mut lines = lines.skip(line_num - 1);
     let (line, start) = get_line_str!(lines.next(), self.start.col);
-    eprintln!("{:width$} {}", "", "|".blue());
-    eprint!("{} ", format!("{:width$}", line_num).blue());
-    eprintln!("{}   {line}", "|".blue());
-    eprint!("{:width$} {}  ", "", "|".blue());
-    eprintln!("{}", format!("{:_>start$}^", "").color(color));
-    // print the middle lines to stderr
+    writeln!(buf, "{:width$} {}", "", "|".blue())?;
+    write!(buf, "{} ", format!("{:width$}", line_num).blue())?;
+    writeln!(buf, "{}   {line}", "|".blue())?;
+    write!(buf, "{:width$} {}  ", "", "|".blue())?;
+    writeln!(buf, "{}", format!("{:_>start$}^", "").color(color))?;
+    // write the middle lines to buffer
     let mid_lines = (self.end.line - self.start.line) as usize - 1;
     if mid_lines <= 4 {
       for i in 0..mid_lines {
         let line = get_line_str!(lines.next());
-        eprint!("{} ", format!("{:width$}", line_num + i + 1).blue());
-        eprintln!("{} {} {line}", "|".blue(), "|".color(color));
+        write!(buf, "{} ", format!("{:width$}", line_num + i + 1).blue())?;
+        writeln!(buf, "{} {} {line}", "|".blue(), "|".color(color))?;
       }
     } else {
       for i in 0..2usize {
         let line = get_line_str!(lines.next());
-        eprint!("{} ", format!("{:width$}", line_num + i + 1).blue());
-        eprintln!("{} {} {line}", "|".blue(), "|".color(color));
+        write!(buf, "{} ", format!("{:width$}", line_num + i + 1).blue())?;
+        writeln!(buf, "{} {} {line}", "|".blue(), "|".color(color))?;
       }
-      eprint!("{:.>width$} {} {}", "", "|".blue(), "|".color(color));
+      write!(buf, "{:.>width$} {} {}", "", "|".blue(), "|".color(color))?;
       let line = get_line_str!(lines.nth(mid_lines - 3));
-      eprint!("{} ", format!("{:width$}", self.end.line - 1).blue());
-      eprintln!("{} {} {line}", "|".blue(), "|".color(color));
+      write!(buf, "{} ", format!("{:width$}", self.end.line - 1).blue())?;
+      writeln!(buf, "{} {} {line}", "|".blue(), "|".color(color))?;
     }
-    // print the last line to stderr
+    // write the last line to buffer
     let line_num = self.end.line as usize;
     let (line, end) = get_line_str!(lines.next(), self.end.col);
-    eprint!("{} ", format!("{:width$}", line_num).blue());
-    eprintln!("{} {} {line}", "|".blue(), "|".color(color));
-    eprint!("{:width$} {} {}", "", "|".blue(), "|".color(color));
-    eprintln!("{}", format!("{:_>end$}^", "").color(color));
+    write!(buf, "{} ", format!("{:width$}", line_num).blue())?;
+    writeln!(buf, "{} {} {line}", "|".blue(), "|".color(color))?;
+    write!(buf, "{:width$} {} {}", "", "|".blue(), "|".color(color))?;
+    writeln!(buf, "{}", format!("{:_>end$}^", "").color(color))?;
+    // print buffer to stderr
+    eprint!("{buf}");
+    Ok(())
   }
 }
 
