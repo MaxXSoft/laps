@@ -1,4 +1,4 @@
-use crate::span::{Error, Location};
+use crate::span::{Error, Location, Span};
 
 /// Trait for lexers.
 pub trait Lexer {
@@ -12,6 +12,9 @@ pub trait Lexer {
   /// Unreads the given character and the last location
   /// and put it back to the input stream.
   fn unread(&mut self, last: (Option<char>, Location));
+
+  /// Returns a reference to the current span in the lexer.
+  fn span(&self) -> &Span;
 
   /// Reads the next character from the input stream.
   ///
