@@ -1,23 +1,52 @@
 use crate::lexer::Lexer;
 use crate::log_raw_fatal_error;
-use crate::span::{Error, FileType, Span};
+use crate::span::{Error, FileType, Location, Span};
 use std::fs::File;
-use std::io::{self, Cursor, Read, Stdin};
+use std::io::{self, stdin, Cursor, Read, Stdin};
 use std::path::Path;
 
 /// A generic reader for lexers.
 pub struct Reader<T> {
   reader: T,
   span: Span,
+  buf: Vec<(Option<char>, Location)>,
 }
 
 impl<T> Reader<T> {
   /// Creates a new reader.
-  fn new(reader: T, file_type: FileType) -> Self {
+  fn new(reader: T, file_type: FileType) -> Self
+  where
+    T: Read,
+  {
     Self {
       reader,
       span: Span::new(file_type),
+      buf: Vec::new(),
     }
+  }
+
+  /// Returns the next character and the last location from the reader.
+  fn next_char_loc_from_reader(&mut self) -> Result<(Option<char>, Location), Error>
+  where
+    T: Read,
+  {
+    let mut buf = [0];
+    // read a character to buffer
+    let count = self
+      .reader
+      .read(&mut buf)
+      .map_err(|e| log_raw_fatal_error!(self.span, "{e}"))?;
+    // get the current location
+    let loc = self.span.start();
+    // make result and update the span
+    Ok((
+      (count != 0).then(|| {
+        let c = buf[0] as char;
+        self.span.update(c);
+        c
+      }),
+      loc,
+    ))
   }
 
   /// Returns a reference to the inner reader.
@@ -51,6 +80,13 @@ impl Reader<File> {
   }
 }
 
+impl Reader<Stdin> {
+  /// Creates a new reader from the standard input.
+  pub fn from_stdin() -> Self {
+    stdin().into()
+  }
+}
+
 impl From<Stdin> for Reader<Stdin> {
   /// Creates a new reader from the standard input.
   fn from(stdin: Stdin) -> Self {
@@ -76,16 +112,25 @@ impl<T> Lexer for Reader<T>
 where
   T: Read,
 {
-  fn next_char(&mut self) -> Result<Option<char>, Error> {
-    let mut buf = [0];
-    let count = self
-      .reader
-      .read(&mut buf)
-      .map_err(|e| log_raw_fatal_error!(self.span, "{e}"))?;
-    Ok((count != 0).then(|| {
-      let c = buf[0] as char;
-      self.span.update(c);
-      c
-    }))
+  fn next_char_loc(&mut self) -> Result<(Option<char>, Location), Error> {
+    match self.buf.pop() {
+      Some(char_loc) => Ok(char_loc),
+      None => self.next_char_loc_from_reader(),
+    }
+  }
+
+  fn unread(&mut self, last: (Option<char>, Location)) {
+    self.span.update_loc(last.1);
+    self.buf.push(last);
+  }
+
+  fn peek(&mut self) -> Result<Option<char>, Error> {
+    if let Some((c, _)) = self.buf.last() {
+      Ok(*c)
+    } else {
+      let char_loc = self.next_char_loc_from_reader()?;
+      self.unread(char_loc);
+      Ok(char_loc.0)
+    }
   }
 }
