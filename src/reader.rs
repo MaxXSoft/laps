@@ -1,6 +1,8 @@
-use crate::span::{FileType, Span};
+use crate::lexer::Lexer;
+use crate::log_raw_fatal_error;
+use crate::span::{Error, FileType, Span};
 use std::fs::File;
-use std::io::{self, Cursor, Stdin};
+use std::io::{self, Cursor, Read, Stdin};
 use std::path::Path;
 
 /// A generic reader for lexers.
@@ -67,5 +69,23 @@ impl<'a> From<&'a str> for Reader<Cursor<&'a str>> {
   /// Creates a new reader from the given <code>&amp;[str]</code>.
   fn from(s: &'a str) -> Self {
     Self::new(Cursor::new(s), FileType::Buffer)
+  }
+}
+
+impl<T> Lexer for Reader<T>
+where
+  T: Read,
+{
+  fn next_char(&mut self) -> Result<Option<char>, Error> {
+    let mut buf = [0];
+    let count = self
+      .reader
+      .read(&mut buf)
+      .map_err(|e| log_raw_fatal_error!(self.span, "{e}"))?;
+    Ok((count != 0).then(|| {
+      let c = buf[0] as char;
+      self.span.update(c);
+      c
+    }))
   }
 }
