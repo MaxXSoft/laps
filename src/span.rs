@@ -450,7 +450,7 @@ impl Location {
     Self { line: 1, col: 0 }
   }
 
-  /// Updates the line number ans column number based on the given character.
+  /// Updates the line number and column number based on the given character.
   fn update(&mut self, c: char) {
     if c == '\n' {
       self.col = 0;
