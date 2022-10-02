@@ -1,8 +1,9 @@
 //! Span ([`Span`]) and error ([`Error`]) related implementations.
 
-use std::cell::RefCell;
+use std::cell::Cell;
 use std::fmt::{self, Arguments, Write};
-use std::path::PathBuf;
+use std::path::Path;
+use std::rc::Rc;
 
 #[cfg(not(feature = "no-logger"))]
 use colored::{Color, Colorize};
@@ -70,6 +71,7 @@ impl<T> From<Error> for Result<T, Error> {
 /// Used to print error messages.
 #[derive(Clone)]
 pub struct Span {
+  status: Rc<LoggerStatus>,
   start: Location,
   end: Location,
 }
@@ -110,176 +112,155 @@ impl Span {
   #[cfg(not(feature = "no-logger"))]
   const TAB_WIDTH: usize = 2;
 
-  thread_local! {
-    static STATE: RefCell<GlobalState> = RefCell::new(GlobalState {
-      file: FileType::Buffer,
-      err_num: 0,
-      warn_num: 0,
-    });
-  }
-
   /// Creates a new span.
-  pub fn new() -> Self {
+  pub fn new(file_type: FileType) -> Self {
     Self {
+      status: Rc::new(LoggerStatus {
+        file_type,
+        errors: Cell::new(0),
+        warnings: Cell::new(0),
+      }),
       start: Location::new(),
       end: Location::new(),
     }
   }
 
-  /// Resets the global state in all spans.
-  pub fn reset(file: FileType) {
-    Self::STATE.with(|gs| {
-      *gs.borrow_mut() = GlobalState {
-        file,
-        err_num: 0,
-        warn_num: 0,
-      }
-    });
-  }
-
   /// Logs normal error with no span provided.
   #[cfg(feature = "no-logger")]
-  pub fn log_raw_error(args: Arguments) -> Error {
+  pub fn log_raw_error(&self, args: Arguments) -> Error {
     // update error number
-    Self::STATE.with(|gs| gs.borrow_mut().err_num += 1);
+    self.status.errors.set(self.status.errors.get() + 1);
     Error::Normal(format!("{args}"))
   }
 
   /// Logs normal error with no span provided.
   #[cfg(not(feature = "no-logger"))]
-  pub fn log_raw_error(args: Arguments) -> Error {
-    Self::STATE.with(|gs| {
-      // update error number
-      gs.borrow_mut().err_num += 1;
-      // print message to stderr
-      eprintln!("{}: {args}", "error".bright_red());
-    });
+  pub fn log_raw_error(&self, args: Arguments) -> Error {
+    // update error number
+    self.status.errors.set(self.status.errors.get() + 1);
+    // print message to stderr
+    eprintln!("{}: {args}", "error".bright_red());
     Error::Normal
   }
 
   /// Logs fatal error with no span provided.
   #[cfg(feature = "no-logger")]
-  pub fn log_raw_fatal_error(args: Arguments) -> Error {
+  pub fn log_raw_fatal_error(&self, args: Arguments) -> Error {
     // update error number
-    Self::STATE.with(|gs| gs.borrow_mut().err_num += 1);
+    self.status.errors.set(self.status.errors.get() + 1);
     Error::Fatal(format!("{args}"))
   }
 
   /// Logs fatal error with no span provided.
   #[cfg(not(feature = "no-logger"))]
-  pub fn log_raw_fatal_error(args: Arguments) -> Error {
-    Self::STATE.with(|gs| {
-      // update error number
-      gs.borrow_mut().err_num += 1;
-      // print message to stderr
-      eprintln!("{}: {args}", "error".bright_red());
-    });
+  pub fn log_raw_fatal_error(&self, args: Arguments) -> Error {
+    // update error number
+    self.status.errors.set(self.status.errors.get() + 1);
+    // print message to stderr
+    eprintln!("{}: {args}", "error".bright_red());
     Error::Fatal
   }
 
   /// Logs warning with no span provided.
   #[cfg(feature = "no-logger")]
-  pub fn log_raw_warning(_: Arguments) {
+  pub fn log_raw_warning(&self, _: Arguments) {
     // update warning number
-    Self::STATE.with(|gs| gs.borrow_mut().warn_num += 1);
+    self.status.warnings.set(self.status.warnings.get() + 1);
   }
 
   /// Logs warning with no span provided.
   #[cfg(not(feature = "no-logger"))]
-  pub fn log_raw_warning(args: Arguments) {
-    Self::STATE.with(|gs| {
-      // update warning number
-      gs.borrow_mut().warn_num += 1;
-      // print message to stderr
-      eprintln!("{}: {args}", "warning".yellow());
-    });
+  pub fn log_raw_warning(&self, args: Arguments) {
+    // update warning number
+    self.status.warnings.set(self.status.warnings.get() + 1);
+    // print message to stderr
+    eprintln!("{}: {args}", "warning".yellow());
   }
 
   /// Logs summary information (total error/warning number).
   #[cfg(feature = "no-logger")]
-  pub fn log_summary() {}
+  pub fn log_summary(&self) {}
 
   /// Logs summary information (total error/warning number).
   #[cfg(not(feature = "no-logger"))]
-  pub fn log_summary() {
-    Self::STATE.with(|gs| {
-      let gs = gs.borrow();
-      let mut msg = String::new();
-      // error info
-      if gs.err_num != 0 {
-        msg += &format!("{} error", gs.err_num);
-        if gs.err_num > 1 {
-          msg += "s";
-        }
+  pub fn log_summary(&self) {
+    let mut msg = String::new();
+    let errors = self.status.errors.get();
+    let warnings = self.status.warnings.get();
+    // error info
+    if errors != 0 {
+      msg += &format!("{errors} error");
+      if errors > 1 {
+        msg += "s";
       }
-      // seperator
-      if gs.err_num != 0 && gs.warn_num != 0 {
-        msg += " and ";
+    }
+    // seperator
+    if errors != 0 && warnings != 0 {
+      msg += " and ";
+    }
+    // warning info
+    if warnings != 0 {
+      msg += &format!("{warnings} warning");
+      if warnings > 1 {
+        msg += "s";
       }
-      // warning info
-      if gs.warn_num != 0 {
-        msg += &format!("{} warning", gs.warn_num);
-        if gs.warn_num > 1 {
-          msg += "s";
-        }
-      }
-      // ending
-      msg += " emitted";
-      eprintln!("{}", msg.bold());
-    });
+    }
+    // ending
+    msg += " emitted";
+    eprintln!("{}", msg.bold());
   }
 
   /// Gets the number of errors.
-  pub fn error_num() -> usize {
-    Self::STATE.with(|gs| gs.borrow().err_num)
+  pub fn error_num(&self) -> usize {
+    self.status.errors.get()
   }
 
   /// Gets the number of warnings.
-  pub fn warning_num() -> usize {
-    Self::STATE.with(|gs| gs.borrow().warn_num)
+  pub fn warning_num(&self) -> usize {
+    self.status.warnings.get()
   }
 
   /// Logs normal error message.
   #[cfg(feature = "no-logger")]
   pub fn log_error(&self, args: Arguments) -> Error {
-    Self::log_raw_error(args);
+    self.log_raw_error(args);
     Error::Normal(self.error_message(args))
   }
 
   /// Logs normal error message.
   #[cfg(not(feature = "no-logger"))]
   pub fn log_error(&self, args: Arguments) -> Error {
-    Self::log_raw_error(args);
-    Self::STATE.with(|gs| self.print_file_info(&gs.borrow().file, Color::BrightRed));
+    self.log_raw_error(args);
+    self.print_file_info(Color::BrightRed);
     Error::Normal
   }
 
   /// Logs fatal error message.
   #[cfg(feature = "no-logger")]
   pub fn log_fatal_error(&self, args: Arguments) -> Error {
-    Self::log_raw_error(args);
+    self.log_raw_error(args);
     Error::Fatal(self.error_message(args))
   }
 
   /// Logs fatal error message.
   #[cfg(not(feature = "no-logger"))]
   pub fn log_fatal_error(&self, args: Arguments) -> Error {
-    Self::log_raw_error(args);
-    Self::STATE.with(|gs| self.print_file_info(&gs.borrow().file, Color::BrightRed));
+    self.log_raw_error(args);
+    self.print_file_info(Color::BrightRed);
     Error::Fatal
   }
 
   /// Logs warning message.
   #[cfg(feature = "no-logger")]
   pub fn log_warning(&self, args: Arguments) {
-    Self::log_raw_warning(args);
+    self.log_raw_warning(args);
   }
 
   /// Logs warning message.
   #[cfg(not(feature = "no-logger"))]
   pub fn log_warning(&self, args: Arguments) {
-    Self::log_raw_warning(args);
-    Self::STATE.with(|gs| self.print_file_info(&gs.borrow().file, Color::Yellow));
+    self.log_raw_warning(args);
+    self.print_file_info(Color::Yellow);
   }
 
   /// Updates the line number ans column number of the start location based on
@@ -296,6 +277,7 @@ impl Span {
     let mut location = self.start;
     location.update(c);
     Self {
+      status: self.status,
       start: location,
       end: location,
     }
@@ -310,6 +292,7 @@ impl Span {
   /// has been updated according to the given span.
   pub fn into_end_updated(self, span: Span) -> Self {
     Self {
+      status: self.status,
       start: self.start,
       end: span.end,
     }
@@ -323,15 +306,16 @@ impl Span {
   /// Returns the error message.
   #[cfg(feature = "no-logger")]
   fn error_message(&self, args: Arguments) -> String {
-    Self::STATE.with(|gs| format!("{}:{}: {args}", gs.borrow().file, self.start))
+    format!("{}:{}: {args}", self.status.file_type, self.start)
   }
 
   /// Prints the file information.
   #[cfg(not(feature = "no-logger"))]
-  fn print_file_info(&self, file: &FileType, color: Color) {
-    eprintln!("  {} {file}:{}", "at".blue(), self.start);
+  fn print_file_info(&self, color: Color) {
+    let file_type = &self.status.file_type;
+    eprintln!("  {} {file_type}:{}", "at".blue(), self.start);
     if self.start.col > 0 && self.end.col > 0 {
-      if let FileType::File(path) = file {
+      if let FileType::File(path) = file_type {
         // open file and get lines, ignore all errors
         let _ = File::open(path).map_err(|_| fmt::Error).and_then(|file| {
           let mut lines = BufReader::new(file).lines();
@@ -463,17 +447,17 @@ impl fmt::Display for Location {
   }
 }
 
-/// Global state for `Span`.
-struct GlobalState {
-  file: FileType,
-  err_num: usize,
-  warn_num: usize,
+/// Logger status for `Span`.
+struct LoggerStatus {
+  file_type: FileType,
+  errors: Cell<usize>,
+  warnings: Cell<usize>,
 }
 
 /// Type of input file.
 pub enum FileType {
   /// File with a path.
-  File(PathBuf),
+  File(Box<Path>),
   /// Standard input file.
   Stdin,
   /// A buffer in the memory.
@@ -566,7 +550,7 @@ mod test {
 
   #[test]
   fn span_update() {
-    let mut span = Span::new();
+    let mut span = Span::new(FileType::Buffer);
     span.update(' ');
     let sp1 = span.clone();
     span.update(' ');
@@ -576,13 +560,12 @@ mod test {
     log_error!(sp2, "test error");
     log_warning!(sp2, "test warning");
     log_warning!(sp2, "test warning 2");
-    Span::log_summary();
+    sp2.log_summary();
     assert_eq!(format!("{}", sp2.start), "1:1");
     assert_eq!(format!("{}", sp2.end), "1:3");
-    let sp = Span {
-      start: Location { line: 10, col: 10 },
-      end: Location { line: 10, col: 15 },
-    };
+    let mut sp = Span::new(FileType::Buffer);
+    sp.start = Location { line: 10, col: 10 };
+    sp.end = Location { line: 10, col: 15 };
     assert!(!sp2.is_in_same_line_as(&sp));
     let sp3 = sp2.clone().into_end_updated(sp);
     assert!(sp2.is_in_same_line_as(&sp3));
