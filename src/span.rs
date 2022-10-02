@@ -477,24 +477,24 @@ impl fmt::Display for FileType {
 /// Logs normal error with no span provided.
 #[macro_export]
 macro_rules! log_raw_error {
-  ($($arg:tt)+) => {
-    Span::log_raw_error(format_args!($($arg)+))
+  ($span:expr, $($arg:tt)+) => {
+    $span.log_raw_error(format_args!($($arg)+))
   };
 }
 
 /// Logs fatal error with no span provided.
 #[macro_export]
 macro_rules! log_raw_fatal_error {
-  ($($arg:tt)+) => {
-    Span::log_raw_fatal_error(format_args!($($arg)+))
+  ($span:expr, $($arg:tt)+) => {
+    $span.log_raw_fatal_error(format_args!($($arg)+))
   };
 }
 
 /// Logs warning with no span provided.
 #[macro_export]
 macro_rules! log_raw_warning {
-  ($($arg:tt)+) => {
-    Span::log_raw_warning(format_args!($($arg)+))
+  ($span:expr, $($arg:tt)+) => {
+    $span.log_raw_warning(format_args!($($arg)+))
   };
 }
 
