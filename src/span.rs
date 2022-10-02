@@ -249,14 +249,24 @@ impl Span {
     self.print_file_info(Color::Yellow);
   }
 
+  /// Returns the start location of the span.
+  pub fn start(&self) -> Location {
+    self.start
+  }
+
+  /// Returns the end location of the span.
+  pub fn end(&self) -> Location {
+    self.end
+  }
+
   /// Updates the line number ans column number of the start location based on
   /// the given character, then set the end location to the start position.
-  /// 
+  ///
   /// # Examples
-  /// 
+  ///
   /// ```
   /// use laps::span::{FileType, Span};
-  /// 
+  ///
   /// let mut span = Span::new(FileType::Buffer);
   /// assert_eq!(format!("{span}"), "1:0-1:0");
   /// span.update(' ');
@@ -281,13 +291,19 @@ impl Span {
     }
   }
 
+  /// Updates both the start and the end location to the given location.
+  pub fn update_loc(&mut self, loc: Location) {
+    self.start = loc;
+    self.end = loc;
+  }
+
   /// Updates the end location according to the given span.
-  /// 
+  ///
   /// # Examples
-  /// 
+  ///
   /// ```
   /// use laps::span::{FileType, Span};
-  /// 
+  ///
   /// let mut span = Span::new(FileType::Buffer);
   /// span.update_end(span.clone().into_updated('\n'));
   /// assert_eq!(format!("{span}"), "1:0-2:0");
@@ -307,12 +323,12 @@ impl Span {
   }
 
   /// Checks if the current span is in the same line as the given span.
-  /// 
+  ///
   /// # Examples
-  /// 
+  ///
   /// ```
   /// use laps::span::{FileType, Span};
-  /// 
+  ///
   /// let span = Span::new(FileType::Buffer);
   /// let span2 = span.clone().into_updated(' ');
   /// assert!(span.is_in_same_line_as(&span2));
@@ -439,7 +455,7 @@ impl fmt::Debug for Span {
 
 /// A line-column mark.
 #[derive(Clone, Copy)]
-struct Location {
+pub struct Location {
   line: u32,
   col: u32,
 }
@@ -464,6 +480,12 @@ impl Location {
 impl fmt::Display for Location {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
     write!(f, "{}:{}", self.line, self.col)
+  }
+}
+
+impl fmt::Debug for Location {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    write!(f, "Location({self})")
   }
 }
 
@@ -555,17 +577,17 @@ mod test {
   use super::*;
 
   #[test]
-  fn location_update() {
-    let mut location = Location::new();
-    assert_eq!(format!("{location}"), "1:0");
-    location.update(' ');
-    location.update(' ');
-    assert_eq!(format!("{location}"), "1:2");
-    location.update('\n');
-    assert_eq!(format!("{location}"), "2:0");
-    location.update('\n');
-    location.update('\n');
-    assert_eq!(format!("{location}"), "4:0");
+  fn loc_update() {
+    let mut loc = Location::new();
+    assert_eq!(format!("{loc}"), "1:0");
+    loc.update(' ');
+    loc.update(' ');
+    assert_eq!(format!("{loc}"), "1:2");
+    loc.update('\n');
+    assert_eq!(format!("{loc}"), "2:0");
+    loc.update('\n');
+    loc.update('\n');
+    assert_eq!(format!("{loc}"), "4:0");
   }
 
   #[test]
