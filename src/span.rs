@@ -251,8 +251,20 @@ impl Span {
 
   /// Updates the line number ans column number of the start location based on
   /// the given character, then set the end location to the start position.
+  /// 
+  /// # Examples
+  /// 
+  /// ```
+  /// use laps::span::{FileType, Span};
+  /// 
+  /// let mut span = Span::new(FileType::Buffer);
+  /// assert_eq!(format!("{span}"), "1:0-1:0");
+  /// span.update(' ');
+  /// assert_eq!(format!("{span}"), "1:1-1:1");
+  /// span.update('\n');
+  /// assert_eq!(format!("{span}"), "2:0-2:0");
+  /// ```
   pub fn update(&mut self, c: char) {
-    // TODO: add examples
     self.start.update(c);
     self.end = self.start;
   }
@@ -270,6 +282,16 @@ impl Span {
   }
 
   /// Updates the end location according to the given span.
+  /// 
+  /// # Examples
+  /// 
+  /// ```
+  /// use laps::span::{FileType, Span};
+  /// 
+  /// let mut span = Span::new(FileType::Buffer);
+  /// span.update_end(span.clone().into_updated('\n'));
+  /// assert_eq!(format!("{span}"), "1:0-2:0");
+  /// ```
   pub fn update_end(&mut self, span: Span) {
     self.end = span.end;
   }
@@ -285,6 +307,18 @@ impl Span {
   }
 
   /// Checks if the current span is in the same line as the given span.
+  /// 
+  /// # Examples
+  /// 
+  /// ```
+  /// use laps::span::{FileType, Span};
+  /// 
+  /// let span = Span::new(FileType::Buffer);
+  /// let span2 = span.clone().into_updated(' ');
+  /// assert!(span.is_in_same_line_as(&span2));
+  /// let span3 = span.clone().into_updated('\n');
+  /// assert!(!span.is_in_same_line_as(&span3));
+  /// ```
   pub fn is_in_same_line_as(&self, span: &Span) -> bool {
     self.end.line == span.start.line
   }
