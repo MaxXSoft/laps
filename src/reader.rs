@@ -48,26 +48,6 @@ impl<T> Reader<T> {
       loc,
     ))
   }
-
-  /// Returns a reference to the inner reader.
-  pub fn reader(&self) -> &T {
-    &self.reader
-  }
-
-  /// Returns a mutable reference to the inner reader.
-  pub fn reader_mut(&mut self) -> &mut T {
-    &mut self.reader
-  }
-
-  /// Returns a reference to the current span.
-  pub fn span(&self) -> &Span {
-    &self.span
-  }
-
-  /// Returns a mutable reference to the current span.
-  pub fn span_mut(&mut self) -> &mut Span {
-    &mut self.span
-  }
 }
 
 impl Reader<File> {
