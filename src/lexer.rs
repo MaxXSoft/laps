@@ -101,3 +101,14 @@ pub trait Lexer {
     }
   }
 }
+
+/// Trait for token streams.
+pub trait TokenStream {
+  /// Type of the returned token.
+  type Token;
+
+  /// Reads the next token from the token stream.
+  ///
+  /// Returns the token if successful, otherwise [`Err`].
+  fn next_token(&mut self) -> Result<Self::Token, Error>;
+}
