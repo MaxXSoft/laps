@@ -48,6 +48,11 @@ impl<T> Reader<T> {
       loc,
     ))
   }
+
+  /// Converts the reader into the inner reader.
+  pub fn into_inner(self) -> T {
+    self.reader
+  }
 }
 
 impl Reader<File> {
