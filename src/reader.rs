@@ -122,4 +122,20 @@ where
       Ok(char_loc.0)
     }
   }
+
+  fn peek_with_span(&mut self) -> Result<(Option<char>, Span), Error> {
+    if let Some(buffered) = self.buf.last() {
+      let span = if let Some(c) = buffered {
+        self.span.clone().into_updated(*c)
+      } else {
+        self.span.clone()
+      };
+      Ok((*buffered, span))
+    } else {
+      let char_loc = self.next_char_loc_from_reader()?;
+      let span = self.span.clone();
+      self.unread(char_loc);
+      Ok((char_loc.0, span))
+    }
+  }
 }
