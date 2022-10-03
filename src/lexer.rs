@@ -49,6 +49,17 @@ pub trait Lexer {
     Ok(char_loc.0)
   }
 
+  /// Peeks the next character from the input stream.
+  /// Returns the peeked character and its span.
+  ///
+  /// Does not advance the position of the input stream.
+  fn peek_with_span(&mut self) -> Result<(Option<char>, Span), Error> {
+    let char_loc = self.next_char_loc()?;
+    let span = self.span().clone();
+    self.unread(char_loc);
+    Ok((char_loc.0, span))
+  }
+
   /// Skips until a character specified by the predicate is encountered.
   fn skip_until<F>(&mut self, mut f: F) -> Result<(), Error>
   where
@@ -71,13 +82,13 @@ pub trait Lexer {
   {
     let mut int = String::new();
     // check the current character and get the span
-    let (mut span, is_zero) = match self.peek()? {
-      Some(c) if c.is_ascii_digit() => {
+    let (mut span, is_zero) = match self.peek_with_span()? {
+      (Some(c), span) if c.is_ascii_digit() => {
         int.push(c);
         self.next_char()?;
-        (self.span().clone(), c == '0')
+        (span, c == '0')
       }
-      _ => return_error!(self.span(), "invalid integer literal"),
+      (_, span) => return_error!(span, "invalid integer literal"),
     };
     // check the radix
     let radix = if is_zero {
