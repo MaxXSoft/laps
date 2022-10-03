@@ -66,17 +66,50 @@ pub trait Lexer {
   {
     let mut int = String::new();
     // check the current character and get the span
-    let mut span = match self.peek()? {
-      Some(c) if c.is_numeric() => {
+    let (mut span, is_zero) = match self.peek()? {
+      Some(c) if c.is_ascii_digit() => {
         int.push(c);
         self.next_char()?;
-        self.span().clone()
+        (self.span().clone(), c == '0')
       }
       _ => return_error!(self.span(), "invalid integer literal"),
     };
+    // check the radix
+    let radix = if is_zero {
+      // check the next character
+      let radix = match self.peek()? {
+        Some(c) if "box".contains(c) => {
+          // radix prefix
+          int.clear();
+          Some(match c {
+            'b' => 2,
+            'o' => 8,
+            'x' => 16,
+            _ => unreachable!(),
+          })
+        }
+        Some(c) if c.is_ascii_digit() => {
+          // leading zero, which is not allowed
+          int.push(c);
+          None
+        }
+        // other characters or EOF, so the literal is just a zero
+        _ => return Ok(T::new(0, span)),
+      };
+      // eat the current character and update the span
+      self.next_char()?;
+      span.update_end(self.span());
+      match radix {
+        Some(r) => r,
+        _ => log_err_and_skip!(self, span, "invalid integer literal '{int}'"),
+      }
+    } else {
+      // previous digit is not zero, just a decimal
+      10
+    };
     // read the rest characters to string
     while let Some(c) = self.peek()? {
-      if !c.is_numeric() {
+      if !c.is_digit(radix) {
         break;
       }
       int.push(c);
@@ -84,18 +117,7 @@ pub trait Lexer {
       span.update_end(self.span());
     }
     // convert to integer
-    let (radix, int) = if let Some(s) = int.strip_prefix("0b") {
-      (2, s)
-    } else if let Some(s) = int.strip_prefix("0o") {
-      (8, s)
-    } else if let Some(s) = int.strip_prefix("0x") {
-      (16, s)
-    } else if !int.starts_with('0') || int.len() == 1 {
-      (10, int.as_str())
-    } else {
-      return_error!(span, "invalid integer literal '{int}'")
-    };
-    match u64::from_str_radix(int, radix) {
+    match u64::from_str_radix(&int, radix) {
       Ok(i) => Ok(T::new(i, span)),
       _ => log_err_and_skip!(self, span, "invalid integer literal '{int}'"),
     }
