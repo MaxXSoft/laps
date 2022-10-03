@@ -308,17 +308,23 @@ impl Span {
   /// span.update_end(&span.clone().into_updated('\n'));
   /// assert_eq!(format!("{span}"), "1:0-2:0");
   /// ```
-  pub fn update_end(&mut self, span: &Span) {
-    self.end = span.end;
+  pub fn update_end<S>(&mut self, span: S)
+  where
+    S: AsRef<Self>,
+  {
+    self.end = span.as_ref().end;
   }
 
   /// Converts the current span into a new one where the end location
   /// has been updated according to the given span.
-  pub fn into_end_updated(self, span: &Span) -> Self {
+  pub fn into_end_updated<S>(self, span: S) -> Self
+  where
+    S: AsRef<Self>,
+  {
     Self {
       status: self.status,
       start: self.start,
-      end: span.end,
+      end: span.as_ref().end,
     }
   }
 
@@ -335,8 +341,11 @@ impl Span {
   /// let span3 = span.clone().into_updated('\n');
   /// assert!(!span.is_in_same_line_as(&span3));
   /// ```
-  pub fn is_in_same_line_as(&self, span: &Span) -> bool {
-    self.end.line == span.start.line
+  pub fn is_in_same_line_as<S>(&self, span: S) -> bool
+  where
+    S: AsRef<Self>,
+  {
+    self.end.line == span.as_ref().start.line
   }
 
   /// Returns the error message.
@@ -450,6 +459,12 @@ impl fmt::Display for Span {
 impl fmt::Debug for Span {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
     write!(f, "Span({self})")
+  }
+}
+
+impl AsRef<Self> for Span {
+  fn as_ref(&self) -> &Self {
+    &self
   }
 }
 
@@ -597,7 +612,7 @@ mod test {
     let sp1 = span.clone();
     span.update(' ');
     span.update(' ');
-    let sp2 = sp1.clone().into_end_updated(&span);
+    let sp2 = sp1.clone().into_end_updated(span);
     assert!(sp1.is_in_same_line_as(&sp2));
     log_error!(sp2, "test error");
     log_warning!(sp2, "test warning");
@@ -609,7 +624,7 @@ mod test {
     sp.start = Location { line: 10, col: 10 };
     sp.end = Location { line: 10, col: 15 };
     assert!(!sp2.is_in_same_line_as(&sp));
-    let sp3 = sp2.clone().into_end_updated(&sp);
+    let sp3 = sp2.clone().into_end_updated(sp);
     assert!(sp2.is_in_same_line_as(&sp3));
     assert_eq!(format!("{}", sp3.start), "1:1");
     assert_eq!(format!("{}", sp3.end), "10:15");
