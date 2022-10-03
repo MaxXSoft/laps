@@ -127,11 +127,79 @@ pub trait Lexer {
       _ => log_err_and_skip!(self, span, "invalid integer literal '{int}'"),
     }
   }
+
+  /// Reads the next floating-point literal from the input stream.
+  ///
+  /// Returns the token if successful, otherwise returns [`Err`]
+  /// and skips until a whitespace character is encountered.
+  fn next_float<T>(&mut self) -> Result<T, Error>
+  where
+    T: Token<f64>,
+  {
+    todo!()
+  }
+
+  /// Reads the next integer literal or floating-point literal from the input
+  /// stream. Supports decimal, binary, hexadecimal and octal integer literals.
+  ///
+  /// Returns the token if successful, otherwise returns [`Err`]
+  /// and skips until a whitespace character is encountered.
+  fn next_num<T>(&mut self) -> Result<T, Error>
+  where
+    T: Token<u64> + Token<f64>,
+  {
+    todo!()
+  }
+
+  /// Reads the next identifier from the input stream.
+  ///
+  /// Returns the token if successful, otherwise returns [`Err`]
+  /// and skips until a whitespace character is encountered.
+  fn next_ident<T>(&mut self) -> Result<T, Error>
+  where
+    T: Token<String>,
+  {
+    todo!()
+  }
+
+  /// Reads the next identifier from the input stream.
+  /// Supports Unicode identifier.
+  ///
+  /// Returns the token if successful, otherwise returns [`Err`]
+  /// and skips until a whitespace character is encountered.
+  fn next_unicode_ident<T>(&mut self) -> Result<T, Error>
+  where
+    T: Token<String>,
+  {
+    todo!()
+  }
+
+  /// Reads the next string literal (`"..."`) from the input stream.
+  ///
+  /// Returns the token if successful, otherwise returns [`Err`]
+  /// and skips until a whitespace character is encountered.
+  fn next_str<T>(&mut self) -> Result<T, Error>
+  where
+    T: Token<String>,
+  {
+    todo!()
+  }
+
+  /// Reads the next character literal (`'...'`) from the input stream.
+  ///
+  /// Returns the token if successful, otherwise returns [`Err`]
+  /// and skips until a whitespace character is encountered.
+  fn next_char_literal<T>(&mut self) -> Result<T, Error>
+  where
+    T: Token<char>,
+  {
+    todo!()
+  }
 }
 
 /// Trait for token streams.
 pub trait TokenStream {
-  /// Type of the returned token.
+  /// Type of the token in the token stream.
   type Token;
 
   /// Reads the next token from the token stream.
