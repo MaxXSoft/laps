@@ -1,6 +1,11 @@
 use crate::return_error;
 use crate::span::{Error, Location, Span};
-use crate::token::Token;
+
+/// Trait for tokens that holding values of type `T`.
+pub trait Token<T> {
+  /// Creates a new token from the given value and span.
+  fn new(value: T, span: Span) -> Self;
+}
 
 /// Logs error and skip until a whitespace character is encountered.
 macro_rules! log_err_and_skip {
