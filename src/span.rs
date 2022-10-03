@@ -305,16 +305,16 @@ impl Span {
   /// use laps::span::{FileType, Span};
   ///
   /// let mut span = Span::new(FileType::Buffer);
-  /// span.update_end(span.clone().into_updated('\n'));
+  /// span.update_end(&span.clone().into_updated('\n'));
   /// assert_eq!(format!("{span}"), "1:0-2:0");
   /// ```
-  pub fn update_end(&mut self, span: Span) {
+  pub fn update_end(&mut self, span: &Span) {
     self.end = span.end;
   }
 
   /// Converts the current span into a new one where the end location
   /// has been updated according to the given span.
-  pub fn into_end_updated(self, span: Span) -> Self {
+  pub fn into_end_updated(self, span: &Span) -> Self {
     Self {
       status: self.status,
       start: self.start,
@@ -597,7 +597,7 @@ mod test {
     let sp1 = span.clone();
     span.update(' ');
     span.update(' ');
-    let sp2 = sp1.clone().into_end_updated(span);
+    let sp2 = sp1.clone().into_end_updated(&span);
     assert!(sp1.is_in_same_line_as(&sp2));
     log_error!(sp2, "test error");
     log_warning!(sp2, "test warning");
@@ -609,7 +609,7 @@ mod test {
     sp.start = Location { line: 10, col: 10 };
     sp.end = Location { line: 10, col: 15 };
     assert!(!sp2.is_in_same_line_as(&sp));
-    let sp3 = sp2.clone().into_end_updated(sp);
+    let sp3 = sp2.clone().into_end_updated(&sp);
     assert!(sp2.is_in_same_line_as(&sp3));
     assert_eq!(format!("{}", sp3.start), "1:1");
     assert_eq!(format!("{}", sp3.end), "10:15");
