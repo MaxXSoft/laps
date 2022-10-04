@@ -1,11 +1,6 @@
 use crate::return_error;
 use crate::span::{Error, Location, Span};
-
-/// Trait for tokens that holding values of type `T`.
-pub trait Token<T> {
-  /// Creates a new token from the given value and span.
-  fn new(value: T, span: Span) -> Self;
-}
+use crate::token::Token;
 
 /// Checks the current character, returns the current character and its span.
 macro_rules! check_char {
@@ -359,15 +354,4 @@ pub trait Lexer {
       (_, span) => err_and_skip_until_nl!(self, span, "expected quote (')"),
     }
   }
-}
-
-/// Trait for token streams.
-pub trait TokenStream {
-  /// Type of the token in the token stream.
-  type Token;
-
-  /// Reads the next token from the token stream.
-  ///
-  /// Returns the token if successful, otherwise [`Err`].
-  fn next_token(&mut self) -> Result<Self::Token, Error>;
 }
