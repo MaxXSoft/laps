@@ -4,12 +4,24 @@ use crate::span::{Error, FileType, Location, Span};
 use std::fs::File;
 use std::io::{self, stdin, Cursor, Read, Stdin};
 use std::path::Path;
+use std::str::{from_utf8, from_utf8_unchecked};
+
+/// Size of the byte buffer.
+const BUFFER_SIZE: usize = 1024;
 
 /// A generic reader for lexers.
 pub struct Reader<T> {
   reader: T,
   span: Span,
-  buf: Vec<char>,
+
+  // Buffers in `Reader`:
+  // Read bytes to buffer `byte_buf`, start at offset `byte_buf_offset`,
+  // then convert bytes to UTF-8 characters and stores them into `char_buf`.
+  // If there are some remaining bytes can not be converted, move them to the
+  // begining of the `byte_buf`, and update `byte_buf_offset`.
+  char_buf: Vec<char>,
+  byte_buf: Box<[u8; BUFFER_SIZE]>,
+  byte_buf_offset: usize,
 }
 
 impl<T> Reader<T> {
@@ -21,7 +33,9 @@ impl<T> Reader<T> {
     Self {
       reader,
       span: Span::new(file_type),
-      buf: Vec::new(),
+      char_buf: Vec::new(),
+      byte_buf: Box::new([0; BUFFER_SIZE]),
+      byte_buf_offset: 0,
     }
   }
 
@@ -30,23 +44,44 @@ impl<T> Reader<T> {
   where
     T: Read,
   {
-    let mut buf = [0];
-    // read a character to buffer
-    let count = self
-      .reader
-      .read(&mut buf)
-      .map_err(|e| log_raw_fatal_error!(self.span, "{e}"))?;
     // get the current location
     let loc = self.span.start();
-    // make result and update the span
-    Ok((
-      (count != 0).then(|| {
-        let c = buf[0] as char;
-        self.span.update(c);
-        c
-      }),
-      loc,
-    ))
+    // read bytes to buffer
+    let count = self
+      .reader
+      .read(&mut self.byte_buf[self.byte_buf_offset..])
+      .map_err(|e| log_raw_fatal_error!(self.span, "{e}"))?
+      + self.byte_buf_offset;
+    // handle EOF
+    if count == 0 {
+      return Ok((None, loc));
+    }
+    // converts bytes to UTF-8 string
+    let (s, end) = match from_utf8(&self.byte_buf[..count]) {
+      Ok(s) => (s, None),
+      Err(e) => {
+        let end = e.valid_up_to();
+        // safe due to the above check
+        let s = unsafe { from_utf8_unchecked(&self.byte_buf[..end]) };
+        (s, Some(end))
+      }
+    };
+    // get the character and fill the char buffer
+    let mut chars = s.chars();
+    let c = if let Some(c) = chars.next() {
+      self.char_buf.extend(chars.rev());
+      c
+    } else {
+      return log_raw_fatal_error!(self.span, "invalid UTF-8 character").into();
+    };
+    // update byte buffer and its offset
+    if let Some(end) = end {
+      self.byte_buf.copy_within(end..count, 0);
+      self.byte_buf_offset = count - end;
+    }
+    // update the span
+    self.span.update(c);
+    Ok((Some(c), loc))
   }
 
   /// Converts the reader into the inner reader.
@@ -105,7 +140,7 @@ where
   T: Read,
 {
   fn next_char_loc(&mut self) -> Result<(Option<char>, Location), Error> {
-    if let Some(c) = self.buf.pop() {
+    if let Some(c) = self.char_buf.pop() {
       let loc = self.span.start();
       self.span.update(c);
       Ok((Some(c), loc))
@@ -117,7 +152,7 @@ where
   fn unread(&mut self, last: (Option<char>, Location)) {
     self.span.update_loc(last.1);
     if let Some(c) = last.0 {
-      self.buf.push(c);
+      self.char_buf.push(c);
     }
   }
 
@@ -126,7 +161,7 @@ where
   }
 
   fn peek(&mut self) -> Result<Option<char>, Error> {
-    if let Some(c) = self.buf.last() {
+    if let Some(c) = self.char_buf.last() {
       Ok(Some(*c))
     } else {
       let char_loc = self.next_char_loc_from_reader()?;
@@ -136,7 +171,7 @@ where
   }
 
   fn peek_with_span(&mut self) -> Result<(Option<char>, Span), Error> {
-    if let Some(c) = self.buf.last() {
+    if let Some(c) = self.char_buf.last() {
       Ok((Some(*c), self.span.clone().into_updated(*c)))
     } else {
       let char_loc = self.next_char_loc_from_reader()?;
