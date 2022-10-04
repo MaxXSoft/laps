@@ -181,7 +181,7 @@ pub trait Lexer {
     Ok((char_loc.0, span))
   }
 
-  /// Skips until a character specified by the predicate is encountered.
+  /// Skips characters until a character specified by the predicate is encountered.
   fn skip_until<F>(&mut self, mut f: F) -> Result<(), Error>
   where
     F: FnMut(char) -> bool,
@@ -190,6 +190,23 @@ pub trait Lexer {
       self.next_char()?;
     }
     Ok(())
+  }
+
+  /// Collects characters into a string until a character specified by the
+  /// predicate is encountered.
+  fn collect_until<F>(&mut self, mut f: F) -> Result<String, Error>
+  where
+    F: FnMut(char) -> bool,
+  {
+    let mut s = String::new();
+    while let Some(c) = self.peek()? {
+      if f(c) {
+        break;
+      }
+      s.push(c);
+      self.next_char()?;
+    }
+    Ok(s)
   }
 
   /// Reads the next integer literal from the input stream.
@@ -287,7 +304,7 @@ pub trait Lexer {
   }
 
   /// Reads the next identifier from the input stream.
-  /// Supports Unicode identifier.
+  /// Supports Unicode identifiers.
   ///
   /// Returns the token if successful, otherwise returns [`Err`]
   /// and skips until a whitespace character is encountered.
