@@ -30,10 +30,7 @@ pub struct Reader<T> {
 
 impl<T> Reader<T> {
   /// Creates a new reader.
-  fn new(reader: T, file_type: FileType) -> Self
-  where
-    T: Read,
-  {
+  fn new(reader: T, file_type: FileType) -> Self {
     Self {
       reader,
       span: Span::new(file_type),
