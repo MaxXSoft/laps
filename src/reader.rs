@@ -124,7 +124,7 @@ impl<T> ByteReader<T> {
     let c = buf[0] as char;
     self
       .char_buf
-      .extend(buf[1..count].into_iter().rev().map(|b| *b as char));
+      .extend(buf[1..count].iter().rev().map(|b| *b as char));
     // update the span
     self.span.update(c);
     Ok((Some(c), loc))
