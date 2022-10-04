@@ -7,6 +7,19 @@ pub trait Token<T> {
   fn new(value: T, span: Span) -> Self;
 }
 
+/// Checks the current character, returns the current character and its span.
+macro_rules! check_char {
+  ($self:expr, $char_id:ident, $cond:expr, $literal_name:literal) => {
+    match $self.peek_with_span()? {
+      (Some($char_id), span) if $cond => {
+        $self.next_char()?;
+        ($char_id, span)
+      }
+      (_, span) => return_error!(span, concat!("invalid ", $literal_name, " literal")),
+    }
+  };
+}
+
 /// Logs error and skip until a whitespace character is encountered.
 macro_rules! err_and_skip {
   ($self:expr, $span:expr, $($arg:tt)+) => {{
@@ -27,6 +40,87 @@ macro_rules! err_and_skip_until_nl {
     $self.skip_until(|c| c == '\n')?;
     return_error!($span, $($arg)+)
   }};
+}
+
+/// Handles the next character literal, returns a character.
+macro_rules! handle_char {
+  ($self:expr, $char_span:expr, $literal_name:literal) => {
+    match $char_span {
+      (c @ (Some('\n') | Some('\r') | Some('\t')), span) => {
+        let escaped = match c {
+          Some('\n') => "\\n",
+          Some('\r') => "\\r",
+          Some('\t') => "\\t",
+          _ => unreachable!(),
+        };
+        err_and_skip_until_nl!($self, span, c, "character should be escaped to '{escaped}'");
+      }
+      (Some('\\'), span) => {
+        let (c, sp) = $self.next_char_span()?;
+        let span = span.into_end_updated(sp);
+        match c {
+          Some('r') => '\r',
+          Some('n') => '\n',
+          Some('t') => '\t',
+          Some('0') => '\0',
+          Some('\\') => '\\',
+          Some('x') => {
+            // get escaped char
+            let c = $self
+              .next_char()?
+              .zip($self.peek()?)
+              .and_then(|(c1, c2)| u8::from_str_radix(&format!("{c1}{c2}"), 16).ok())
+              .map(|b| b as char);
+            // get the last char
+            let last_char = $self.next_char()?;
+            let span = span.into_end_updated($self.span());
+            match c {
+              Some(c) => c,
+              None => err_and_skip_until_nl!($self, span, last_char, "invalid byte escape"),
+            }
+          }
+          Some('u') => {
+            // check '{'
+            match $self.next_char_span()? {
+              (Some(c), _) if c == '{' => {}
+              (c, span) => err_and_skip_until_nl!($self, span, c, "expected '{{'"),
+            }
+            // get hex value
+            let mut hex = String::new();
+            while let Some(c) = $self.peek()? {
+              if !c.is_ascii_hexdigit() {
+                break;
+              }
+              hex.push(c);
+              $self.next_char()?;
+            }
+            // check and eat '}'
+            match $self.next_char_span()? {
+              (Some('}'), sp) => {
+                let span = span.into_end_updated(sp);
+                // parse the hex value
+                let hex = match u32::from_str_radix(&hex, 16) {
+                  Ok(hex) => hex,
+                  _ => err_and_skip_until_nl!($self, span, "invalid hexadecimal value '{hex}'"),
+                };
+                // convert to unicode character
+                match char::from_u32(hex) {
+                  Some(c) => c,
+                  None => {
+                    err_and_skip_until_nl!($self, span, "invalid unicode escape '\\u{{{hex}}}'")
+                  }
+                }
+              }
+              (c, span) => err_and_skip_until_nl!($self, span, c, "expected '}}'"),
+            }
+          }
+          _ => err_and_skip_until_nl!($self, span, c, "unknown escape"),
+        }
+      }
+      (Some(c), _) => c,
+      (None, span) => return_error!(span, concat!("unterminated ", $literal_name, " literal")),
+    }
+  };
 }
 
 /// Trait for lexers.
@@ -114,16 +208,10 @@ pub trait Lexer {
   {
     let mut int = String::new();
     // check the current character and get the span
-    let (mut span, is_zero) = match self.peek_with_span()? {
-      (Some(c), span) if c.is_ascii_digit() => {
-        int.push(c);
-        self.next_char()?;
-        (span, c == '0')
-      }
-      (_, span) => return_error!(span, "invalid integer literal"),
-    };
+    let (first_char, mut span) = check_char!(self, c, c.is_ascii_digit(), "integer");
+    int.push(first_char);
     // check the radix
-    let radix = if is_zero {
+    let radix = if first_char == '0' {
       // check the next character
       let radix = match self.peek()? {
         Some(c) if "box".contains(c.to_ascii_lowercase()) => {
@@ -229,7 +317,19 @@ pub trait Lexer {
   where
     T: Token<String>,
   {
-    todo!()
+    // check and skip the first character
+    let (_, span) = check_char!(self, c, c == '"', "string");
+    // read characters
+    let mut s = String::new();
+    while self.peek()?.map_or(false, |c| c != '"') {
+      s.push(handle_char!(self, self.next_char_span()?, "string"));
+    }
+    // check eat the quote
+    match self.next_char_span()? {
+      (Some('"'), sp) => Ok(T::new(s, span.into_end_updated(sp))),
+      (None, span) => return_error!(span, "expected quote (\")"),
+      _ => unreachable!(),
+    }
   }
 
   /// Reads the next character literal (`'...'`) from the input stream.
@@ -247,96 +347,15 @@ pub trait Lexer {
     T: Token<char>,
   {
     // check and skip the first character
-    let span = match self.peek_with_span()? {
-      (Some('\''), span) => {
-        self.next_char()?;
-        span
-      }
-      (_, span) => return_error!(span, "invalid character literal"),
-    };
+    let (_, span) = check_char!(self, c, c == '\'', "character");
     // check the next character
     let c = match self.next_char_span()? {
       (Some('\''), span) => return_error!(span, "character literal must not be empty"),
-      (c @ (Some('\n') | Some('\r') | Some('\t')), span) => {
-        let escaped = match c {
-          Some('\n') => "\\n",
-          Some('\r') => "\\r",
-          Some('\t') => "\\t",
-          _ => unreachable!(),
-        };
-        err_and_skip_until_nl!(self, span, c, "character should be escaped to '{escaped}'");
-      }
-      (Some('\\'), span) => {
-        let (c, sp) = self.next_char_span()?;
-        let span = span.into_end_updated(sp);
-        match c {
-          Some('r') => '\r',
-          Some('n') => '\n',
-          Some('t') => '\t',
-          Some('0') => '\0',
-          Some('\\') => '\\',
-          Some('x') => {
-            // get escaped char
-            let c = self
-              .next_char()?
-              .zip(self.peek()?)
-              .and_then(|(c1, c2)| u8::from_str_radix(&format!("{c1}{c2}"), 16).ok())
-              .map(|b| b as char);
-            // get the last char
-            let last_char = self.next_char()?;
-            let span = span.into_end_updated(self.span());
-            match c {
-              Some(c) => c,
-              None => err_and_skip_until_nl!(self, span, last_char, "invalid byte escape"),
-            }
-          }
-          Some('u') => {
-            // check '{'
-            match self.next_char_span()? {
-              (Some(c), _) if c == '{' => {}
-              (c, span) => err_and_skip_until_nl!(self, span, c, "expected '{{'"),
-            }
-            // get hex value
-            let mut hex = String::new();
-            while let Some(c) = self.peek()? {
-              if !c.is_ascii_hexdigit() {
-                break;
-              }
-              hex.push(c);
-              self.next_char()?;
-            }
-            // check and eat '}'
-            match self.next_char_span()? {
-              (Some('}'), sp) => {
-                let span = span.into_end_updated(sp);
-                // parse the hex value
-                let hex = match u32::from_str_radix(&hex, 16) {
-                  Ok(hex) => hex,
-                  _ => err_and_skip_until_nl!(self, span, "invalid hexadecimal value '{hex}'"),
-                };
-                // convert to unicode character
-                match char::from_u32(hex) {
-                  Some(c) => c,
-                  None => {
-                    err_and_skip_until_nl!(self, span, "invalid unicode escape '\\u{{{hex}}}'")
-                  }
-                }
-              }
-              (c, span) => err_and_skip_until_nl!(self, span, c, "expected '}}'"),
-            }
-          }
-          _ => err_and_skip_until_nl!(self, span, c, "unknown escape"),
-        }
-      }
-      (Some(c), _) => c,
-      (None, span) => return_error!(span, "unterminated character literal"),
+      char_span => handle_char!(self, char_span, "character"),
     };
     // check and eat the quote
     match self.peek_with_span()? {
-      (Some('\''), s) => {
-        self.next_char()?;
-        Ok(T::new(c, span.into_end_updated(s)))
-      }
+      (Some('\''), _) => Ok(T::new(c, span.into_end_updated(self.next_span()?))),
       (_, span) => err_and_skip_until_nl!(self, span, "expected quote (')"),
     }
   }
