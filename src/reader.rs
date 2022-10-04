@@ -9,7 +9,7 @@ use std::path::Path;
 pub struct Reader<T> {
   reader: T,
   span: Span,
-  buf: Vec<Option<char>>,
+  buf: Vec<char>,
 }
 
 impl<T> Reader<T> {
@@ -105,12 +105,10 @@ where
   T: Read,
 {
   fn next_char_loc(&mut self) -> Result<(Option<char>, Location), Error> {
-    if let Some(buffered) = self.buf.pop() {
+    if let Some(c) = self.buf.pop() {
       let loc = self.span.start();
-      if let Some(c) = buffered {
-        self.span.update(c);
-      }
-      Ok((buffered, loc))
+      self.span.update(c);
+      Ok((Some(c), loc))
     } else {
       self.next_char_loc_from_reader()
     }
@@ -118,7 +116,9 @@ where
 
   fn unread(&mut self, last: (Option<char>, Location)) {
     self.span.update_loc(last.1);
-    self.buf.push(last.0);
+    if let Some(c) = last.0 {
+      self.buf.push(c);
+    }
   }
 
   fn span(&self) -> &Span {
@@ -126,8 +126,8 @@ where
   }
 
   fn peek(&mut self) -> Result<Option<char>, Error> {
-    if let Some(buffered) = self.buf.last() {
-      Ok(*buffered)
+    if let Some(c) = self.buf.last() {
+      Ok(Some(*c))
     } else {
       let char_loc = self.next_char_loc_from_reader()?;
       self.unread(char_loc);
@@ -136,13 +136,8 @@ where
   }
 
   fn peek_with_span(&mut self) -> Result<(Option<char>, Span), Error> {
-    if let Some(buffered) = self.buf.last() {
-      let span = if let Some(c) = buffered {
-        self.span.clone().into_updated(*c)
-      } else {
-        self.span.clone()
-      };
-      Ok((*buffered, span))
+    if let Some(c) = self.buf.last() {
+      Ok((Some(*c), self.span.clone().into_updated(*c)))
     } else {
       let char_loc = self.next_char_loc_from_reader()?;
       let span = self.span.clone();
