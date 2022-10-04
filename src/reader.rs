@@ -93,6 +93,13 @@ impl<'a> From<&'a str> for Reader<Cursor<&'a str>> {
   }
 }
 
+impl<'a> From<&'a [u8]> for Reader<&'a [u8]> {
+  /// Creates a new reader from the given <code>&amp;[[u8]]</code>.
+  fn from(b: &'a [u8]) -> Self {
+    Self::new(b, FileType::Buffer)
+  }
+}
+
 impl<T> Lexer for Reader<T>
 where
   T: Read,
