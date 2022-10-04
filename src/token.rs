@@ -1,7 +1,7 @@
 use crate::span::{Error, Span};
 
-/// Trait for tokens that holding values of type `T`.
-pub trait Token<T> {
+/// Trait for creating tokens that holding values of type `T`.
+pub trait TokenBuilder<T> {
   /// Creates a new token from the given value and span.
   fn new(value: T, span: Span) -> Self;
 }

@@ -1,6 +1,6 @@
 use crate::return_error;
 use crate::span::{Error, Location, Span};
-use crate::token::Token;
+use crate::token::TokenBuilder;
 
 /// Checks the current character, returns the current character and its span.
 macro_rules! check_char {
@@ -199,7 +199,7 @@ pub trait Lexer {
   /// and skips until a whitespace character is encountered.
   fn next_int<T>(&mut self) -> Result<T, Error>
   where
-    T: Token<u64>,
+    T: TokenBuilder<u64>,
   {
     let mut int = String::new();
     // check the current character and get the span
@@ -258,7 +258,7 @@ pub trait Lexer {
   /// and skips until a whitespace character is encountered.
   fn next_float<T>(&mut self) -> Result<T, Error>
   where
-    T: Token<f64>,
+    T: TokenBuilder<f64>,
   {
     todo!()
   }
@@ -270,7 +270,7 @@ pub trait Lexer {
   /// and skips until a whitespace character is encountered.
   fn next_num<T>(&mut self) -> Result<T, Error>
   where
-    T: Token<u64> + Token<f64>,
+    T: TokenBuilder<u64> + TokenBuilder<f64>,
   {
     todo!()
   }
@@ -281,7 +281,7 @@ pub trait Lexer {
   /// and skips until a whitespace character is encountered.
   fn next_ident<T>(&mut self) -> Result<T, Error>
   where
-    T: Token<String>,
+    T: TokenBuilder<String>,
   {
     todo!()
   }
@@ -293,7 +293,7 @@ pub trait Lexer {
   /// and skips until a whitespace character is encountered.
   fn next_unicode_ident<T>(&mut self) -> Result<T, Error>
   where
-    T: Token<String>,
+    T: TokenBuilder<String>,
   {
     todo!()
   }
@@ -310,7 +310,7 @@ pub trait Lexer {
   /// and skips until a whitespace character is encountered.
   fn next_str<T>(&mut self) -> Result<T, Error>
   where
-    T: Token<String>,
+    T: TokenBuilder<String>,
   {
     // check and skip the first character
     let (_, span) = check_char!(self, c, c == '"', "string");
@@ -339,7 +339,7 @@ pub trait Lexer {
   /// and skips until a whitespace character is encountered.
   fn next_char_literal<T>(&mut self) -> Result<T, Error>
   where
-    T: Token<char>,
+    T: TokenBuilder<char>,
   {
     // check and skip the first character
     let (_, span) = check_char!(self, c, c == '\'', "character");
