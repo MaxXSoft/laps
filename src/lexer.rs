@@ -209,6 +209,12 @@ pub trait Lexer {
     Ok(s)
   }
 
+  /// Returns `true` if the current character may be the beginning of
+  /// an integer literal.
+  fn maybe_int(&mut self) -> Result<bool, Error> {
+    Ok(self.peek()?.map_or(false, |c| c.is_ascii_digit()))
+  }
+
   /// Reads the next integer literal from the input stream.
   /// Supports decimal, binary, hexadecimal and octal.
   ///
@@ -269,6 +275,12 @@ pub trait Lexer {
     }
   }
 
+  /// Returns `true` if the current character may be the beginning of
+  /// an floating-point literal.
+  fn maybe_float(&mut self) -> Result<bool, Error> {
+    todo!()
+  }
+
   /// Reads the next floating-point literal from the input stream.
   ///
   /// Returns the token if successful, otherwise returns [`Err`]
@@ -277,6 +289,12 @@ pub trait Lexer {
   where
     T: TokenBuilder<f64>,
   {
+    todo!()
+  }
+
+  /// Returns `true` if the current character may be the beginning of
+  /// a number (integer literal or floating-point literal).
+  fn maybe_num(&mut self) -> Result<bool, Error> {
     todo!()
   }
 
@@ -292,6 +310,12 @@ pub trait Lexer {
     todo!()
   }
 
+  /// Returns `true` if the current character may be the beginning of
+  /// an identifier.
+  fn maybe_ident(&mut self) -> Result<bool, Error> {
+    todo!()
+  }
+
   /// Reads the next identifier from the input stream.
   ///
   /// Returns the token if successful, otherwise returns [`Err`]
@@ -300,6 +324,12 @@ pub trait Lexer {
   where
     T: TokenBuilder<String>,
   {
+    todo!()
+  }
+
+  /// Returns `true` if the current character may be the beginning of
+  /// a Unicode identifier.
+  fn maybe_unicode_ident(&mut self) -> Result<bool, Error> {
     todo!()
   }
 
@@ -313,6 +343,12 @@ pub trait Lexer {
     T: TokenBuilder<String>,
   {
     todo!()
+  }
+
+  /// Returns `true` if the current character may be the beginning of
+  /// a string literal.
+  fn maybe_str(&mut self) -> Result<bool, Error> {
+    Ok(self.peek()?.map_or(false, |c| c == '"'))
   }
 
   /// Reads the next string literal (`"..."`) from the input stream.
@@ -342,6 +378,12 @@ pub trait Lexer {
       (None, span) => return_error!(span, "expected quote (\")"),
       _ => unreachable!(),
     }
+  }
+
+  /// Returns `true` if the current character may be the beginning of
+  /// a character literal.
+  fn maybe_char_literal(&mut self) -> Result<bool, Error> {
+    Ok(self.peek()?.map_or(false, |c| c == '\''))
   }
 
   /// Reads the next character literal (`'...'`) from the input stream.
