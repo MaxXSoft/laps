@@ -84,101 +84,156 @@ impl<T> Reader<T> {
     self.span.update(c);
     Ok((Some(c), loc))
   }
-
-  /// Converts the reader into the inner reader.
-  pub fn into_inner(self) -> T {
-    self.reader
-  }
 }
 
-impl Reader<File> {
-  /// Creates a new reader from the file at the given path.
-  pub fn from_path<P>(path: P) -> io::Result<Self>
+/// A generic byte reader for lexers.
+pub struct ByteReader<T> {
+  reader: T,
+  span: Span,
+  char_buf: Vec<char>,
+}
+
+impl<T> ByteReader<T> {
+  /// Creates a new reader.
+  fn new(reader: T, file_type: FileType) -> Self {
+    Self {
+      reader,
+      span: Span::new(file_type),
+      char_buf: Vec::new(),
+    }
+  }
+
+  /// Returns the next character and the last location from the reader.
+  fn next_char_loc_from_reader(&mut self) -> Result<(Option<char>, Location), Error>
   where
-    P: AsRef<Path> + Clone,
+    T: Read,
   {
-    File::open(path.clone()).map(|f| Self::new(f, FileType::File(Box::from(path.as_ref()))))
-  }
-}
-
-impl Reader<Stdin> {
-  /// Creates a new reader from the standard input.
-  pub fn from_stdin() -> Self {
-    stdin().into()
-  }
-}
-
-impl From<Stdin> for Reader<Stdin> {
-  /// Creates a new reader from the standard input.
-  fn from(stdin: Stdin) -> Self {
-    Self::new(stdin, FileType::Stdin)
-  }
-}
-
-impl From<String> for Reader<Cursor<String>> {
-  /// Creates a new reader from the given [`String`].
-  fn from(s: String) -> Self {
-    Self::new(Cursor::new(s), FileType::Buffer)
-  }
-}
-
-impl<'a> From<&'a str> for Reader<Cursor<&'a str>> {
-  /// Creates a new reader from the given <code>&amp;[str]</code>.
-  fn from(s: &'a str) -> Self {
-    Self::new(Cursor::new(s), FileType::Buffer)
-  }
-}
-
-impl<'a> From<&'a [u8]> for Reader<&'a [u8]> {
-  /// Creates a new reader from the given <code>&amp;[[u8]]</code>.
-  fn from(b: &'a [u8]) -> Self {
-    Self::new(b, FileType::Buffer)
-  }
-}
-
-impl<T> Lexer for Reader<T>
-where
-  T: Read,
-{
-  fn next_char_loc(&mut self) -> Result<(Option<char>, Location), Error> {
-    if let Some(c) = self.char_buf.pop() {
-      let loc = self.span.start();
-      self.span.update(c);
-      Ok((Some(c), loc))
-    } else {
-      self.next_char_loc_from_reader()
+    // get the current location
+    let loc = self.span.start();
+    // read bytes to buffer
+    let mut buf = [0; BUFFER_SIZE];
+    let count = self
+      .reader
+      .read(&mut buf)
+      .map_err(|e| log_raw_fatal_error!(self.span, "{e}"))?;
+    // handle EOF
+    if count == 0 {
+      return Ok((None, loc));
     }
-  }
-
-  fn unread(&mut self, last: (Option<char>, Location)) {
-    self.span.update_loc(last.1);
-    if let Some(c) = last.0 {
-      self.char_buf.push(c);
-    }
-  }
-
-  fn span(&self) -> &Span {
-    &self.span
-  }
-
-  fn peek(&mut self) -> Result<Option<char>, Error> {
-    if let Some(c) = self.char_buf.last() {
-      Ok(Some(*c))
-    } else {
-      let char_loc = self.next_char_loc_from_reader()?;
-      self.unread(char_loc);
-      Ok(char_loc.0)
-    }
-  }
-
-  fn peek_with_span(&mut self) -> Result<(Option<char>, Span), Error> {
-    if let Some(c) = self.char_buf.last() {
-      Ok((Some(*c), self.span.clone().into_updated(*c)))
-    } else {
-      let char_loc = self.next_char_loc_from_reader()?;
-      let span = self.span.clone();
-      self.unread(char_loc);
-      Ok((char_loc.0, span))
-    }
+    // get the character and fill the char buffer
+    let c = buf[0] as char;
+    self
+      .char_buf
+      .extend(buf[1..count].into_iter().rev().map(|b| *b as char));
+    // update the span
+    self.span.update(c);
+    Ok((Some(c), loc))
   }
 }
+
+/// Implements necessary methods for the given reader.
+macro_rules! impl_reader {
+  ($name:ident) => {
+    impl<T> $name<T> {
+      /// Converts the reader into the inner reader.
+      pub fn into_inner(self) -> T {
+        self.reader
+      }
+    }
+
+    impl $name<File> {
+      /// Creates a new reader from the file at the given path.
+      pub fn from_path<P>(path: P) -> io::Result<Self>
+      where
+        P: AsRef<Path> + Clone,
+      {
+        File::open(path.clone()).map(|f| Self::new(f, FileType::File(Box::from(path.as_ref()))))
+      }
+    }
+
+    impl $name<Stdin> {
+      /// Creates a new reader from the standard input.
+      pub fn from_stdin() -> Self {
+        stdin().into()
+      }
+    }
+
+    impl From<Stdin> for $name<Stdin> {
+      /// Creates a new reader from the standard input.
+      fn from(stdin: Stdin) -> Self {
+        Self::new(stdin, FileType::Stdin)
+      }
+    }
+
+    impl From<String> for $name<Cursor<String>> {
+      /// Creates a new reader from the given [`String`].
+      fn from(s: String) -> Self {
+        Self::new(Cursor::new(s), FileType::Buffer)
+      }
+    }
+
+    impl<'a> From<&'a str> for $name<Cursor<&'a str>> {
+      /// Creates a new reader from the given <code>&amp;[str]</code>.
+      fn from(s: &'a str) -> Self {
+        Self::new(Cursor::new(s), FileType::Buffer)
+      }
+    }
+
+    impl<'a> From<&'a [u8]> for $name<&'a [u8]> {
+      /// Creates a new reader from the given <code>&amp;[[u8]]</code>.
+      fn from(b: &'a [u8]) -> Self {
+        Self::new(b, FileType::Buffer)
+      }
+    }
+
+    impl<T> Lexer for $name<T>
+    where
+      T: Read,
+    {
+      fn next_char_loc(&mut self) -> Result<(Option<char>, Location), Error> {
+        if let Some(c) = self.char_buf.pop() {
+          let loc = self.span.start();
+          self.span.update(c);
+          Ok((Some(c), loc))
+        } else {
+          self.next_char_loc_from_reader()
+        }
+      }
+
+      fn unread(&mut self, last: (Option<char>, Location)) {
+        self.span.update_loc(last.1);
+        if let Some(c) = last.0 {
+          self.char_buf.push(c);
+        }
+      }
+
+      fn span(&self) -> &Span {
+        &self.span
+      }
+
+      fn peek(&mut self) -> Result<Option<char>, Error> {
+        if let Some(c) = self.char_buf.last() {
+          Ok(Some(*c))
+        } else {
+          let char_loc = self.next_char_loc_from_reader()?;
+          self.unread(char_loc);
+          Ok(char_loc.0)
+        }
+      }
+
+      fn peek_with_span(&mut self) -> Result<(Option<char>, Span), Error> {
+        if let Some(c) = self.char_buf.last() {
+          Ok((Some(*c), self.span.clone().into_updated(*c)))
+        } else {
+          let char_loc = self.next_char_loc_from_reader()?;
+          let span = self.span.clone();
+          self.unread(char_loc);
+          Ok((char_loc.0, span))
+        }
+      }
+    }
+  };
+}
+
+impl_reader!(Reader);
+impl_reader!(ByteReader);
