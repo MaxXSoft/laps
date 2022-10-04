@@ -11,3 +11,6 @@ no-logger = []
 
 [target.'cfg(not(feature = "no-logger"))'.dependencies]
 colored = "2.0.0"
+
+[dependencies]
+unicode-xid = "0.2.4"
