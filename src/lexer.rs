@@ -1,6 +1,7 @@
 use crate::return_error;
 use crate::span::{Error, Location, Span};
 use crate::token::TokenBuilder;
+use unicode_xid::UnicodeXID;
 
 /// Checks the current character, returns the current character and its span.
 macro_rules! check_char {
@@ -278,7 +279,11 @@ pub trait Lexer {
   /// Returns `true` if the current character may be the beginning of
   /// an floating-point literal.
   fn maybe_float(&mut self) -> Result<bool, Error> {
-    todo!()
+    Ok(
+      self
+        .peek()?
+        .map_or(false, |c| c.is_ascii_digit() || c == '.'),
+    )
   }
 
   /// Reads the next floating-point literal from the input stream.
@@ -295,7 +300,7 @@ pub trait Lexer {
   /// Returns `true` if the current character may be the beginning of
   /// a number (integer literal or floating-point literal).
   fn maybe_num(&mut self) -> Result<bool, Error> {
-    todo!()
+    self.maybe_float()
   }
 
   /// Reads the next integer literal or floating-point literal from the input
@@ -313,7 +318,11 @@ pub trait Lexer {
   /// Returns `true` if the current character may be the beginning of
   /// an identifier.
   fn maybe_ident(&mut self) -> Result<bool, Error> {
-    todo!()
+    Ok(
+      self
+        .peek()?
+        .map_or(false, |c| c.is_ascii_alphabetic() || c == '_'),
+    )
   }
 
   /// Reads the next identifier from the input stream.
@@ -330,7 +339,11 @@ pub trait Lexer {
   /// Returns `true` if the current character may be the beginning of
   /// a Unicode identifier.
   fn maybe_unicode_ident(&mut self) -> Result<bool, Error> {
-    todo!()
+    Ok(
+      self
+        .peek()?
+        .map_or(false, |c| UnicodeXID::is_xid_start(c) || c == '_'),
+    )
   }
 
   /// Reads the next identifier from the input stream.
