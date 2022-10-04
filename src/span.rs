@@ -175,7 +175,7 @@ impl Span {
     let warnings = self.status.warnings.get();
     // error info
     if errors != 0 {
-      msg += &format!("{errors} error");
+      let _ = write!(msg, "{errors} error");
       if errors > 1 {
         msg += "s";
       }
@@ -186,7 +186,7 @@ impl Span {
     }
     // warning info
     if warnings != 0 {
-      msg += &format!("{warnings} warning");
+      let _ = write!(msg, "{warnings} warning");
       if warnings > 1 {
         msg += "s";
       }
@@ -464,7 +464,7 @@ impl fmt::Debug for Span {
 
 impl AsRef<Self> for Span {
   fn as_ref(&self) -> &Self {
-    &self
+    self
   }
 }
 
