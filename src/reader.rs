@@ -9,7 +9,11 @@ use std::str::{from_utf8, from_utf8_unchecked};
 /// Size of the byte buffer.
 const BUFFER_SIZE: usize = 1024;
 
-/// A generic reader for lexers.
+/// A generic UTF-8 character reader for lexers.
+///
+/// [`Reader`] always tries to read UTF-8 characters from the stream.
+/// If there are no valid UTF-8 characters, [`Reader`] will return a
+/// fatal error ([`Error::Fatal`]).
 pub struct Reader<T> {
   reader: T,
   span: Span,
