@@ -230,36 +230,18 @@ pub trait Lexer {
     let (first_char, mut span) = check_char!(self, c, c.is_ascii_digit(), "integer");
     int.push(first_char);
     // check the radix
-    let radix = if first_char == '0' {
-      // check the next character
-      let radix = match self.peek()? {
-        Some(c) if "box".contains(c.to_ascii_lowercase()) => {
-          // radix prefix
-          int.clear();
-          Some(match c.to_ascii_lowercase() {
-            'b' => 2,
-            'o' => 8,
-            'x' => 16,
-            _ => unreachable!(),
-          })
+    let radix = match (first_char, self.peek()?) {
+      ('0', Some(c)) if "box".contains(c.to_ascii_lowercase()) => {
+        // radix prefix
+        int.clear();
+        match c.to_ascii_lowercase() {
+          'b' => 2,
+          'o' => 8,
+          'x' => 16,
+          _ => unreachable!(),
         }
-        Some(c) if c.is_ascii_digit() => {
-          // leading zero, which is not allowed
-          int.push(c);
-          None
-        }
-        // other characters or EOF, so the literal is just a zero
-        _ => return Ok(T::new(0, span)),
-      };
-      // eat the current character and update the span
-      span.update_end(self.next_span()?);
-      match radix {
-        Some(r) => r,
-        _ => err_and_skip!(self, span, "invalid integer literal '{int}'"),
       }
-    } else {
-      // previous digit is not zero, just a decimal
-      10
+      _ => 10,
     };
     // read the rest characters to string
     while let Some(c) = self.peek()? {
