@@ -234,6 +234,7 @@ pub trait Lexer {
       ('0', Some(c)) if "box".contains(c.to_ascii_lowercase()) => {
         // radix prefix
         int.clear();
+        span.update_end(self.next_span()?);
         match c.to_ascii_lowercase() {
           'b' => 2,
           'o' => 8,
@@ -311,7 +312,48 @@ pub trait Lexer {
   where
     T: TokenBuilder<u64> + TokenBuilder<f64>,
   {
-    todo!()
+    let mut num = String::new();
+    // check the current character and get the span
+    let (first_char, mut span) = check_char!(self, c, c.is_ascii_digit() || c == '.', "number");
+    num.push(first_char);
+    // check the radix
+    let mut is_float = first_char == '.';
+    let radix = match (first_char, self.peek()?) {
+      ('0', Some(c)) if "box".contains(c.to_ascii_lowercase()) => {
+        // radix prefix
+        num.clear();
+        span.update_end(self.next_span()?);
+        match c.to_ascii_lowercase() {
+          'b' => 2,
+          'o' => 8,
+          'x' => 16,
+          _ => unreachable!(),
+        }
+      }
+      _ => 10,
+    };
+    // read the rest characters to string
+    while let Some(c) = self.peek()? {
+      if ".+-e".contains(c.to_ascii_lowercase()) {
+        is_float = true;
+      } else if !c.is_ascii_digit() {
+        break;
+      }
+      num.push(c);
+      span.update_end(self.next_span()?);
+    }
+    // convert to number
+    if is_float {
+      match num.parse::<f64>() {
+        Ok(f) => Ok(T::new(f, span)),
+        _ => err_and_skip!(self, span, "invalid floating-point literal '{num}'"),
+      }
+    } else {
+      match u64::from_str_radix(&num, radix) {
+        Ok(i) => Ok(T::new(i, span)),
+        _ => err_and_skip!(self, span, "invalid integer literal '{num}'"),
+      }
+    }
   }
 
   /// Returns `true` if the current character may be the beginning of
