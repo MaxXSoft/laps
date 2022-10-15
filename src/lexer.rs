@@ -223,6 +223,23 @@ pub trait Lexer {
     Ok(s)
   }
 
+  /// Collects characters into a string until a character specified by the
+  /// predicate is encountered.
+  ///
+  /// Returns the collected string and its span.
+  fn collect_with_span_until<F>(&mut self, mut f: F) -> Result<(String, Span), Error>
+  where
+    F: FnMut(char) -> bool,
+  {
+    let mut s = String::new();
+    let mut span = match self.peek_with_span()? {
+      (Some(c), span) if !f(c) => span,
+      (_, span) => return Ok((s, span)),
+    };
+    read_chars!(self, c, !f(c), s, span);
+    Ok((s, span))
+  }
+
   /// Returns `true` if the current character may be the beginning of
   /// an integer literal.
   fn maybe_int(&mut self) -> Result<bool, Error> {
