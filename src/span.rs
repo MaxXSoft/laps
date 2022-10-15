@@ -12,7 +12,7 @@ use std::{fmt::Write, fs::File, io::BufRead, io::BufReader, io::Result as IoResu
 
 /// The type of error returned by logger methods of [`Span`].
 #[cfg(feature = "no-logger")]
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Error {
   /// Normal error.
   Normal(String),
@@ -22,7 +22,7 @@ pub enum Error {
 
 /// The type of error returned by logger methods of [`Span`].
 #[cfg(not(feature = "no-logger"))]
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Error {
   /// Normal error.
   Normal,
@@ -462,6 +462,14 @@ impl fmt::Debug for Span {
   }
 }
 
+impl PartialEq for Span {
+  fn eq(&self, other: &Self) -> bool {
+    Rc::ptr_eq(&self.status, &other.status) && self.start == other.start && self.end == other.end
+  }
+}
+
+impl Eq for Span {}
+
 impl AsRef<Self> for Span {
   fn as_ref(&self) -> &Self {
     self
@@ -469,7 +477,7 @@ impl AsRef<Self> for Span {
 }
 
 /// A line-column mark.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Location {
   line: u32,
   col: u32,
