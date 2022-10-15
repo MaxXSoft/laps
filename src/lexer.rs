@@ -16,6 +16,19 @@ macro_rules! check_char {
   };
 }
 
+/// Reads characters to string while the condition is true.
+macro_rules! read_chars {
+  ($self:expr, $char_id:ident, $cond:expr, $s:expr, $span:expr) => {
+    while let Some($char_id) = $self.peek()? {
+      if !$cond {
+        break;
+      }
+      $s.push($char_id);
+      $span.update_end($self.next_span()?);
+    }
+  };
+}
+
 /// Logs error and skip until a whitespace character is encountered.
 macro_rules! err_and_skip {
   ($self:expr, $span:expr, $($arg:tt)+) => {{
@@ -245,13 +258,7 @@ pub trait Lexer {
       _ => 10,
     };
     // read the rest characters to string
-    while let Some(c) = self.peek()? {
-      if !c.is_digit(radix) {
-        break;
-      }
-      int.push(c);
-      span.update_end(self.next_span()?);
-    }
+    read_chars!(self, c, c.is_digit(radix), int, span);
     // convert to integer
     match u64::from_str_radix(&int, radix) {
       Ok(i) => Ok(T::new(i, span)),
@@ -283,13 +290,8 @@ pub trait Lexer {
       check_char!(self, c, c.is_ascii_digit() || c == '.', "floating-point");
     float.push(first_char);
     // read the rest characters to string
-    while let Some(c) = self.peek()? {
-      if !c.is_ascii_digit() && !".+-e".contains(c.to_ascii_lowercase()) {
-        break;
-      }
-      float.push(c);
-      span.update_end(self.next_span()?);
-    }
+    let is_float_char = |c: char| c.is_ascii_digit() || ".+-e".contains(c.to_ascii_lowercase());
+    read_chars!(self, c, is_float_char(c), float, span);
     // convert to floating-point
     match float.parse() {
       Ok(f) => Ok(T::new(f, span)),
@@ -380,13 +382,7 @@ pub trait Lexer {
       check_char!(self, c, c.is_ascii_alphabetic() || c == '_', "identifier");
     id.push(first_char);
     // read the rest characters to string
-    while let Some(c) = self.peek()? {
-      if !c.is_ascii_alphanumeric() && c != '_' {
-        break;
-      }
-      id.push(c);
-      span.update_end(self.next_span()?);
-    }
+    read_chars!(self, c, c.is_ascii_alphanumeric() || c == '_', id, span);
     Ok(T::new(id, span))
   }
 
@@ -414,13 +410,7 @@ pub trait Lexer {
     let (first_char, mut span) = check_char!(self, c, UnicodeXID::is_xid_start(c), "identifier");
     id.push(first_char);
     // read the rest characters to string
-    while let Some(c) = self.peek()? {
-      if !UnicodeXID::is_xid_continue(c) {
-        break;
-      }
-      id.push(c);
-      span.update_end(self.next_span()?);
-    }
+    read_chars!(self, c, UnicodeXID::is_xid_continue(c), id, span);
     Ok(T::new(id, span))
   }
 
