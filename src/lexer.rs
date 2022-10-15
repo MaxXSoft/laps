@@ -500,3 +500,55 @@ pub trait Lexer {
     }
   }
 }
+
+#[cfg(test)]
+mod test {
+  use super::Lexer;
+  use crate::reader::Reader;
+
+  #[test]
+  fn next_char_or_span() {
+    let mut reader = Reader::from("123 abc");
+    assert_eq!(reader.next_char(), Ok(Some('1')));
+    assert_eq!(reader.next_char(), Ok(Some('2')));
+    let (c, span) = reader.next_char_span().unwrap();
+    assert_eq!(c, Some('3'));
+    assert_eq!(format!("{span}"), "1:3-1:3");
+    let (c, span) = reader.next_char_span().unwrap();
+    assert_eq!(c, Some(' '));
+    assert_eq!(format!("{span}"), "1:4-1:4");
+    assert_eq!(format!("{}", reader.next_span().unwrap()), "1:5-1:5");
+    assert_eq!(format!("{}", reader.next_span().unwrap()), "1:6-1:6");
+    assert_eq!(reader.next_char(), Ok(Some('c')));
+    assert_eq!(reader.next_char(), Ok(None));
+    assert_eq!(reader.next_char(), Ok(None));
+  }
+
+  #[test]
+  fn skip_until() {
+    let mut reader = Reader::from("123  abc");
+    assert_eq!(reader.skip_until(|c| c.is_whitespace()), Ok(()));
+    assert_eq!(reader.next_char(), Ok(Some(' ')));
+    assert_eq!(reader.next_char(), Ok(Some(' ')));
+    assert_eq!(reader.next_char(), Ok(Some('a')));
+    assert_eq!(reader.next_char(), Ok(Some('b')));
+    assert_eq!(reader.next_char(), Ok(Some('c')));
+    assert_eq!(reader.next_char(), Ok(None));
+    assert_eq!(reader.next_char(), Ok(None));
+  }
+
+  #[test]
+  fn collect_until() {
+    let mut reader = Reader::from("123 abc");
+    assert_eq!(
+      reader.collect_until(|c| c.is_whitespace()),
+      Ok("123".into())
+    );
+    assert_eq!(reader.next_char(), Ok(Some(' ')));
+    let (s, span) = reader.collect_with_span_until(|_| false).unwrap();
+    assert_eq!(s, "abc");
+    assert_eq!(format!("{span}"), "1:5-1:7");
+    assert_eq!(reader.next_char(), Ok(None));
+    assert_eq!(reader.next_char(), Ok(None));
+  }
+}
