@@ -237,3 +237,54 @@ macro_rules! impl_reader {
 
 impl_reader!(Reader);
 impl_reader!(ByteReader);
+
+#[cfg(test)]
+mod test {
+  use super::*;
+
+  #[test]
+  fn next_char_loc_unread() {
+    let mut reader = Reader::from("123 abc");
+    assert_eq!(reader.next_char_loc().unwrap().0, Some('1'));
+    let last = reader.next_char_loc().unwrap();
+    assert_eq!(last.0, Some('2'));
+    reader.unread(last);
+    let loc = last.1;
+    assert_eq!(reader.next_char_loc().unwrap(), (Some('2'), loc));
+    assert_eq!(reader.next_char_loc().unwrap().0, Some('3'));
+    assert_eq!(reader.next_char_loc().unwrap().0, Some(' '));
+    assert_eq!(reader.next_char_loc().unwrap().0, Some('a'));
+    assert_eq!(reader.next_char_loc().unwrap().0, Some('b'));
+    assert_eq!(reader.next_char_loc().unwrap().0, Some('c'));
+    let last = reader.next_char_loc().unwrap();
+    assert_eq!(last.0, None);
+    reader.unread(last);
+    let loc = last.1;
+    assert_eq!(reader.next_char_loc().unwrap(), (None, loc));
+    assert_eq!(reader.next_char_loc().unwrap().0, None);
+  }
+
+  #[test]
+  fn peek() {
+    let mut reader = Reader::from("123 abc");
+    assert_eq!(reader.peek(), Ok(Some('1')));
+    assert_eq!(reader.peek(), Ok(Some('1')));
+    reader.next_char_loc().unwrap();
+    assert_eq!(reader.peek(), Ok(Some('2')));
+  }
+
+  #[test]
+  fn peek_with_span() {
+    let mut reader = Reader::from("123 abc");
+    let (c, span) = reader.peek_with_span().unwrap();
+    assert_eq!(c, Some('1'));
+    assert_eq!(format!("{span}"), "1:1-1:1");
+    let (c, span) = reader.peek_with_span().unwrap();
+    assert_eq!(c, Some('1'));
+    assert_eq!(format!("{span}"), "1:1-1:1");
+    reader.next_char_loc().unwrap();
+    let (c, span) = reader.peek_with_span().unwrap();
+    assert_eq!(c, Some('2'));
+    assert_eq!(format!("{span}"), "1:2-1:2");
+  }
+}
