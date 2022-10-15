@@ -333,7 +333,20 @@ pub trait Lexer {
   where
     T: TokenBuilder<String>,
   {
-    todo!()
+    let mut id = String::new();
+    // check the current character and get the span
+    let (first_char, mut span) =
+      check_char!(self, c, c.is_ascii_alphabetic() || c == '_', "identifier");
+    id.push(first_char);
+    // read the rest characters to string
+    while let Some(c) = self.peek()? {
+      if !c.is_ascii_alphanumeric() && c != '_' {
+        break;
+      }
+      id.push(c);
+      span.update_end(self.next_span()?);
+    }
+    Ok(T::new(id, span))
   }
 
   /// Returns `true` if the current character may be the beginning of
@@ -355,7 +368,19 @@ pub trait Lexer {
   where
     T: TokenBuilder<String>,
   {
-    todo!()
+    let mut id = String::new();
+    // check the current character and get the span
+    let (first_char, mut span) = check_char!(self, c, UnicodeXID::is_xid_start(c), "identifier");
+    id.push(first_char);
+    // read the rest characters to string
+    while let Some(c) = self.peek()? {
+      if !UnicodeXID::is_xid_continue(c) {
+        break;
+      }
+      id.push(c);
+      span.update_end(self.next_span()?);
+    }
+    Ok(T::new(id, span))
   }
 
   /// Returns `true` if the current character may be the beginning of
