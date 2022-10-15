@@ -276,7 +276,24 @@ pub trait Lexer {
   where
     T: TokenBuilder<f64>,
   {
-    todo!()
+    let mut float = String::new();
+    // check the current character and get the span
+    let (first_char, mut span) =
+      check_char!(self, c, c.is_ascii_digit() || c == '.', "floating-point");
+    float.push(first_char);
+    // read the rest characters to string
+    while let Some(c) = self.peek()? {
+      if !c.is_ascii_digit() && !".+-e".contains(c.to_ascii_lowercase()) {
+        break;
+      }
+      float.push(c);
+      span.update_end(self.next_span()?);
+    }
+    // convert to floating-point
+    match float.parse() {
+      Ok(f) => Ok(T::new(f, span)),
+      _ => err_and_skip!(self, span, "invalid floating-point literal '{float}'"),
+    }
   }
 
   /// Returns `true` if the current character may be the beginning of
