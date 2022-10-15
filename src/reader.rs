@@ -290,4 +290,41 @@ mod test {
     assert_eq!(c, Some('2'));
     assert_eq!(format!("{span}"), "1:2-1:2");
   }
+
+  #[test]
+  fn unicode_chars() {
+    let mut bytes: Vec<_> = "你好, abc✨".into();
+    bytes.push(0xff);
+    bytes.push(b'z');
+    let mut reader = Reader::from(bytes.as_slice());
+    assert_eq!(reader.next_char(), Ok(Some('你')));
+    assert_eq!(reader.next_char(), Ok(Some('好')));
+    assert_eq!(reader.next_char(), Ok(Some(',')));
+    assert_eq!(reader.next_char(), Ok(Some(' ')));
+    assert_eq!(reader.next_char(), Ok(Some('a')));
+    assert_eq!(reader.next_char(), Ok(Some('b')));
+    assert_eq!(reader.next_char(), Ok(Some('c')));
+    assert_eq!(reader.next_char(), Ok(Some('✨')));
+    assert!(reader.next_char().is_err());
+    assert!(reader.next_char().is_err());
+    let mut reader = ByteReader::from(bytes.as_slice());
+    assert_eq!(reader.next_char(), Ok(Some(0xe4 as char)));
+    assert_eq!(reader.next_char(), Ok(Some(0xbd as char)));
+    assert_eq!(reader.next_char(), Ok(Some(0xa0 as char)));
+    assert_eq!(reader.next_char(), Ok(Some(0xe5 as char)));
+    assert_eq!(reader.next_char(), Ok(Some(0xa5 as char)));
+    assert_eq!(reader.next_char(), Ok(Some(0xbd as char)));
+    assert_eq!(reader.next_char(), Ok(Some(',')));
+    assert_eq!(reader.next_char(), Ok(Some(' ')));
+    assert_eq!(reader.next_char(), Ok(Some('a')));
+    assert_eq!(reader.next_char(), Ok(Some('b')));
+    assert_eq!(reader.next_char(), Ok(Some('c')));
+    assert_eq!(reader.next_char(), Ok(Some(0xe2 as char)));
+    assert_eq!(reader.next_char(), Ok(Some(0x9c as char)));
+    assert_eq!(reader.next_char(), Ok(Some(0xa8 as char)));
+    assert_eq!(reader.next_char(), Ok(Some(0xff as char)));
+    assert_eq!(reader.next_char(), Ok(Some('z')));
+    assert_eq!(reader.next_char(), Ok(None));
+    assert_eq!(reader.next_char(), Ok(None));
+  }
 }
