@@ -265,12 +265,15 @@ mod test {
   }
 
   #[test]
-  fn peek() {
+  fn peek_span() {
     let mut reader = Reader::from("123 abc");
     assert_eq!(reader.peek(), Ok(Some('1')));
+    assert_eq!(format!("{}", reader.span()), "1:0-1:0");
     assert_eq!(reader.peek(), Ok(Some('1')));
+    assert_eq!(format!("{}", reader.span()), "1:0-1:0");
     reader.next_char_loc().unwrap();
     assert_eq!(reader.peek(), Ok(Some('2')));
+    assert_eq!(format!("{}", reader.span()), "1:1-1:1");
   }
 
   #[test]
