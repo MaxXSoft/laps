@@ -361,7 +361,7 @@ pub trait Lexer {
     while let Some(c) = self.peek()? {
       if ".+-e".contains(c.to_ascii_lowercase()) {
         is_float = true;
-      } else if !c.is_ascii_digit() {
+      } else if !c.is_digit(radix) {
         break;
       }
       num.push(c);
@@ -586,6 +586,9 @@ mod test {
 
   token_kind! {
     Int(u64),
+    Float(f64),
+    Str(String),
+    Char(char),
   }
 
   /// Generates `expected` functions for testing.
@@ -618,23 +621,73 @@ mod test {
     };
   }
 
+  /// Generates integer literal related expects.
+  macro_rules! gen_int_expects {
+    () => {
+      expected("123", 123, "1:1-1:3");
+      expected("123??", 123, "1:1-1:3");
+      expected("0", 0, "1:1-1:1");
+      expected("000", 0, "1:1-1:3");
+      expected("0x0", 0x0, "1:1-1:3");
+      expected("0xFf", 0xFf, "1:1-1:4");
+      expected("0b110", 0b110, "1:1-1:5");
+      expected("0o765", 0o765, "1:1-1:5");
+      expected_err("", false);
+      expected_err("?", false);
+      expected_err("0x?", true);
+      expected_err("99999999999999999999999999999999", true);
+      expected_skipped("? 123", false, 123, "1:3-1:5");
+      expected_skipped("  123", false, 123, "1:3-1:5");
+      expected_skipped("0x? 0xab", true, 0xab, "1:5-1:8");
+    };
+  }
+
+  /// Generates floating-point literal related expects.
+  macro_rules! gen_float_expects {
+    () => {
+      expected("1.1", 1.1, "1:1-1:3");
+      expected(".1", 0.1, "1:1-1:2");
+      expected("1.", 1., "1:1-1:2");
+      expected("00.01", 00.01, "1:1-1:5");
+      expected("1.e1", 1.0e1, "1:1-1:4");
+      expected("1.1e1", 1.1e1, "1:1-1:5");
+      expected("1.1E1", 1.1e1, "1:1-1:5");
+      expected("1.1e+1", 1.1e+1, "1:1-1:6");
+      expected("1.1e-1", 1.1e-1, "1:1-1:6");
+      expected("1.?", 1., "1:1-1:2");
+      expected_err("?", false);
+      expected_err(".", true);
+      expected_err("1..", true);
+      expected_err("1.e", true);
+      expected_err(".e1", true);
+      expected_skipped("? 1.1", false, 1.1, "1:3-1:5");
+      expected_skipped("1.. 1.1", true, 1.1, "1:5-1:7");
+    };
+  }
+
   #[test]
   fn read_int() {
     gen_expected_fns!(u64, maybe_int, next_int, Int, |c| c.is_ascii_digit());
-    expected("123", 123, "1:1-1:3");
-    expected("123??", 123, "1:1-1:3");
-    expected("0", 0, "1:1-1:1");
-    expected("000", 0, "1:1-1:3");
-    expected("0x0", 0x0, "1:1-1:3");
-    expected("0xFf", 0xFf, "1:1-1:4");
-    expected("0b110", 0b110, "1:1-1:5");
-    expected("0o765", 0o765, "1:1-1:5");
-    expected_err("", false);
-    expected_err("?", false);
-    expected_err("0x?", true);
-    expected_err("99999999999999999999999999999999", true);
-    expected_skipped("? 123", false, 123, "1:3-1:5");
-    expected_skipped("  123", false, 123, "1:3-1:5");
-    expected_skipped("0x? 0xab", true, 0xab, "1:5-1:8");
+    gen_int_expects!();
+  }
+
+  #[test]
+  fn read_float() {
+    gen_expected_fns!(f64, maybe_float, next_float, Float, |c| c.is_ascii_digit()
+      || c == '.');
+    gen_float_expects!();
+  }
+
+  #[test]
+  fn read_num() {
+    // integer part
+    gen_expected_fns!(u64, maybe_num, next_num, Int, |c| c.is_ascii_digit());
+    gen_int_expects!();
+    // floating-point part
+    {
+      gen_expected_fns!(f64, maybe_num, next_num, Float, |c| c.is_ascii_digit()
+        || c == '.');
+      gen_float_expects!();
+    }
   }
 }
