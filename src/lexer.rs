@@ -73,6 +73,8 @@ macro_rules! handle_char {
           Some('t') => '\t',
           Some('0') => '\0',
           Some('\\') => '\\',
+          Some('\'') => '\'',
+          Some('\"') => '\"',
           Some('x') => {
             // get escaped char
             let c = $self
@@ -737,12 +739,16 @@ mod test {
     expected(r#""\n""#, "\n".into(), "1:1-1:4");
     expected(r#""\r""#, "\r".into(), "1:1-1:4");
     expected(r#""\\r""#, "\\r".into(), "1:1-1:5");
+    expected(r#""\'""#, "\'".into(), "1:1-1:4");
+    expected(r#""\"""#, "\"".into(), "1:1-1:4");
     expected(r#""\x4a""#, "\x4a".into(), "1:1-1:6");
     expected(r#""\u{1234}""#, "\u{1234}".into(), "1:1-1:10");
     expected(r#""a\x4aa""#, "a\x4aa".into(), "1:1-1:8");
+    expected(r#""'""#, "'".into(), "1:1-1:3");
     expected_err(r#"?"#, false);
     expected_err(r#"""#, true);
     expected_err(r#""aa"#, true);
+    expected_err(r#""\"#, true);
     expected_err(
       r#""
 ""#, true,
@@ -753,6 +759,7 @@ mod test {
     );
     expected_err(r#""\?""#, true);
     expected_err(r#""\x""#, true);
+    expected_err(r#""\x4""#, true);
     expected_err(r#""\u""#, true);
     expected_err(r#""\u{""#, true);
     expected_err(r#""\u{111111111""#, true);
@@ -763,6 +770,53 @@ mod test {
 "b""#,
       true,
       "b".into(),
+      "2:1-2:3",
+    );
+  }
+
+  #[test]
+  fn read_char_literal() {
+    gen_expected_fns!(char, maybe_char_literal, next_char_literal, Char, |c| c
+      == '\'');
+    expected("'a'", 'a', "1:1-1:3");
+    expected("'🤔'", '🤔', "1:1-1:3");
+    expected(r#"'\t'"#, '\t', "1:1-1:4");
+    expected(r#"'\n'"#, '\n', "1:1-1:4");
+    expected(r#"'\r'"#, '\r', "1:1-1:4");
+    expected(r#"'\\'"#, '\\', "1:1-1:4");
+    expected(r#"'\''"#, '\'', "1:1-1:4");
+    expected(r#"'\"'"#, '\"', "1:1-1:4");
+    expected(r#"'\x4a'"#, '\x4a', "1:1-1:6");
+    expected(r#"'\u{1234}'"#, '\u{1234}', "1:1-1:10");
+    expected(r#"'"'"#, '"', "1:1-1:3");
+    expected_err("?", false);
+    expected_err("'", true);
+    expected_err("''", true);
+    expected_err("'a", true);
+    expected_err("'ab", true);
+    expected_err("'ab'", true);
+    expected_err(
+      r#"'
+'"#, true,
+    );
+    expected_err(
+      r#"'a
+'"#, true,
+    );
+    expected_err(r#"'\'"#, true);
+    expected_err(r#"'\?'"#, true);
+    expected_err(r#"'\x'"#, true);
+    expected_err(r#"'\x4'"#, true);
+    expected_err(r#"'\u'"#, true);
+    expected_err(r#"'\u{'"#, true);
+    expected_err(r#"'\u{111111111'"#, true);
+    expected_err(r#"'\u{111111111}'"#, true);
+    expected_skipped(r#"? 'a'"#, false, 'a', "1:3-1:5");
+    expected_skipped(
+      r#"'a
+'b'"#,
+      true,
+      'b',
       "2:1-2:3",
     );
   }
