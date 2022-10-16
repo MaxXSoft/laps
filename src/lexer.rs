@@ -633,7 +633,7 @@ mod test {
       expected("0", 0, "1:1-1:1");
       expected("000", 0, "1:1-1:3");
       expected("0x0", 0x0, "1:1-1:3");
-      expected("0xFf", 0xFf, "1:1-1:4");
+      expected("0xFf", 0xff, "1:1-1:4");
       expected("0b110", 0b110, "1:1-1:5");
       expected("0o765", 0o765, "1:1-1:5");
       expected_err("", false);
