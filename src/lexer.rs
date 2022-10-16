@@ -1,5 +1,5 @@
 use crate::return_error;
-use crate::span::{Error, Location, Span};
+use crate::span::{Location, Result, Span};
 use crate::token::TokenBuilder;
 use unicode_xid::UnicodeXID;
 
@@ -141,7 +141,7 @@ pub trait Lexer {
   /// Returns the character and the last location (location before reading
   /// the character) if successful, or <code>[Ok]&#40;[None]&#41;</code>
   /// if EOF was encountered, or [`Err`] if something wrong.
-  fn next_char_loc(&mut self) -> Result<(Option<char>, Location), Error>;
+  fn next_char_loc(&mut self) -> Result<(Option<char>, Location)>;
 
   /// Unreads the given character and the last location
   /// and put it back to the input stream.
@@ -155,7 +155,7 @@ pub trait Lexer {
   /// Returns the character if successful,
   /// or <code>[Ok]&#40;[None]&#41;</code> if EOF was encountered,
   /// or [`Err`] if something wrong.
-  fn next_char(&mut self) -> Result<Option<char>, Error> {
+  fn next_char(&mut self) -> Result<Option<char>> {
     self.next_char_loc().map(|(c, _)| c)
   }
 
@@ -164,7 +164,7 @@ pub trait Lexer {
   /// Returns the character and its span if successful,
   /// or <code>[Ok]&#40;([None], _)&#41;</code> if EOF was encountered,
   /// or [`Err`] if something wrong.
-  fn next_char_span(&mut self) -> Result<(Option<char>, Span), Error> {
+  fn next_char_span(&mut self) -> Result<(Option<char>, Span)> {
     self.next_char_loc().map(|(c, _)| (c, self.span().clone()))
   }
 
@@ -172,7 +172,7 @@ pub trait Lexer {
   ///
   /// Returns a reference to the span of the read character if successful,
   /// or [`Err`] if something wrong.
-  fn next_span(&mut self) -> Result<&Span, Error> {
+  fn next_span(&mut self) -> Result<&Span> {
     self.next_char_loc()?;
     Ok(self.span())
   }
@@ -180,7 +180,7 @@ pub trait Lexer {
   /// Peeks the next character from the input stream.
   ///
   /// Does not advance the position of the input stream.
-  fn peek(&mut self) -> Result<Option<char>, Error> {
+  fn peek(&mut self) -> Result<Option<char>> {
     let char_loc = self.next_char_loc()?;
     self.unread(char_loc);
     Ok(char_loc.0)
@@ -190,7 +190,7 @@ pub trait Lexer {
   /// Returns the peeked character and its span.
   ///
   /// Does not advance the position of the input stream.
-  fn peek_with_span(&mut self) -> Result<(Option<char>, Span), Error> {
+  fn peek_with_span(&mut self) -> Result<(Option<char>, Span)> {
     let char_loc = self.next_char_loc()?;
     let span = self.span().clone();
     self.unread(char_loc);
@@ -198,7 +198,7 @@ pub trait Lexer {
   }
 
   /// Skips characters until a character specified by the predicate is encountered.
-  fn skip_until<F>(&mut self, mut f: F) -> Result<(), Error>
+  fn skip_until<F>(&mut self, mut f: F) -> Result<()>
   where
     F: FnMut(char) -> bool,
   {
@@ -210,7 +210,7 @@ pub trait Lexer {
 
   /// Collects characters into a string until a character specified by the
   /// predicate is encountered.
-  fn collect_until<F>(&mut self, mut f: F) -> Result<String, Error>
+  fn collect_until<F>(&mut self, mut f: F) -> Result<String>
   where
     F: FnMut(char) -> bool,
   {
@@ -229,7 +229,7 @@ pub trait Lexer {
   /// predicate is encountered.
   ///
   /// Returns the collected string and its span.
-  fn collect_with_span_until<F>(&mut self, mut f: F) -> Result<(String, Span), Error>
+  fn collect_with_span_until<F>(&mut self, mut f: F) -> Result<(String, Span)>
   where
     F: FnMut(char) -> bool,
   {
@@ -244,7 +244,7 @@ pub trait Lexer {
 
   /// Returns `true` if the current character may be the beginning of
   /// an integer literal.
-  fn maybe_int(&mut self) -> Result<bool, Error> {
+  fn maybe_int(&mut self) -> Result<bool> {
     Ok(self.peek()?.map_or(false, |c| c.is_ascii_digit()))
   }
 
@@ -253,7 +253,7 @@ pub trait Lexer {
   ///
   /// Returns the token if successful, otherwise returns [`Err`]
   /// and skips until a whitespace character is encountered.
-  fn next_int<T>(&mut self) -> Result<T, Error>
+  fn next_int<T>(&mut self) -> Result<T>
   where
     T: TokenBuilder<u64>,
   {
@@ -290,7 +290,7 @@ pub trait Lexer {
 
   /// Returns `true` if the current character may be the beginning of
   /// an floating-point literal.
-  fn maybe_float(&mut self) -> Result<bool, Error> {
+  fn maybe_float(&mut self) -> Result<bool> {
     Ok(
       self
         .peek()?
@@ -302,7 +302,7 @@ pub trait Lexer {
   ///
   /// Returns the token if successful, otherwise returns [`Err`]
   /// and skips until a whitespace character is encountered.
-  fn next_float<T>(&mut self) -> Result<T, Error>
+  fn next_float<T>(&mut self) -> Result<T>
   where
     T: TokenBuilder<f64>,
   {
@@ -323,7 +323,7 @@ pub trait Lexer {
 
   /// Returns `true` if the current character may be the beginning of
   /// a number (integer literal or floating-point literal).
-  fn maybe_num(&mut self) -> Result<bool, Error> {
+  fn maybe_num(&mut self) -> Result<bool> {
     self.maybe_float()
   }
 
@@ -332,7 +332,7 @@ pub trait Lexer {
   ///
   /// Returns the token if successful, otherwise returns [`Err`]
   /// and skips until a whitespace character is encountered.
-  fn next_num<T>(&mut self) -> Result<T, Error>
+  fn next_num<T>(&mut self) -> Result<T>
   where
     T: TokenBuilder<u64> + TokenBuilder<f64>,
   {
@@ -386,7 +386,7 @@ pub trait Lexer {
 
   /// Returns `true` if the current character may be the beginning of
   /// an identifier.
-  fn maybe_ident(&mut self) -> Result<bool, Error> {
+  fn maybe_ident(&mut self) -> Result<bool> {
     Ok(
       self
         .peek()?
@@ -398,7 +398,7 @@ pub trait Lexer {
   ///
   /// Returns the token if successful, otherwise returns [`Err`]
   /// and skips until a whitespace character is encountered.
-  fn next_ident<T>(&mut self) -> Result<T, Error>
+  fn next_ident<T>(&mut self) -> Result<T>
   where
     T: TokenBuilder<String>,
   {
@@ -414,7 +414,7 @@ pub trait Lexer {
 
   /// Returns `true` if the current character may be the beginning of
   /// a Unicode identifier.
-  fn maybe_unicode_ident(&mut self) -> Result<bool, Error> {
+  fn maybe_unicode_ident(&mut self) -> Result<bool> {
     Ok(
       self
         .peek()?
@@ -427,7 +427,7 @@ pub trait Lexer {
   ///
   /// Returns the token if successful, otherwise returns [`Err`]
   /// and skips until a whitespace character is encountered.
-  fn next_unicode_ident<T>(&mut self) -> Result<T, Error>
+  fn next_unicode_ident<T>(&mut self) -> Result<T>
   where
     T: TokenBuilder<String>,
   {
@@ -443,7 +443,7 @@ pub trait Lexer {
 
   /// Returns `true` if the current character may be the beginning of
   /// a string literal.
-  fn maybe_str(&mut self) -> Result<bool, Error> {
+  fn maybe_str(&mut self) -> Result<bool> {
     Ok(self.peek()?.map_or(false, |c| c == '"'))
   }
 
@@ -457,7 +457,7 @@ pub trait Lexer {
   ///
   /// Returns the token if successful, otherwise returns [`Err`]
   /// and skips until a whitespace character is encountered.
-  fn next_str<T>(&mut self) -> Result<T, Error>
+  fn next_str<T>(&mut self) -> Result<T>
   where
     T: TokenBuilder<String>,
   {
@@ -478,7 +478,7 @@ pub trait Lexer {
 
   /// Returns `true` if the current character may be the beginning of
   /// a character literal.
-  fn maybe_char_literal(&mut self) -> Result<bool, Error> {
+  fn maybe_char_literal(&mut self) -> Result<bool> {
     Ok(self.peek()?.map_or(false, |c| c == '\''))
   }
 
@@ -492,7 +492,7 @@ pub trait Lexer {
   ///
   /// Returns the token if successful, otherwise returns [`Err`]
   /// and skips until a whitespace character is encountered.
-  fn next_char_literal<T>(&mut self) -> Result<T, Error>
+  fn next_char_literal<T>(&mut self) -> Result<T>
   where
     T: TokenBuilder<char>,
   {

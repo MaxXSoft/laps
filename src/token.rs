@@ -1,4 +1,4 @@
-use crate::span::{Error, Span};
+use crate::span::{Result, Span};
 
 /// Trait for creating tokens that holding values of type `T`.
 pub trait TokenBuilder<T> {
@@ -14,7 +14,7 @@ pub trait TokenStream {
   /// Reads the next token from the token stream.
   ///
   /// Returns the token if successful, otherwise [`Err`].
-  fn next_token(&mut self) -> Result<Self::Token, Error>;
+  fn next_token(&mut self) -> Result<Self::Token>;
 
   /// Unreads the given token and put it back to the token stream.
   fn unread(&mut self, token: Self::Token);
@@ -22,7 +22,7 @@ pub trait TokenStream {
   /// Peeks the next character from the input stream.
   ///
   /// Does not advance the position of the token stream.
-  fn peek(&mut self) -> Result<Self::Token, Error>
+  fn peek(&mut self) -> Result<Self::Token>
   where
     Self::Token: Clone,
   {
@@ -32,7 +32,7 @@ pub trait TokenStream {
   }
 
   /// Skips tokens untils a token specified by the predicate is encountered.
-  fn skip_until<F>(&mut self, mut f: F) -> Result<(), Error>
+  fn skip_until<F>(&mut self, mut f: F) -> Result<()>
   where
     F: FnMut(&Self::Token) -> bool,
   {
@@ -47,7 +47,7 @@ pub trait TokenStream {
 
   /// Collects tokens into a [`Vec`] until a token specified by the predicate
   /// is encountered.
-  fn collect_until<F>(&mut self, mut f: F) -> Result<Vec<Self::Token>, Error>
+  fn collect_until<F>(&mut self, mut f: F) -> Result<Vec<Self::Token>>
   where
     F: FnMut(&Self::Token) -> bool,
   {

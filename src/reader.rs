@@ -1,6 +1,6 @@
 use crate::lexer::Lexer;
 use crate::log_raw_fatal_error;
-use crate::span::{Error, FileType, Location, Span};
+use crate::span::{FileType, Location, Result, Span};
 use std::fs::File;
 use std::io::{self, stdin, Cursor, Read, Stdin};
 use std::path::Path;
@@ -41,7 +41,7 @@ impl<T> Reader<T> {
   }
 
   /// Returns the next character and the last location from the reader.
-  fn next_char_loc_from_reader(&mut self) -> Result<(Option<char>, Location), Error>
+  fn next_char_loc_from_reader(&mut self) -> Result<(Option<char>, Location)>
   where
     T: Read,
   {
@@ -104,7 +104,7 @@ impl<T> ByteReader<T> {
   }
 
   /// Returns the next character and the last location from the reader.
-  fn next_char_loc_from_reader(&mut self) -> Result<(Option<char>, Location), Error>
+  fn next_char_loc_from_reader(&mut self) -> Result<(Option<char>, Location)>
   where
     T: Read,
   {
@@ -190,7 +190,7 @@ macro_rules! impl_reader {
     where
       T: Read,
     {
-      fn next_char_loc(&mut self) -> Result<(Option<char>, Location), Error> {
+      fn next_char_loc(&mut self) -> Result<(Option<char>, Location)> {
         if let Some(c) = self.char_buf.pop() {
           let loc = self.span.start();
           self.span.update(c);
@@ -211,7 +211,7 @@ macro_rules! impl_reader {
         &self.span
       }
 
-      fn peek(&mut self) -> Result<Option<char>, Error> {
+      fn peek(&mut self) -> Result<Option<char>> {
         if let Some(c) = self.char_buf.last() {
           Ok(Some(*c))
         } else {
@@ -221,7 +221,7 @@ macro_rules! impl_reader {
         }
       }
 
-      fn peek_with_span(&mut self) -> Result<(Option<char>, Span), Error> {
+      fn peek_with_span(&mut self) -> Result<(Option<char>, Span)> {
         if let Some(c) = self.char_buf.last() {
           Ok((Some(*c), self.span.clone().into_updated(*c)))
         } else {
