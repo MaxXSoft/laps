@@ -44,7 +44,10 @@ impl Error {
   }
 }
 
-impl<T> From<Error> for Result<T, Error> {
+/// A specialized [`Result`] type for lexers and parsers.
+pub type Result<T> = std::result::Result<T, Error>;
+
+impl<T> From<Error> for Result<T> {
   /// Creates a result from the given error,
   /// which the value is always [`Err`].
   fn from(error: Error) -> Self {
