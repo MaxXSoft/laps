@@ -11,7 +11,7 @@ macro_rules! check_char {
         $self.next_char()?;
         ($char_id, span)
       }
-      (_, span) => return_error!(span, concat!("invalid ", $literal_name, " literal")),
+      (_, span) => return_error!(span, concat!("invalid ", $literal_name)),
     }
   };
 }
@@ -257,7 +257,7 @@ pub trait Lexer {
   {
     let mut int = String::new();
     // check the current character and get the span
-    let (first_char, mut span) = check_char!(self, c, c.is_ascii_digit(), "integer");
+    let (first_char, mut span) = check_char!(self, c, c.is_ascii_digit(), "integer literal");
     int.push(first_char);
     // check the radix
     let (radix, start_from) = match (first_char, self.peek()?) {
@@ -306,8 +306,8 @@ pub trait Lexer {
   {
     let mut float = String::new();
     // check the current character and get the span
-    let (first_char, mut span) =
-      check_char!(self, c, c.is_ascii_digit() || c == '.', "floating-point");
+    let is_float_start = |c: char| c.is_ascii_digit() || c == '.';
+    let (first_char, mut span) = check_char!(self, c, is_float_start(c), "floating-point literal");
     float.push(first_char);
     // read the rest characters to string
     let is_float_char = |c: char| c.is_ascii_digit() || ".+-e".contains(c.to_ascii_lowercase());
@@ -336,7 +336,8 @@ pub trait Lexer {
   {
     let mut num = String::new();
     // check the current character and get the span
-    let (first_char, mut span) = check_char!(self, c, c.is_ascii_digit() || c == '.', "number");
+    let (first_char, mut span) =
+      check_char!(self, c, c.is_ascii_digit() || c == '.', "number literal");
     num.push(first_char);
     // check the radix
     let mut is_float = first_char == '.';
@@ -430,7 +431,8 @@ pub trait Lexer {
   {
     let mut id = String::new();
     // check the current character and get the span
-    let (first_char, mut span) = check_char!(self, c, UnicodeXID::is_xid_start(c), "identifier");
+    let is_id_start = |c: char| UnicodeXID::is_xid_start(c) || c == '_';
+    let (first_char, mut span) = check_char!(self, c, is_id_start(c), "identifier");
     id.push(first_char);
     // read the rest characters to string
     read_chars!(self, c, UnicodeXID::is_xid_continue(c), id, span);
@@ -458,7 +460,7 @@ pub trait Lexer {
     T: TokenBuilder<String>,
   {
     // check and skip the first character
-    let (_, span) = check_char!(self, c, c == '"', "string");
+    let (_, span) = check_char!(self, c, c == '"', "string literal");
     // read characters
     let mut s = String::new();
     while self.peek()?.map_or(false, |c| c != '"') {
@@ -493,7 +495,7 @@ pub trait Lexer {
     T: TokenBuilder<char>,
   {
     // check and skip the first character
-    let (_, span) = check_char!(self, c, c == '\'', "character");
+    let (_, span) = check_char!(self, c, c == '\'', "character literal");
     // check the next character
     let c = match self.next_char_span()? {
       (Some('\''), span) => return_error!(span, "character literal must not be empty"),
@@ -706,5 +708,22 @@ mod test {
     expected_err("", false);
     expected_err("1", false);
     expected_skipped("? abc", false, "abc".into(), "1:3-1:5");
+  }
+
+  #[test]
+  fn read_unicode_ident() {
+    gen_expected_fns!(String, maybe_unicode_ident, next_unicode_ident, Str, |c| {
+      UnicodeXID::is_xid_start(c)
+    });
+    expected("abc", "abc".into(), "1:1-1:3");
+    expected("你好", "你好".into(), "1:1-1:2");
+    expected("_a1", "_a1".into(), "1:1-1:3");
+    expected("_你好", "_你好".into(), "1:1-1:3");
+    expected("_a01你好", "_a01你好".into(), "1:1-1:6");
+    expected("_你a01好##", "_你a01好".into(), "1:1-1:6");
+    expected_err("?", false);
+    expected_err("", false);
+    expected_err("😂", false);
+    expected_skipped("? 你好", false, "你好".into(), "1:3-1:4");
   }
 }
