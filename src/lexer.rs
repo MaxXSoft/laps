@@ -260,24 +260,27 @@ pub trait Lexer {
     let (first_char, mut span) = check_char!(self, c, c.is_ascii_digit(), "integer");
     int.push(first_char);
     // check the radix
-    let radix = match (first_char, self.peek()?) {
-      ('0', Some(c)) if "box".contains(c.to_ascii_lowercase()) => {
+    let (radix, start_from) = match (first_char, self.peek()?) {
+      ('0', Some(c)) if "box".contains(c) => {
         // radix prefix
-        int.clear();
+        int.push(c);
         span.update_end(self.next_span()?);
-        match c.to_ascii_lowercase() {
-          'b' => 2,
-          'o' => 8,
-          'x' => 16,
-          _ => unreachable!(),
-        }
+        (
+          match c {
+            'b' => 2,
+            'o' => 8,
+            'x' => 16,
+            _ => unreachable!(),
+          },
+          2,
+        )
       }
-      _ => 10,
+      _ => (10, 0),
     };
     // read the rest characters to string
     read_chars!(self, c, c.is_digit(radix), int, span);
     // convert to integer
-    match u64::from_str_radix(&int, radix) {
+    match u64::from_str_radix(&int[start_from..], radix) {
       Ok(i) => Ok(T::new(i, span)),
       _ => err_and_skip!(self, span, "invalid integer literal '{int}'"),
     }
@@ -337,19 +340,22 @@ pub trait Lexer {
     num.push(first_char);
     // check the radix
     let mut is_float = first_char == '.';
-    let radix = match (first_char, self.peek()?) {
-      ('0', Some(c)) if "box".contains(c.to_ascii_lowercase()) => {
+    let (radix, start_from) = match (first_char, self.peek()?) {
+      ('0', Some(c)) if "box".contains(c) => {
         // radix prefix
-        num.clear();
+        num.push(c);
         span.update_end(self.next_span()?);
-        match c.to_ascii_lowercase() {
-          'b' => 2,
-          'o' => 8,
-          'x' => 16,
-          _ => unreachable!(),
-        }
+        (
+          match c {
+            'b' => 2,
+            'o' => 8,
+            'x' => 16,
+            _ => unreachable!(),
+          },
+          2,
+        )
       }
-      _ => 10,
+      _ => (10, 0),
     };
     // read the rest characters to string
     while let Some(c) = self.peek()? {
@@ -368,7 +374,7 @@ pub trait Lexer {
         _ => err_and_skip!(self, span, "invalid floating-point literal '{num}'"),
       }
     } else {
-      match u64::from_str_radix(&num, radix) {
+      match u64::from_str_radix(&num[start_from..], radix) {
         Ok(i) => Ok(T::new(i, span)),
         _ => err_and_skip!(self, span, "invalid integer literal '{num}'"),
       }
@@ -503,8 +509,9 @@ pub trait Lexer {
 
 #[cfg(test)]
 mod test {
-  use super::Lexer;
+  use super::*;
   use crate::reader::Reader;
+  use std::io::Cursor;
 
   #[test]
   fn next_char_or_span() {
@@ -540,6 +547,8 @@ mod test {
   #[test]
   fn collect_until() {
     let mut reader = Reader::from("123 abc");
+    assert_eq!(reader.collect_until(|c| c == '1'), Ok("".into()));
+    assert_eq!(reader.collect_with_span_until(|c| c == '1').unwrap().0, "");
     assert_eq!(
       reader.collect_until(|c| c.is_whitespace()),
       Ok("123".into())
@@ -550,5 +559,82 @@ mod test {
     assert_eq!(format!("{span}"), "1:5-1:7");
     assert_eq!(reader.next_char(), Ok(None));
     assert_eq!(reader.next_char(), Ok(None));
+  }
+
+  struct Token {
+    kind: TokenKind,
+    span: Span,
+  }
+
+  macro_rules! token_kind {
+    ($($id:ident($t:ty)),* $(,)?) => {
+      #[derive(Debug, PartialEq)]
+      enum TokenKind {
+        $($id($t)),*
+      }
+
+      $(impl TokenBuilder<$t> for Token {
+        fn new(value: $t, span: Span) -> Self {
+          Self {
+            kind: TokenKind::$id(value),
+            span,
+          }
+        }
+      })*
+    };
+  }
+
+  token_kind! {
+    Int(u64),
+  }
+
+  /// Generates `expected` functions for testing.
+  macro_rules! gen_expected_fns {
+    ($t:ty, $maybe:ident, $next:ident, $kind:ident, $skip_cond:expr) => {
+      fn expected_impl(reader: &mut Reader<Cursor<&str>>, value: $t, span: &str) {
+        assert_eq!(reader.$maybe(), Ok(true));
+        let Token { kind, span: sp } = reader.$next().unwrap();
+        assert_eq!(kind, TokenKind::$kind(value));
+        assert_eq!(format!("{sp}"), span)
+      }
+
+      fn expected(input: &str, value: $t, span: &str) {
+        expected_impl(&mut Reader::from(input), value, span)
+      }
+
+      fn expected_err(input: &str, maybe: bool) {
+        let mut reader = Reader::from(input);
+        assert_eq!(reader.$maybe(), Ok(maybe));
+        assert!(reader.$next::<Token>().is_err());
+      }
+
+      fn expected_skipped(input: &str, maybe: bool, value: $t, span: &str) {
+        let mut reader = Reader::from(input);
+        assert_eq!(reader.$maybe(), Ok(maybe));
+        assert!(reader.$next::<Token>().is_err());
+        assert!(reader.skip_until($skip_cond).is_ok());
+        expected_impl(&mut reader, value, span);
+      }
+    };
+  }
+
+  #[test]
+  fn read_int() {
+    gen_expected_fns!(u64, maybe_int, next_int, Int, |c| c.is_ascii_digit());
+    expected("123", 123, "1:1-1:3");
+    expected("123??", 123, "1:1-1:3");
+    expected("0", 0, "1:1-1:1");
+    expected("000", 0, "1:1-1:3");
+    expected("0x0", 0x0, "1:1-1:3");
+    expected("0xFf", 0xFf, "1:1-1:4");
+    expected("0b110", 0b110, "1:1-1:5");
+    expected("0o765", 0o765, "1:1-1:5");
+    expected_err("", false);
+    expected_err("?", false);
+    expected_err("0x?", true);
+    expected_err("99999999999999999999999999999999", true);
+    expected_skipped("? 123", false, 123, "1:3-1:5");
+    expected_skipped("  123", false, 123, "1:3-1:5");
+    expected_skipped("0x? 0xab", true, 0xab, "1:5-1:8");
   }
 }
