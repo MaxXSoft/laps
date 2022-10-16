@@ -450,7 +450,7 @@ pub trait Lexer {
   /// Supported escapes:
   /// * `\r`, `\n`, `\t`, `\0`, `\\`.
   /// * `\'`, `\"`.
-  /// * `\x00`-`\xFF` (`\xff`).
+  /// * `\x00`-`\xff` (`\xFF`).
   /// * `\u{0}`-`\u{10ffff}` (`\u{10FFFF}`).
   ///
   /// Returns the token if successful, otherwise returns [`Err`]
@@ -485,7 +485,7 @@ pub trait Lexer {
   /// Supported escapes:
   /// * `\r`, `\n`, `\t`, `\0`, `\\`.
   /// * `\'`, `\"`.
-  /// * `\x00`-`\xFF` (`\xff`).
+  /// * `\x00`-`\xff` (`\xFF`).
   /// * `\u{0}`-`\u{10ffff}` (`\u{10FFFF}`).
   ///
   /// Returns the token if successful, otherwise returns [`Err`]
@@ -725,5 +725,45 @@ mod test {
     expected_err("", false);
     expected_err("😂", false);
     expected_skipped("? 你好", false, "你好".into(), "1:3-1:4");
+  }
+
+  #[test]
+  fn read_str() {
+    gen_expected_fns!(String, maybe_str, next_str, Str, |c| c == '"');
+    expected(r#""""#, "".into(), "1:1-1:2");
+    expected(r#""a""#, "a".into(), "1:1-1:3");
+    expected(r#""🤡👈""#, "🤡👈".into(), "1:1-1:4");
+    expected(r#""\t""#, "\t".into(), "1:1-1:4");
+    expected(r#""\n""#, "\n".into(), "1:1-1:4");
+    expected(r#""\r""#, "\r".into(), "1:1-1:4");
+    expected(r#""\\r""#, "\\r".into(), "1:1-1:5");
+    expected(r#""\x4a""#, "\x4a".into(), "1:1-1:6");
+    expected(r#""\u{1234}""#, "\u{1234}".into(), "1:1-1:10");
+    expected(r#""a\x4aa""#, "a\x4aa".into(), "1:1-1:8");
+    expected_err(r#"?"#, false);
+    expected_err(r#"""#, true);
+    expected_err(r#""aa"#, true);
+    expected_err(
+      r#""
+""#, true,
+    );
+    expected_err(
+      r#""aa
+""#, true,
+    );
+    expected_err(r#""\?""#, true);
+    expected_err(r#""\x""#, true);
+    expected_err(r#""\u""#, true);
+    expected_err(r#""\u{""#, true);
+    expected_err(r#""\u{111111111""#, true);
+    expected_err(r#""\u{111111111}""#, true);
+    expected_skipped(r#"? "a""#, false, "a".into(), "1:3-1:5");
+    expected_skipped(
+      r#""a
+"b""#,
+      true,
+      "b".into(),
+      "2:1-2:3",
+    );
   }
 }
