@@ -690,4 +690,21 @@ mod test {
       gen_float_expects!();
     }
   }
+
+  #[test]
+  fn read_ident() {
+    gen_expected_fns!(String, maybe_ident, next_ident, Str, |c| c
+      .is_ascii_alphabetic()
+      || c == '_');
+    expected("_", "_".into(), "1:1-1:1");
+    expected("abc", "abc".into(), "1:1-1:3");
+    expected("_1", "_1".into(), "1:1-1:2");
+    expected("_1a19#", "_1a19".into(), "1:1-1:5");
+    expected("a_1_2", "a_1_2".into(), "1:1-1:5");
+    expected("a_@1_2", "a_".into(), "1:1-1:2");
+    expected_err("?", false);
+    expected_err("", false);
+    expected_err("1", false);
+    expected_skipped("? abc", false, "abc".into(), "1:3-1:5");
+  }
 }
