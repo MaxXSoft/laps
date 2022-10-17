@@ -135,7 +135,7 @@ macro_rules! handle_char {
 }
 
 /// Trait for lexers.
-pub trait Lexer {
+pub trait InputStream {
   /// Reads the next character from the input stream.
   ///
   /// Returns the character and the last location (location before reading
