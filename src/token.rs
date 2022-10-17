@@ -135,16 +135,19 @@ impl<Kind> AsMut<Kind> for Token<Kind> {
   }
 }
 
-/// Trait for token streams.
-pub trait TokenStream {
-  /// Type of the token in the token stream.
+/// Trait for tokenizers.
+pub trait Tokenizer {
+  /// Type of the token produced by the tokenizer.
   type Token;
 
   /// Reads the next token from the token stream.
   ///
   /// Returns the token if successful, otherwise [`Err`].
   fn next_token(&mut self) -> Result<Self::Token>;
+}
 
+/// Trait for token streams.
+pub trait TokenStream: Tokenizer {
   /// Unreads the given token and put it back to the token stream.
   fn unread(&mut self, token: Self::Token);
 
