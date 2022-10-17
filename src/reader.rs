@@ -1,4 +1,4 @@
-use crate::lexer::Lexer;
+use crate::input::InputStream;
 use crate::log_raw_fatal_error;
 use crate::span::{FileType, Location, Result, Span};
 use std::fs::File;
@@ -186,7 +186,7 @@ macro_rules! impl_reader {
       }
     }
 
-    impl<T> Lexer for $name<T>
+    impl<T> InputStream for $name<T>
     where
       T: Read,
     {
