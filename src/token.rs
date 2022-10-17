@@ -1,9 +1,41 @@
 use crate::span::{Result, Span};
+use std::fmt;
 
 /// Trait for creating tokens that holding values of type `T`.
 pub trait TokenBuilder<T> {
   /// Creates a new token from the given value and span.
   fn new(value: T, span: Span) -> Self;
+}
+
+/// Wrapper type representing an identifier.
+///
+/// In order not to be confused with string literals
+/// in built-in methods of [`Lexer`](crate::lexer::Lexer) trait.
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Ident(pub String);
+
+impl From<Ident> for String {
+  fn from(id: Ident) -> Self {
+    id.0
+  }
+}
+
+impl From<String> for Ident {
+  fn from(s: String) -> Self {
+    Self(s)
+  }
+}
+
+impl<'a> From<&'a str> for Ident {
+  fn from(s: &'a str) -> Self {
+    Self(s.into())
+  }
+}
+
+impl fmt::Display for Ident {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    self.0.fmt(f)
+  }
 }
 
 /// Trait for token streams.
