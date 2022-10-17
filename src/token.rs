@@ -239,3 +239,93 @@ pub trait TokenStream: Tokenizer {
     }
   }
 }
+
+/// A token buffer that implements trait [`TokenStream`].
+///
+/// Contains a tokenizer of type `TN`, produces tokens of type `T`.
+pub struct TokenBuffer<TN, T> {
+  tokenizer: TN,
+  token_buf: Vec<T>,
+}
+
+impl<TN, T> TokenBuffer<TN, T> {
+  /// Creates a new token buffer by the given tokenizer.
+  pub fn new(tokenizer: TN) -> Self {
+    Self {
+      tokenizer,
+      token_buf: Vec::new(),
+    }
+  }
+}
+
+impl<TN, T> From<TN> for TokenBuffer<TN, T> {
+  /// Converts the given tokenizer to a token buffer.
+  fn from(tokenizer: TN) -> Self {
+    Self::new(tokenizer)
+  }
+}
+
+impl<TN, T> Tokenizer for TokenBuffer<TN, T>
+where
+  TN: Tokenizer<Token = T>,
+{
+  type Token = T;
+
+  fn next_token(&mut self) -> Result<Self::Token> {
+    match self.token_buf.pop() {
+      Some(t) => Ok(t),
+      None => self.tokenizer.next_token(),
+    }
+  }
+}
+
+impl<TN, T> TokenStream for TokenBuffer<TN, T>
+where
+  TN: Tokenizer<Token = T>,
+{
+  fn unread(&mut self, token: Self::Token) {
+    self.token_buf.push(token)
+  }
+
+  fn peek(&mut self) -> Result<Self::Token>
+  where
+    Self::Token: Clone,
+  {
+    if let Some(t) = self.token_buf.last() {
+      Ok(t.clone())
+    } else {
+      let t = self.tokenizer.next_token()?;
+      self.token_buf.push(t.clone());
+      Ok(t)
+    }
+  }
+
+  fn peek2(&mut self) -> Result<(Self::Token, Self::Token)>
+  where
+    Self::Token: Clone,
+  {
+    let mut last = self.token_buf.iter().rev();
+    match (last.next(), last.next()) {
+      (Some(t1), Some(t2)) => Ok((t1.clone(), t2.clone())),
+      (Some(t1), None) => {
+        let ts = (t1.clone(), self.tokenizer.next_token()?);
+        self.token_buf.push(ts.1.clone());
+        Ok(ts)
+      }
+      _ => TokenStream::peek2(self),
+    }
+  }
+
+  fn peek_n(&mut self, n: usize) -> Result<Vec<Self::Token>>
+  where
+    Self::Token: Clone,
+  {
+    if self.token_buf.len() < n {
+      let ts = (self.token_buf.len()..n)
+        .map(|_| self.next_token())
+        .collect::<Result<Vec<_>>>()?;
+      self.token_buf.extend(ts.into_iter().rev());
+    }
+    Ok(self.token_buf.iter().rev().take(n).cloned().collect())
+  }
+}
