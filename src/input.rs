@@ -134,7 +134,7 @@ macro_rules! handle_char {
   };
 }
 
-/// Trait for lexers.
+/// Trait for input streams.
 pub trait InputStream {
   /// Reads the next character from the input stream.
   ///
