@@ -19,7 +19,7 @@ pub trait TokenStream {
   /// Unreads the given token and put it back to the token stream.
   fn unread(&mut self, token: Self::Token);
 
-  /// Peeks the next character from the input stream.
+  /// Peeks the next token from the token stream.
   ///
   /// Does not advance the position of the token stream.
   fn peek(&mut self) -> Result<Self::Token>
@@ -29,6 +29,34 @@ pub trait TokenStream {
     let token = self.next_token()?;
     self.unread(token.clone());
     Ok(token)
+  }
+
+  /// Peeks the next 2 tokens from the token stream.
+  ///
+  /// Does not advance the position of the token stream.
+  fn peek2(&mut self) -> Result<(Self::Token, Self::Token)>
+  where
+    Self::Token: Clone,
+  {
+    let token1 = self.next_token()?;
+    let token2 = self.next_token()?;
+    self.unread(token2.clone());
+    self.unread(token1.clone());
+    Ok((token1, token2))
+  }
+
+  /// Peeks the next N tokens from the token stream.
+  ///
+  /// Does not advance the position of the token stream.
+  fn peek_n(&mut self, n: usize) -> Result<Vec<Self::Token>>
+  where
+    Self::Token: Clone,
+  {
+    let v = (0..n)
+      .map(|_| self.next_token())
+      .collect::<Result<Vec<_>>>()?;
+    v.iter().rev().for_each(|t| self.unread(t.clone()));
+    Ok(v)
   }
 
   /// Skips tokens untils a token specified by the predicate is encountered.
