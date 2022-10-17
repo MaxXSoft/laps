@@ -8,6 +8,11 @@ where
 {
   /// Parses a instance of the current type from the given token stream.
   fn parse(tokens: &mut TS) -> Result<Self>;
+
+  /// Checks if the current type can be parsed from the given token stream.
+  ///
+  /// Does not advance the position of the token stream.
+  fn maybe(tokens: &mut TS) -> Result<bool>;
 }
 
 impl<TS, T> Parse<TS> for Box<T>
@@ -17,5 +22,9 @@ where
 {
   fn parse(tokens: &mut TS) -> Result<Self> {
     T::parse(tokens).map(Box::new)
+  }
+
+  fn maybe(tokens: &mut TS) -> Result<bool> {
+    T::maybe(tokens)
   }
 }
