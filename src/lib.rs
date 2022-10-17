@@ -1,4 +1,5 @@
 pub mod input;
+pub mod lexer;
 pub mod parse;
 pub mod reader;
 pub mod span;
