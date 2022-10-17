@@ -38,6 +38,12 @@ impl fmt::Display for Ident {
   }
 }
 
+/// Trait for getting span from tokens.
+pub trait TokenSpan {
+  /// Returns a reference to the span of the current token.
+  fn span(&self) -> &Span;
+}
+
 /// Trait for token streams.
 pub trait TokenStream {
   /// Type of the token in the token stream.
