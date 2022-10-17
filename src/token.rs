@@ -1,6 +1,7 @@
 use crate::log_error;
 use crate::span::{Result, Span};
 use std::borrow::{Borrow, BorrowMut};
+use std::collections::VecDeque;
 use std::{fmt, hash};
 
 /// Trait for creating tokens that holding values of type `T`.
@@ -245,7 +246,7 @@ pub trait TokenStream: Tokenizer {
 /// Contains a tokenizer of type `TN`, produces tokens of type `T`.
 pub struct TokenBuffer<TN, T> {
   tokenizer: TN,
-  token_buf: Vec<T>,
+  token_buf: VecDeque<T>,
 }
 
 impl<TN, T> TokenBuffer<TN, T> {
@@ -253,8 +254,19 @@ impl<TN, T> TokenBuffer<TN, T> {
   pub fn new(tokenizer: TN) -> Self {
     Self {
       tokenizer,
-      token_buf: Vec::new(),
+      token_buf: VecDeque::new(),
     }
+  }
+
+  /// Extends the token buffer by `n` new tokens.
+  fn extend_by(&mut self, n: usize) -> Result<()>
+  where
+    TN: Tokenizer<Token = T>,
+  {
+    for _ in 0..n {
+      self.token_buf.push_back(self.tokenizer.next_token()?);
+    }
+    Ok(())
   }
 }
 
@@ -272,7 +284,7 @@ where
   type Token = T;
 
   fn next_token(&mut self) -> Result<Self::Token> {
-    match self.token_buf.pop() {
+    match self.token_buf.pop_front() {
       Some(t) => Ok(t),
       None => self.tokenizer.next_token(),
     }
@@ -284,18 +296,18 @@ where
   TN: Tokenizer<Token = T>,
 {
   fn unread(&mut self, token: Self::Token) {
-    self.token_buf.push(token)
+    self.token_buf.push_front(token)
   }
 
   fn peek(&mut self) -> Result<Self::Token>
   where
     Self::Token: Clone,
   {
-    if let Some(t) = self.token_buf.last() {
+    if let Some(t) = self.token_buf.front() {
       Ok(t.clone())
     } else {
       let t = self.tokenizer.next_token()?;
-      self.token_buf.push(t.clone());
+      self.token_buf.push_front(t.clone());
       Ok(t)
     }
   }
@@ -304,15 +316,13 @@ where
   where
     Self::Token: Clone,
   {
-    let mut last = self.token_buf.iter().rev();
-    match (last.next(), last.next()) {
+    if self.token_buf.len() < 2 {
+      self.extend_by(2 - self.token_buf.len())?;
+    }
+    let mut iter = self.token_buf.iter();
+    match (iter.next(), iter.next()) {
       (Some(t1), Some(t2)) => Ok((t1.clone(), t2.clone())),
-      (Some(t1), None) => {
-        let ts = (t1.clone(), self.tokenizer.next_token()?);
-        self.token_buf.push(ts.1.clone());
-        Ok(ts)
-      }
-      _ => TokenStream::peek2(self),
+      _ => unreachable!(),
     }
   }
 
@@ -321,11 +331,8 @@ where
     Self::Token: Clone,
   {
     if self.token_buf.len() < n {
-      let ts = (self.token_buf.len()..n)
-        .map(|_| self.next_token())
-        .collect::<Result<Vec<_>>>()?;
-      self.token_buf.extend(ts.into_iter().rev());
+      self.extend_by(n - self.token_buf.len())?;
     }
-    Ok(self.token_buf.iter().rev().take(n).cloned().collect())
+    Ok(self.token_buf.iter().take(n).cloned().collect())
   }
 }
