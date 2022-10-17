@@ -1,3 +1,4 @@
+use crate::log_error;
 use crate::span::{Result, Span};
 use std::fmt;
 
@@ -125,6 +126,23 @@ pub trait TokenStream {
         break Ok(v);
       }
       v.push(token);
+    }
+  }
+
+  /// Checks if the next token is the same as the given token,
+  /// and returns the token if it is, otherwise returns an error.
+  fn expect<T>(&mut self, token: T) -> Result<Self::Token>
+  where
+    Self::Token: PartialEq<T> + TokenSpan + fmt::Display,
+    T: fmt::Display,
+  {
+    let next = self.next_token()?;
+    if next == token {
+      Ok(next)
+    } else {
+      let err = log_error!(next.span(), "expected {next}, found {token}");
+      self.unread(next);
+      Err(err)
     }
   }
 }
