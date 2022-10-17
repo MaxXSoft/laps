@@ -1,6 +1,6 @@
 use crate::return_error;
 use crate::span::{Location, Result, Span};
-use crate::token::TokenBuilder;
+use crate::token::{Ident, TokenBuilder};
 use unicode_xid::UnicodeXID;
 
 /// Checks the current character, returns the current character and its span.
@@ -400,7 +400,7 @@ pub trait Lexer {
   /// and skips until a whitespace character is encountered.
   fn next_ident<T>(&mut self) -> Result<T>
   where
-    T: TokenBuilder<String>,
+    T: TokenBuilder<Ident>,
   {
     let mut id = String::new();
     // check the current character and get the span
@@ -409,7 +409,7 @@ pub trait Lexer {
     id.push(first_char);
     // read the rest characters to string
     read_chars!(self, c, c.is_ascii_alphanumeric() || c == '_', id, span);
-    Ok(T::new(id, span))
+    Ok(T::new(Ident(id), span))
   }
 
   /// Returns `true` if the current character may be the beginning of
@@ -429,7 +429,7 @@ pub trait Lexer {
   /// and skips until a whitespace character is encountered.
   fn next_unicode_ident<T>(&mut self) -> Result<T>
   where
-    T: TokenBuilder<String>,
+    T: TokenBuilder<Ident>,
   {
     let mut id = String::new();
     // check the current character and get the span
@@ -438,7 +438,7 @@ pub trait Lexer {
     id.push(first_char);
     // read the rest characters to string
     read_chars!(self, c, UnicodeXID::is_xid_continue(c), id, span);
-    Ok(T::new(id, span))
+    Ok(T::new(Ident(id), span))
   }
 
   /// Returns `true` if the current character may be the beginning of
@@ -591,6 +591,7 @@ mod test {
   token_kind! {
     Int(u64),
     Float(f64),
+    Ident(Ident),
     Str(String),
     Char(char),
   }
@@ -697,7 +698,7 @@ mod test {
 
   #[test]
   fn read_ident() {
-    gen_expected_fns!(String, maybe_ident, next_ident, Str, |c| c
+    gen_expected_fns!(Ident, maybe_ident, next_ident, Ident, |c| c
       .is_ascii_alphabetic()
       || c == '_');
     expected("_", "_".into(), "1:1-1:1");
@@ -714,7 +715,7 @@ mod test {
 
   #[test]
   fn read_unicode_ident() {
-    gen_expected_fns!(String, maybe_unicode_ident, next_unicode_ident, Str, |c| {
+    gen_expected_fns!(Ident, maybe_unicode_ident, next_unicode_ident, Ident, |c| {
       UnicodeXID::is_xid_start(c)
     });
     expected("abc", "abc".into(), "1:1-1:3");
