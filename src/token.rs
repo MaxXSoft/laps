@@ -1,6 +1,7 @@
 use crate::log_error;
 use crate::span::{Result, Span};
-use std::fmt;
+use std::borrow::{Borrow, BorrowMut};
+use std::{fmt, hash};
 
 /// Trait for creating tokens that holding values of type `T`.
 pub trait TokenBuilder<T> {
@@ -43,6 +44,95 @@ impl fmt::Display for Ident {
 pub trait TokenSpan {
   /// Returns a reference to the span of the current token.
   fn span(&self) -> &Span;
+}
+
+/// A generic token.
+#[derive(Clone, Debug)]
+pub struct Token<Kind> {
+  /// Kind of the token.
+  pub kind: Kind,
+  /// Span of the token.
+  pub span: Span,
+}
+
+impl<T, Kind> TokenBuilder<T> for Token<Kind>
+where
+  Kind: From<T>,
+{
+  fn new(value: T, span: Span) -> Self {
+    Self {
+      kind: value.into(),
+      span,
+    }
+  }
+}
+
+impl<Kind> TokenSpan for Token<Kind> {
+  fn span(&self) -> &Span {
+    &self.span
+  }
+}
+
+impl<Kind> PartialEq<Kind> for Token<Kind>
+where
+  Kind: PartialEq,
+{
+  fn eq(&self, other: &Kind) -> bool {
+    self.kind.eq(other)
+  }
+}
+
+impl<Kind> PartialEq for Token<Kind>
+where
+  Kind: PartialEq,
+{
+  fn eq(&self, other: &Self) -> bool {
+    self.kind.eq(&other.kind)
+  }
+}
+
+impl<Kind> Eq for Token<Kind> where Kind: Eq {}
+
+impl<Kind> hash::Hash for Token<Kind>
+where
+  Kind: hash::Hash,
+{
+  fn hash<H: hash::Hasher>(&self, state: &mut H) {
+    self.kind.hash(state)
+  }
+}
+
+impl<Kind> fmt::Display for Token<Kind>
+where
+  Kind: fmt::Display,
+{
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    self.kind.fmt(f)
+  }
+}
+
+impl<Kind> Borrow<Kind> for Token<Kind> {
+  fn borrow(&self) -> &Kind {
+    &self.kind
+  }
+}
+
+impl<Kind> BorrowMut<Kind> for Token<Kind> {
+  fn borrow_mut(&mut self) -> &mut Kind {
+    &mut self.kind
+  }
+}
+
+impl<Kind> AsRef<Kind> for Token<Kind> {
+  fn as_ref(&self) -> &Kind {
+    &self.kind
+  }
+}
+
+impl<Kind> AsMut<Kind> for Token<Kind> {
+  fn as_mut(&mut self) -> &mut Kind {
+    &mut self.kind
+  }
 }
 
 /// Trait for token streams.
