@@ -42,3 +42,21 @@ where
     Ok(true)
   }
 }
+
+impl<TS, T> Parse<TS> for Vec<T>
+where
+  TS: TokenStream,
+  T: Parse<TS>,
+{
+  fn parse(tokens: &mut TS) -> Result<Self> {
+    let mut ts = Vec::new();
+    while T::maybe(tokens)? {
+      ts.push(T::parse(tokens)?);
+    }
+    Ok(ts)
+  }
+
+  fn maybe(_: &mut TS) -> Result<bool> {
+    Ok(true)
+  }
+}
