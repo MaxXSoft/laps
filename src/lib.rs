@@ -1,3 +1,4 @@
+pub mod ast;
 pub mod input;
 pub mod parse;
 pub mod reader;
