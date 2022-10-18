@@ -1,0 +1,11 @@
+[package]
+name = "laps_macros"
+version = "0.0.1"
+authors = ["MaxXing <x@MaxXSoft.net>"]
+edition = "2021"
+description = "Macros for crate `laps`."
+
+[lib]
+proc-macro = true
+
+[dependencies]

@@ -1,3 +1,8 @@
+[workspace]
+members = [
+  "laps_macros",
+]
+
 [package]
 name = "laps"
 version = "0.0.1"
