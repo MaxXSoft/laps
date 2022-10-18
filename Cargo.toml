@@ -13,9 +13,12 @@ description = "Lexer and parser collections."
 [features]
 # Disable the logger, returns error messages as strings.
 no-logger = []
+# Enable additional macros, like derive macros.
+macros = ["dep:laps_macros"]
 
 [target.'cfg(not(feature = "no-logger"))'.dependencies]
 colored = "2.0.0"
 
 [dependencies]
 unicode-xid = "0.2.4"
+laps_macros = { path = "./laps_macros", optional = true }
