@@ -239,6 +239,53 @@ pub trait TokenStream: Tokenizer {
       Err(err)
     }
   }
+
+  /// Constructs a helper for peeking a sequence of tokens.
+  fn lookahead(&mut self) -> Lookahead<Self, Self::Token>
+  where
+    Self: Sized,
+  {
+    Lookahead {
+      tokens: self,
+      buf: Vec::new(),
+    }
+  }
+}
+
+/// Support for checking token sequences without
+/// advancing the position of the token stream.
+pub struct Lookahead<'ts, TS, T>
+where
+  TS: TokenStream<Token = T>,
+{
+  tokens: &'ts mut TS,
+  buf: Vec<T>,
+}
+
+impl<'ts, TS, T> Lookahead<'ts, TS, T>
+where
+  TS: TokenStream<Token = T>,
+{
+  /// Peeks the next token from the token stream.
+  pub fn peek_next(&mut self) -> Result<T>
+  where
+    T: Clone,
+  {
+    let token = self.tokens.next_token()?;
+    self.buf.push(token.clone());
+    Ok(token)
+  }
+}
+
+impl<'ts, TS, T> Drop for Lookahead<'ts, TS, T>
+where
+  TS: TokenStream<Token = T>,
+{
+  fn drop(&mut self) {
+    while let Some(token) = self.buf.pop() {
+      self.tokens.unread(token)
+    }
+  }
 }
 
 /// A token buffer that implements trait [`TokenStream`].
