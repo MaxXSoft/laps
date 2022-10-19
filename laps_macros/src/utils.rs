@@ -1,7 +1,6 @@
 use proc_macro2::{Ident, Span};
 use syn::parse::{Parse, ParseStream};
-use syn::punctuated::Punctuated;
-use syn::{parenthesized, Result, Token};
+use syn::{parenthesized, Result};
 
 /// Generates a compile error.
 macro_rules! error {
@@ -39,30 +38,4 @@ impl<T: Parse> Parse for Parenthesized<T> {
 /// Creates a new identifier by the given string.
 pub fn ident(s: &str) -> Ident {
   Ident::new(s, Span::call_site())
-}
-
-/// Data of `key = value`.
-pub struct KeyValue<S, V> {
-  pub key: Ident,
-  pub separator: S,
-  pub value: V,
-}
-
-impl<S: Parse, V: Parse> Parse for KeyValue<S, V> {
-  fn parse(input: ParseStream) -> Result<Self> {
-    Ok(Self {
-      key: input.parse()?,
-      separator: input.parse()?,
-      value: input.parse()?,
-    })
-  }
-}
-
-/// Data of comma separated items.
-pub struct CommaSep<T>(pub Punctuated<T, Token![,]>);
-
-impl<T: Parse> Parse for CommaSep<T> {
-  fn parse(input: ParseStream) -> Result<Self> {
-    Ok(Self(Punctuated::parse_terminated(input)?))
-  }
 }
