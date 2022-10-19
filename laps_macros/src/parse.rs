@@ -175,23 +175,30 @@ fn gen_where_clause(
   trait_param: &Path,
 ) -> WhereClause {
   // `Parse` trait bound
-  let mut trait_bound = Punctuated::new();
-  trait_bound.push(syn::parse2(quote!(laps::parse::Parse<#trait_param>)).unwrap());
+  let mut parse_trait = Punctuated::new();
+  parse_trait.push(syn::parse2(quote!(laps::parse::Parse<#trait_param>)).unwrap());
+  // `TokenStream` trait bound
+  let mut ts_trait = Punctuated::new();
+  ts_trait.push(syn::parse2(quote!(laps::token::TokenStream)).unwrap());
   // turns types into where predicates
   let param_ty = Type::Path(TypePath {
     qself: None,
     path: trait_param.clone(),
   });
-  let preds = std::iter::once(param_ty)
-    .chain(tys.into_iter().cloned())
-    .map(|t| {
-      WherePredicate::Type(PredicateType {
-        lifetimes: None,
-        bounded_ty: t,
-        colon_token: Default::default(),
-        bounds: trait_bound.clone(),
-      })
-    });
+  let preds = tys.into_iter().cloned().map(|t| {
+    WherePredicate::Type(PredicateType {
+      lifetimes: None,
+      bounded_ty: t,
+      colon_token: Default::default(),
+      bounds: parse_trait.clone(),
+    })
+  });
+  let preds = preds.chain(std::iter::once(WherePredicate::Type(PredicateType {
+    lifetimes: None,
+    bounded_ty: param_ty,
+    colon_token: Default::default(),
+    bounds: ts_trait,
+  })));
   // create where clause
   WhereClause {
     where_token: Default::default(),
