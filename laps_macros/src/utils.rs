@@ -1,3 +1,4 @@
+use proc_macro2::{Ident, Span};
 use syn::parse::{Parse, ParseStream};
 use syn::{parenthesized, Result};
 
@@ -32,4 +33,9 @@ impl<T: Parse> Parse for Parenthesized<T> {
     parenthesized!(content in input);
     Ok(Self(content.parse()?))
   }
+}
+
+/// Creates a new identifier by the given string.
+pub fn ident(s: &str) -> Ident {
+  Ident::new(s, Span::call_site())
 }
