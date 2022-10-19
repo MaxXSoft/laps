@@ -22,3 +22,7 @@ colored = "2.0.0"
 [dependencies]
 unicode-xid = "0.2.4"
 laps_macros = { path = "./laps_macros", optional = true }
+
+[[example]]
+name = "clike"
+required-features = ["macros"]
