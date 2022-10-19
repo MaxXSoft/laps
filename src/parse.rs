@@ -1,6 +1,9 @@
 use crate::span::Result;
 use crate::token::TokenStream;
 
+#[cfg(feature = "macros")]
+pub use laps_macros::Parse;
+
 /// Parsing trait for all types that can be parsed from a token stream.
 pub trait Parse<TS>: Sized
 where
