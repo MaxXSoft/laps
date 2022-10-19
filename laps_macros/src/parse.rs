@@ -1,10 +1,10 @@
-use crate::utils::{ident, return_error, Parenthesized};
+use crate::utils::{ident, return_error, CommaSep, KeyValue, Parenthesized};
 use proc_macro::TokenStream;
 use proc_macro2::{Ident, TokenStream as TokenStream2};
 use quote::{quote, ToTokens, TokenStreamExt};
 use syn::{
   punctuated::Punctuated, spanned::Spanned, AttrStyle, Attribute, Data, DataEnum, DataStruct,
-  DeriveInput, Field, Fields, GenericParam, Generics, ImplGenerics, Path, PathArguments,
+  DeriveInput, Expr, Field, Fields, GenericParam, Generics, ImplGenerics, Path, PathArguments,
   PredicateType, Result, Token, Type, TypePath, WhereClause, WherePredicate,
 };
 
@@ -15,8 +15,9 @@ pub fn derive_parse(tokens: TokenStream) -> Result<TokenStream> {
   if !matches!(&input.data, Data::Struct(_) | Data::Enum(_)) {
     return_error!("`#[derive(Parse)]` only supports structs and enums");
   }
-  // parse `token_stream` attribute
-  let token_stream = parse_token_stream(input.attrs)?;
+  // parse attributes
+  let token_stream = parse_token_stream(&input.attrs)?;
+  let custom = parse_custom(&input.attrs)?;
   // get name and field types
   let name = input.ident;
   let tys = collect_data_types(&input.data);
@@ -27,8 +28,8 @@ pub fn derive_parse(tokens: TokenStream) -> Result<TokenStream> {
   let where_clause = gen_where_clause(where_clause, tys, &trait_param);
   // get method implementations
   let (parse, maybe) = match &input.data {
-    Data::Struct(s) => gen_struct_methods(s, &trait_param),
-    Data::Enum(e) => gen_enum_methods(e, &trait_param),
+    Data::Struct(s) => gen_struct_methods(s, &trait_param, &custom),
+    Data::Enum(e) => gen_enum_methods(e, &trait_param, &custom),
     _ => unreachable!(),
   };
   // generate implementations
@@ -41,24 +42,60 @@ pub fn derive_parse(tokens: TokenStream) -> Result<TokenStream> {
   }))
 }
 
-/// Parses attribute `#[token_stream(...)]`.
-fn parse_token_stream(attrs: Vec<Attribute>) -> Result<Option<Path>> {
-  let mut token_stream = None;
-  // find attribute `token_stream`
-  for attr in attrs {
-    if is_path_eq(&attr.path, "token_stream") {
-      if token_stream.is_some() {
-        return_error!(
-          attr.span(),
-          "attribute `token_stream` is bound more than once"
-        );
-      } else {
-        let Parenthesized(path) = syn::parse2(attr.tokens)?;
-        token_stream = Some(path);
+/// Helper macro for handling attributes.
+macro_rules! match_attr {
+  (for $attr:ident in $attrs:ident if $name:literal && $cond:expr => $body:block) => {
+    for $attr in $attrs {
+      if is_path_eq(&$attr.path, $name) {
+        if $cond $body else {
+          return_error!(
+            $attr.span(),
+            concat!("attribute `", $name, "` is bound more than once")
+          );
+        }
       }
+    }
+  };
+}
+
+/// Parses attribute `#[token_stream(...)]`.
+fn parse_token_stream(attrs: &Vec<Attribute>) -> Result<Option<Path>> {
+  let mut token_stream = None;
+  match_attr! {
+    for attr in attrs if "token_stream" && token_stream.is_none() => {
+      let Parenthesized(path) = syn::parse2(attr.tokens.clone())?;
+      token_stream = Some(path);
     }
   }
   Ok(token_stream)
+}
+
+/// Data in `#[custom(...)]` attribute.
+#[derive(Default)]
+struct CustomConfig {
+  maybe: Option<Expr>,
+  error: Option<Expr>,
+}
+
+/// Parses attribute `#[custom(maybe = ..., error = ...)]`.
+fn parse_custom(attrs: &Vec<Attribute>) -> Result<CustomConfig> {
+  let mut custom = CustomConfig::default();
+  match_attr! {
+    for attr in attrs if "custom" && custom.maybe.is_none() && custom.error.is_none() => {
+      let Parenthesized(CommaSep(kvs)) = syn::parse2(attr.tokens.clone())?;
+      let kvs: Punctuated<KeyValue<Token![=], Expr>, Token![,]> = kvs;
+      for KeyValue { key, value, .. } in kvs {
+        if key == "maybe" {
+          custom.maybe = Some(value);
+        } else if key == "error" {
+          custom.error = Some(value);
+        } else {
+          return_error!(key.span(), format!("unsupported key `{key}`"))
+        }
+      }
+    }
+  }
+  Ok(custom)
 }
 
 /// Checks if the given path equals to the given string.
@@ -188,7 +225,11 @@ fn gen_token_stream_type() -> Ident {
 }
 
 /// Generates trait methods for the given struct data.
-fn gen_struct_methods(data: &DataStruct, trait_param: &Path) -> (TokenStream2, TokenStream2) {
+fn gen_struct_methods(
+  data: &DataStruct,
+  trait_param: &Path,
+  custom: &CustomConfig,
+) -> (TokenStream2, TokenStream2) {
   // generate `parse` method
   let constructor = match &data.fields {
     Fields::Named(f) => {
@@ -213,14 +254,15 @@ fn gen_struct_methods(data: &DataStruct, trait_param: &Path) -> (TokenStream2, T
     }
   };
   // generate `maybe` method
-  let result = match &data.fields {
+  let first_field = match &data.fields {
     Fields::Named(f) => f.named.first(),
     Fields::Unnamed(f) => f.unnamed.first(),
     Fields::Unit => None,
   };
-  let result = match result {
-    Some(Field { ty, .. }) => quote!(<#ty>::maybe(tokens)),
-    None => quote!(Ok(true)),
+  let result = match (&custom.maybe, first_field) {
+    (Some(maybe), _) => quote!((#maybe)(tokens)),
+    (_, Some(Field { ty, .. })) => quote!(<#ty>::maybe(tokens)),
+    _ => quote!(Ok(true)),
   };
   let maybe = quote! {
     fn maybe(tokens: &mut #trait_param) -> laps::span::Result<bool> {
@@ -231,6 +273,10 @@ fn gen_struct_methods(data: &DataStruct, trait_param: &Path) -> (TokenStream2, T
 }
 
 /// Generates trait methods for the given enum data.
-fn gen_enum_methods(data: &DataEnum, trait_param: &Path) -> (TokenStream2, TokenStream2) {
+fn gen_enum_methods(
+  data: &DataEnum,
+  trait_param: &Path,
+  custom: &CustomConfig,
+) -> (TokenStream2, TokenStream2) {
   todo!()
 }
