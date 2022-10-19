@@ -1,4 +1,4 @@
-use crate::utils::{ident, return_error, CommaSep, KeyValue, Parenthesized};
+use crate::utils::{ident, return_error, Parenthesized};
 use proc_macro::TokenStream;
 use proc_macro2::{Ident, TokenStream as TokenStream2};
 use quote::{quote, ToTokens, TokenStreamExt};
@@ -17,7 +17,7 @@ pub fn derive_parse(tokens: TokenStream) -> Result<TokenStream> {
   }
   // parse attributes
   let token_stream = parse_token_stream(&input.attrs)?;
-  let custom = parse_custom(&input.attrs)?;
+  let maybe = parse_maybe(&input.attrs)?;
   // get name and field types
   let name = input.ident;
   let tys = collect_data_types(&input.data);
@@ -28,8 +28,8 @@ pub fn derive_parse(tokens: TokenStream) -> Result<TokenStream> {
   let where_clause = gen_where_clause(where_clause, tys, &trait_param);
   // get method implementations
   let (parse, maybe) = match &input.data {
-    Data::Struct(s) => gen_struct_methods(s, &trait_param, &custom),
-    Data::Enum(e) => gen_enum_methods(e, &trait_param, &custom),
+    Data::Struct(s) => gen_struct_methods(s, &trait_param, &maybe),
+    Data::Enum(e) => gen_enum_methods(e, &trait_param, &maybe),
     _ => unreachable!(),
   };
   // generate implementations
@@ -70,32 +70,16 @@ fn parse_token_stream(attrs: &Vec<Attribute>) -> Result<Option<Path>> {
   Ok(token_stream)
 }
 
-/// Data in `#[custom(...)]` attribute.
-#[derive(Default)]
-struct CustomConfig {
-  maybe: Option<Expr>,
-  error: Option<Expr>,
-}
-
-/// Parses attribute `#[custom(maybe = ..., error = ...)]`.
-fn parse_custom(attrs: &Vec<Attribute>) -> Result<CustomConfig> {
-  let mut custom = CustomConfig::default();
+/// Parses attribute `#[maybe(...)]`.
+fn parse_maybe(attrs: &Vec<Attribute>) -> Result<Option<Expr>> {
+  let mut maybe = None;
   match_attr! {
-    for attr in attrs if "custom" && custom.maybe.is_none() && custom.error.is_none() => {
-      let Parenthesized(CommaSep(kvs)) = syn::parse2(attr.tokens.clone())?;
-      let kvs: Punctuated<KeyValue<Token![=], Expr>, Token![,]> = kvs;
-      for KeyValue { key, value, .. } in kvs {
-        if key == "maybe" {
-          custom.maybe = Some(value);
-        } else if key == "error" {
-          custom.error = Some(value);
-        } else {
-          return_error!(key.span(), format!("unsupported key `{key}`"))
-        }
-      }
+    for attr in attrs if "maybe" && maybe.is_none() => {
+      let Parenthesized(expr) = syn::parse2(attr.tokens.clone())?;
+      maybe = Some(expr);
     }
   }
-  Ok(custom)
+  Ok(maybe)
 }
 
 /// Checks if the given path equals to the given string.
@@ -228,10 +212,88 @@ fn gen_token_stream_type() -> Ident {
 fn gen_struct_methods(
   data: &DataStruct,
   trait_param: &Path,
-  custom: &CustomConfig,
+  maybe: &Option<Expr>,
 ) -> (TokenStream2, TokenStream2) {
   // generate `parse` method
-  let constructor = match &data.fields {
+  let constructor = gen_constructor(&data.fields);
+  let parse = quote! {
+    fn parse(tokens: &mut #trait_param) -> laps::span::Result<Self> {
+      Ok(Self #constructor)
+    }
+  };
+  // generate `maybe` method
+  let result = if let Some(maybe) = maybe {
+    quote!((#maybe)(tokens))
+  } else if let Some(Field { ty, .. }) = first_field(&data.fields) {
+    quote!(<#ty>::maybe(tokens))
+  } else {
+    quote!(Ok(true))
+  };
+  let maybe = quote! {
+    fn maybe(tokens: &mut #trait_param) -> laps::span::Result<bool> {
+      #result
+    }
+  };
+  (parse, maybe)
+}
+
+/// Generates trait methods for the given enum data.
+fn gen_enum_methods(
+  data: &DataEnum,
+  trait_param: &Path,
+  maybe: &Option<Expr>,
+) -> (TokenStream2, TokenStream2) {
+  // generate `parse` method
+  let mut branches = TokenStream2::new();
+  for (i, variant) in data.variants.iter().enumerate() {
+    if i != 0 {
+      <Token![else]>::default().to_tokens(&mut branches);
+    }
+    if i != data.variants.len() - 1 {
+      <Token![if]>::default().to_tokens(&mut branches);
+      branches.append_all(match first_field(&variant.fields) {
+        Some(Field { ty, .. }) => quote!(<#ty>::maybe(tokens)?),
+        None => quote!(true),
+      });
+    }
+    let ident = &variant.ident;
+    let constructor = gen_constructor(&variant.fields);
+    branches.append_all(quote!({ Self::#ident #constructor }));
+  }
+  let parse = quote! {
+    fn parse(tokens: &mut #trait_param) -> laps::span::Result<Self> {
+      Ok(#branches)
+    }
+  };
+  // generate `maybe` method
+  let result = if let Some(maybe) = maybe {
+    quote!((#maybe)(tokens))
+  } else if data.variants.is_empty() {
+    quote!(Ok(true))
+  } else {
+    let mut tokens = TokenStream2::new();
+    for (i, variant) in data.variants.iter().enumerate() {
+      if i != 0 {
+        <Token![||]>::default().to_tokens(&mut tokens);
+      }
+      tokens.append_all(match first_field(&variant.fields) {
+        Some(Field { ty, .. }) => quote!(<#ty>::maybe(tokens)),
+        None => quote!(true),
+      });
+    }
+    quote!(Ok(#tokens))
+  };
+  let maybe = quote! {
+    fn maybe(tokens: &mut #trait_param) -> laps::span::Result<bool> {
+      #result
+    }
+  };
+  (parse, maybe)
+}
+
+/// Generates the constructor for the given fields.
+fn gen_constructor(fields: &Fields) -> TokenStream2 {
+  match fields {
     Fields::Named(f) => {
       let mut fields = TokenStream2::new();
       for Field { ident, ty, .. } in &f.named {
@@ -247,36 +309,14 @@ fn gen_struct_methods(
       quote!((#fields))
     }
     Fields::Unit => quote!(),
-  };
-  let parse = quote! {
-    fn parse(tokens: &mut #trait_param) -> laps::span::Result<Self> {
-      Ok(Self #constructor)
-    }
-  };
-  // generate `maybe` method
-  let first_field = match &data.fields {
+  }
+}
+
+/// Returns the first field of the given fields.
+fn first_field(fields: &Fields) -> Option<&Field> {
+  match fields {
     Fields::Named(f) => f.named.first(),
     Fields::Unnamed(f) => f.unnamed.first(),
     Fields::Unit => None,
-  };
-  let result = match (&custom.maybe, first_field) {
-    (Some(maybe), _) => quote!((#maybe)(tokens)),
-    (_, Some(Field { ty, .. })) => quote!(<#ty>::maybe(tokens)),
-    _ => quote!(Ok(true)),
-  };
-  let maybe = quote! {
-    fn maybe(tokens: &mut #trait_param) -> laps::span::Result<bool> {
-      #result
-    }
-  };
-  (parse, maybe)
-}
-
-/// Generates trait methods for the given enum data.
-fn gen_enum_methods(
-  data: &DataEnum,
-  trait_param: &Path,
-  custom: &CustomConfig,
-) -> (TokenStream2, TokenStream2) {
-  todo!()
+  }
 }
