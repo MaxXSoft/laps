@@ -4,8 +4,8 @@ use proc_macro2::{Ident, TokenStream as TokenStream2};
 use quote::{quote, ToTokens, TokenStreamExt};
 use syn::{
   punctuated::Punctuated, spanned::Spanned, AttrStyle, Attribute, Data, DataEnum, DataStruct,
-  DeriveInput, Fields, GenericParam, Generics, ImplGenerics, Path, PathArguments, PredicateType,
-  Result, Token, Type, TypePath, WhereClause, WherePredicate,
+  DeriveInput, Field, Fields, GenericParam, Generics, ImplGenerics, Path, PathArguments,
+  PredicateType, Result, Token, Type, TypePath, WhereClause, WherePredicate,
 };
 
 /// Entry function of `#[derive(Parse)]`.
@@ -23,17 +23,17 @@ pub fn derive_parse(tokens: TokenStream) -> Result<TokenStream> {
   // get generic related stuffs
   let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
   let impl_generics = gen_impl_generics(&token_stream, impl_generics, &input.generics);
-  let parse_trait_param = gen_parse_trait_param(token_stream);
-  let where_clause = gen_where_clause(where_clause, &tys, &parse_trait_param);
+  let trait_param = gen_parse_trait_param(token_stream);
+  let where_clause = gen_where_clause(where_clause, tys, &trait_param);
   // get method implementations
   let (parse, maybe) = match &input.data {
-    Data::Struct(s) => gen_struct_methods(s, tys),
-    Data::Enum(e) => gen_enum_methods(e),
+    Data::Struct(s) => gen_struct_methods(s, &trait_param),
+    Data::Enum(e) => gen_enum_methods(e, &trait_param),
     _ => unreachable!(),
   };
   // generate implementations
   Ok(TokenStream::from(quote! {
-    impl #impl_generics laps::parse::Parse<#parse_trait_param>
+    impl #impl_generics laps::parse::Parse<#trait_param>
     for #name #ty_generics #where_clause {
       #parse
       #maybe
@@ -150,19 +150,19 @@ fn gen_parse_trait_param(token_stream: Option<Path>) -> Path {
 /// Generates `where` clause.
 fn gen_where_clause(
   where_clause: Option<&WhereClause>,
-  tys: &Vec<&Type>,
-  parse_trait_param: &Path,
+  tys: Vec<&Type>,
+  trait_param: &Path,
 ) -> WhereClause {
   // `Parse` trait bound
   let mut trait_bound = Punctuated::new();
-  trait_bound.push(syn::parse2(quote!(laps::parse::Parse<#parse_trait_param>)).unwrap());
+  trait_bound.push(syn::parse2(quote!(laps::parse::Parse<#trait_param>)).unwrap());
   // turns types into where predicates
   let param_ty = Type::Path(TypePath {
     qself: None,
-    path: parse_trait_param.clone(),
+    path: trait_param.clone(),
   });
   let preds = std::iter::once(param_ty)
-    .chain(tys.iter().map(|&t| t.clone()))
+    .chain(tys.into_iter().cloned())
     .map(|t| {
       WherePredicate::Type(PredicateType {
         lifetimes: None,
@@ -188,11 +188,49 @@ fn gen_token_stream_type() -> Ident {
 }
 
 /// Generates trait methods for the given struct data.
-fn gen_struct_methods(data: &DataStruct, tys: Vec<&Type>) -> (TokenStream2, TokenStream2) {
-  todo!()
+fn gen_struct_methods(data: &DataStruct, trait_param: &Path) -> (TokenStream2, TokenStream2) {
+  // generate `parse` method
+  let constructor = match &data.fields {
+    Fields::Named(f) => {
+      let mut fields = TokenStream2::new();
+      for Field { ident, ty, .. } in &f.named {
+        fields.append_all(quote!(#ident: <#ty>::parse(tokens)?,));
+      }
+      quote!({#fields})
+    }
+    Fields::Unnamed(f) => {
+      let mut fields = TokenStream2::new();
+      for Field { ty, .. } in &f.unnamed {
+        fields.append_all(quote!(<#ty>::parse(tokens)?,))
+      }
+      quote!((#fields))
+    }
+    Fields::Unit => quote!(),
+  };
+  let parse = quote! {
+    fn parse(tokens: &mut #trait_param) -> laps::span::Result<Self> {
+      Ok(Self #constructor)
+    }
+  };
+  // generate `maybe` method
+  let result = match &data.fields {
+    Fields::Named(f) => f.named.first(),
+    Fields::Unnamed(f) => f.unnamed.first(),
+    Fields::Unit => None,
+  };
+  let result = match result {
+    Some(Field { ty, .. }) => quote!(<#ty>::maybe(tokens)),
+    None => quote!(Ok(true)),
+  };
+  let maybe = quote! {
+    fn maybe(tokens: &mut #trait_param) -> laps::span::Result<bool> {
+      #result
+    }
+  };
+  (parse, maybe)
 }
 
 /// Generates trait methods for the given enum data.
-fn gen_enum_methods(data: &DataEnum) -> (TokenStream2, TokenStream2) {
+fn gen_enum_methods(data: &DataEnum, trait_param: &Path) -> (TokenStream2, TokenStream2) {
   todo!()
 }
