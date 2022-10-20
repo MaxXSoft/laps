@@ -7,7 +7,7 @@ use syn::{
   parse::{Parse, ParseStream},
   punctuated::Punctuated,
   token::{Brace, Bracket, Paren},
-  Attribute, Pat, Path, Result, Token, Visibility,
+  Attribute, LitStr, Pat, Path, Result, Token, Visibility,
 };
 
 struct TokenAst {
@@ -66,17 +66,34 @@ struct TokenAstArm {
   _bracket_token: Bracket,
   token: TokenStream2,
   _fat_arrow_token: Token![=>],
+  _paren_token: Paren,
   pat: Pat,
+  _comma_token: Token![,],
+  prompt: Option<LitStr>,
 }
 
 impl Parse for TokenAstArm {
   fn parse(input: ParseStream) -> Result<Self> {
-    let content;
+    let bracket_content;
+    let paren_content;
     Ok(Self {
-      _bracket_token: bracketed!(content in input),
-      token: content.parse()?,
+      _bracket_token: bracketed!(bracket_content in input),
+      token: bracket_content.parse()?,
       _fat_arrow_token: input.parse()?,
-      pat: input.parse()?,
+      _paren_token: parenthesized!(paren_content in input),
+      pat: paren_content.parse()?,
+      _comma_token: paren_content.parse()?,
+      prompt: {
+        let lookahead = paren_content.lookahead1();
+        if lookahead.peek(LitStr) {
+          Some(paren_content.parse()?)
+        } else if lookahead.peek(Token![_]) {
+          paren_content.parse::<Token![_]>()?;
+          None
+        } else {
+          return Err(lookahead.error());
+        }
+      },
     })
   }
 }
@@ -104,7 +121,17 @@ fn gen_ast_defs(input: &TokenAst) -> Result<(TokenStream2, Vec<TokenStream2>)> {
   let defs = names
     .clone()
     .zip(&input.arms)
-    .map(|(name, TokenAstArm { pat, .. })| {
+    .map(|(name, TokenAstArm { pat, prompt, .. })| {
+      let parse_body = match prompt {
+        Some(prompt) => quote! {
+          let token = tokens.next_token()?;
+          match token.kind {
+            #kind::#pat => Ok(Self(token)),
+            _ => laps::return_error!(token.span, concat!("expected ", #prompt, ", found {}"), token),
+          }
+        },
+        None => quote!(tokens.expect(#kind::#pat).map(Self))
+      };
       quote! {
         pub struct #name(#token);
         impl<TS> laps::parse::Parse<TS> for #name
@@ -112,11 +139,7 @@ fn gen_ast_defs(input: &TokenAst) -> Result<(TokenStream2, Vec<TokenStream2>)> {
           TS: laps::token::TokenStream<Token = #token>
         {
           fn parse(tokens: &mut TS) -> laps::span::Result<Self> {
-            let token = tokens.next_token()?;
-            match token.kind {
-              #kind::#pat => Ok(Self(token)),
-              _ => laps::return_error!(token.span, "unexpected token {}", token),
-            }
+            #parse_body
           }
           fn maybe(tokens: &mut TS) -> laps::span::Result<bool> {
             Ok(matches!(tokens.peek()?.kind, #kind::#pat))
