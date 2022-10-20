@@ -133,6 +133,7 @@ fn gen_ast_defs(input: &TokenAst) -> Result<(TokenStream2, Vec<TokenStream2>)> {
         None => quote!(tokens.expect(#kind::#pat).map(Self))
       };
       quote! {
+        #[derive(Clone, Debug, PartialEq, Eq, Hash)]
         pub struct #name(#token);
         impl<TS> laps::parse::Parse<TS> for #name
         where
