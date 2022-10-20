@@ -9,6 +9,7 @@ description = "Macros for crate `laps`."
 proc-macro = true
 
 [dependencies]
+proc-macro-crate = "1.2.1"
 proc-macro2 = "1.0.47"
 quote = "1.0.21"
 syn = { version = "1.0.102", features = ["full"] }
