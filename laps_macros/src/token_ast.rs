@@ -1,4 +1,4 @@
-use crate::utils::{ident, return_error};
+use crate::utils::{ident, laps_crate, return_error};
 use proc_macro::TokenStream;
 use proc_macro2::{Ident, TokenStream as TokenStream2, TokenTree};
 use quote::quote;
@@ -81,31 +81,65 @@ pub fn token_ast(item: TokenStream) -> Result<TokenStream> {
   // parse macro input
   let input: TokenAst = syn::parse(item)?;
   // generate AST definitions
-  let mod_name = ident(&format!("__token_ast_{}", input.ident));
   let (ast_defs, ast_names) = gen_ast_defs(&input)?;
   // generate macro definition
   let macro_def = gen_macro_def(&input, ast_names);
-  Ok(TokenStream::from(quote! {
-    mod #mod_name { #ast_defs }
-    #macro_def
-  }))
+  Ok(TokenStream::from(quote!(#ast_defs #macro_def)))
 }
 
 /// Generates AST definitions.
 ///
 /// Returns definitions and AST names.
 fn gen_ast_defs(input: &TokenAst) -> Result<(TokenStream2, Vec<TokenStream2>)> {
-  todo!()
+  // generate AST names
+  let names = (0..input.arms.len()).map(|i| ident(&format!("Token{i}")));
+  // generate AST definitions
+  let laps = laps_crate()?;
+  let kind = &input.mod_and_kind.token_kind;
+  let token = quote!(#laps::token::Token<#kind>);
+  let defs = names
+    .clone()
+    .zip(&input.arms)
+    .map(|(name, TokenAstArm { pat, .. })| {
+      quote! {
+        pub struct #name(#token);
+        impl<TS> #laps::parse::Parse<TS> for #name
+        where
+          TS: #laps::tokens::TokenStream<Token = #token>
+        {
+          fn parse(tokens: &mut TS) -> #laps::span::Result<Self> {
+            if Self::maybe(tokens)? {
+              Ok(Self(unsafe { tokens.next_token().unwrap_unchecked() }))
+            } else {
+              let token = unsafe { tokens.peek().unwrap_unchecked() };
+              #laps::return_error!(token.span, "unexpected token {}", token);
+            }
+          }
+          fn maybe(tokens: &mut TS) -> #laps::span::Result<bool> {
+            Ok(matches!(tokens.peek()?.kind, #pat))
+          }
+        }
+      }
+    });
+  let vis = &input.vis;
+  let mod_name = ident(&format!(
+    "token_ast_{}",
+    camel_to_snake(input.ident.to_string())
+  ));
+  let ast_defs = quote!(#vis mod #mod_name { #(#defs)* });
+  // generate full paths for all ASTs
+  let current_mod = &input.mod_and_kind.current_mod;
+  let ast_names = names.map(|ident| quote!(#current_mod::#mod_name::#ident));
+  Ok((ast_defs, ast_names.collect()))
 }
 
 /// Generates the macro definition.
 fn gen_macro_def(input: &TokenAst, ast_names: Vec<TokenStream2>) -> TokenStream2 {
   // generate arms
-  let arms = input
-    .arms
-    .iter()
-    .zip(ast_names)
-    .map(|(TokenAstArm { token, .. }, name)| quote!([#token] => {#name};));
+  let arms = ast_names
+    .into_iter()
+    .zip(&input.arms)
+    .map(|(name, TokenAstArm { token, .. })| quote!([#token] => {#name};));
   // generate definition
   let name = &input.ident;
   let macro_def = quote!(macro_rules! #name { #(#arms)* });
@@ -118,4 +152,20 @@ fn gen_macro_def(input: &TokenAst, ast_names: Vec<TokenStream2>) -> TokenStream2
       #vis use #name;
     },
   }
+}
+
+/// Converts the given camel case string to snake case.
+pub fn camel_to_snake(s: String) -> String {
+  let mut ans = String::new();
+  for c in s.chars() {
+    if c.is_ascii_uppercase() {
+      if !ans.is_empty() {
+        ans.push('_');
+      }
+      ans.push(c.to_ascii_lowercase());
+    } else {
+      ans.push(c);
+    }
+  }
+  ans
 }
