@@ -1,5 +1,4 @@
 use proc_macro2::{Ident, Span};
-use proc_macro_crate::{crate_name, FoundCrate};
 use syn::parse::{Parse, ParseStream};
 use syn::{parenthesized, Result};
 
@@ -45,16 +44,6 @@ impl<T: Parse> Parse for Parenthesized<T> {
     parenthesized!(content in input);
     Ok(Self(content.parse()?))
   }
-}
-
-/// Returns the name of the `laps` crate.
-pub fn laps_crate() -> Result<Ident> {
-  crate_name("laps")
-    .map(|fc| match fc {
-      FoundCrate::Itself => ident("crate"),
-      FoundCrate::Name(name) => ident(&name),
-    })
-    .map_err(|e| error!(format!("{e}")))
 }
 
 /// Creates a new identifier by the given string.
