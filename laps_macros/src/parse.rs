@@ -2,6 +2,7 @@ use crate::utils::{ident, return_error, Parenthesized};
 use proc_macro::TokenStream;
 use proc_macro2::{Ident, TokenStream as TokenStream2};
 use quote::{quote, ToTokens, TokenStreamExt};
+use std::iter;
 use syn::{
   punctuated::Punctuated, spanned::Spanned, AttrStyle, Attribute, Data, DataEnum, DataStruct,
   DeriveInput, Expr, Field, Fields, GenericParam, Generics, ImplGenerics, Path, PredicateType,
@@ -185,7 +186,7 @@ fn gen_where_clause(
       bounds: parse_trait.clone(),
     })
   });
-  let preds = preds.chain(std::iter::once(WherePredicate::Type(PredicateType {
+  let preds = preds.chain(iter::once(WherePredicate::Type(PredicateType {
     lifetimes: None,
     bounded_ty: param_ty,
     colon_token: Default::default(),
@@ -294,18 +295,15 @@ fn gen_enum_methods(
 fn gen_constructor(fields: &Fields) -> TokenStream2 {
   match fields {
     Fields::Named(f) => {
-      let mut fields = TokenStream2::new();
-      for Field { ident, ty, .. } in &f.named {
-        fields.append_all(quote!(#ident: <#ty>::parse(tokens)?,));
-      }
-      quote!({#fields})
+      let fields = f
+        .named
+        .iter()
+        .map(|Field { ident, .. }| quote!(#ident: tokens.parse()?,));
+      quote!({#(#fields)*})
     }
     Fields::Unnamed(f) => {
-      let mut fields = TokenStream2::new();
-      for Field { ty, .. } in &f.unnamed {
-        fields.append_all(quote!(<#ty>::parse(tokens)?,))
-      }
-      quote!((#fields))
+      let fields = iter::repeat(quote!(tokens.parse()?,)).take(f.unnamed.len());
+      quote!((#(#fields)*))
     }
     Fields::Unit => quote!(),
   }
