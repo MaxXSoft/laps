@@ -6,7 +6,7 @@ use std::collections::VecDeque;
 use std::{fmt, hash};
 
 #[cfg(feature = "macros")]
-pub use laps_macros::token_kind;
+pub use laps_macros::{token_kind, token_ast};
 
 /// Trait for creating tokens that holding values of type `T`.
 pub trait TokenBuilder<T> {
