@@ -4,6 +4,7 @@ use crate::token::TokenStream;
 use std::marker::PhantomData;
 
 /// An empty AST.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Empty;
 
 impl<TS> Parse<TS> for Empty
@@ -23,6 +24,7 @@ where
 /// like `T`, `T T`, `T T T`, ...
 ///
 /// The inner [`Vec`] is guaranteed not to be empty.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct NonEmptySeq<T>(pub Vec<T>);
 
 impl<TS, T> Parse<TS> for NonEmptySeq<T>
@@ -45,6 +47,7 @@ where
 
 /// A sequence of AST `T`, separated by AST `S`,
 /// like `<empty>`, `T`, `T S T`, `T S T S T`, ...
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct SepSeq<T, S>(pub Vec<T>, PhantomData<S>);
 
 impl<TS, T, S> Parse<TS> for SepSeq<T, S>
@@ -76,6 +79,7 @@ where
 /// like `T`, `T S T`, `T S T S T`, ...
 ///
 /// The inner [`Vec`] is guaranteed not to be empty.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct NonEmptySepSeq<T, S>(pub Vec<T>, PhantomData<S>);
 
 impl<TS, T, S> Parse<TS> for NonEmptySepSeq<T, S>
@@ -99,6 +103,7 @@ where
 }
 
 /// An AST `T` quoted by AST `L` and AST `R`, like `L T R`.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Quoted<L, T, R>(pub L, pub T, pub R);
 
 impl<TS, L, T, R> Parse<TS> for Quoted<L, T, R>
