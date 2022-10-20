@@ -4,6 +4,9 @@ use std::borrow::{Borrow, BorrowMut};
 use std::collections::VecDeque;
 use std::{fmt, hash};
 
+#[cfg(feature = "macros")]
+pub use laps_macros::token_kind;
+
 /// Trait for creating tokens that holding values of type `T`.
 pub trait TokenBuilder<T> {
   /// Creates a new token from the given value and span.
