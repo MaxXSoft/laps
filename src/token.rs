@@ -1,4 +1,5 @@
 use crate::log_error;
+use crate::parse::Parse;
 use crate::span::{Result, Span};
 use std::borrow::{Borrow, BorrowMut};
 use std::collections::VecDeque;
@@ -154,6 +155,15 @@ pub trait Tokenizer {
 pub trait TokenStream: Tokenizer {
   /// Unreads the given token and put it back to the token stream.
   fn unread(&mut self, token: Self::Token);
+
+  /// Parses an AST of type `T` from the token stream.
+  fn parse<T>(&mut self) -> Result<T>
+  where
+    T: Parse<Self>,
+    Self: Sized,
+  {
+    T::parse(self)
+  }
 
   /// Peeks the next token from the token stream.
   ///
