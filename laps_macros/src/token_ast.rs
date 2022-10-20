@@ -1,12 +1,12 @@
-use crate::utils::{ident, laps_crate, return_error};
+use crate::utils::{ident, return_error};
 use proc_macro::TokenStream;
-use proc_macro2::{Ident, TokenStream as TokenStream2, TokenTree};
+use proc_macro2::{Ident, TokenStream as TokenStream2};
 use quote::quote;
 use syn::{
-  braced, parenthesized,
+  braced, bracketed, parenthesized,
   parse::{Parse, ParseStream},
   punctuated::Punctuated,
-  token::{Brace, Paren},
+  token::{Brace, Bracket, Paren},
   Attribute, Pat, Path, Result, Token, Visibility,
 };
 
@@ -63,15 +63,18 @@ impl Parse for ModAndKind {
 }
 
 struct TokenAstArm {
-  token: TokenTree,
+  _bracket_token: Bracket,
+  token: TokenStream2,
   _fat_arrow_token: Token![=>],
   pat: Pat,
 }
 
 impl Parse for TokenAstArm {
   fn parse(input: ParseStream) -> Result<Self> {
+    let content;
     Ok(Self {
-      token: input.parse()?,
+      _bracket_token: bracketed!(content in input),
+      token: content.parse()?,
       _fat_arrow_token: input.parse()?,
       pat: input.parse()?,
     })
@@ -96,29 +99,27 @@ fn gen_ast_defs(input: &TokenAst) -> Result<(TokenStream2, Vec<TokenStream2>)> {
   // generate AST names
   let names = (0..input.arms.len()).map(|i| ident(&format!("Token{i}")));
   // generate AST definitions
-  let laps = laps_crate()?;
   let kind = &input.mod_and_kind.token_kind;
-  let token = quote!(#laps::token::Token<#kind>);
+  let token = quote!(laps::token::Token<#kind>);
   let defs = names
     .clone()
     .zip(&input.arms)
     .map(|(name, TokenAstArm { pat, .. })| {
       quote! {
         pub struct #name(#token);
-        impl<TS> #laps::parse::Parse<TS> for #name
+        impl<TS> laps::parse::Parse<TS> for #name
         where
-          TS: #laps::tokens::TokenStream<Token = #token>
+          TS: laps::token::TokenStream<Token = #token>
         {
-          fn parse(tokens: &mut TS) -> #laps::span::Result<Self> {
-            if Self::maybe(tokens)? {
-              Ok(Self(unsafe { tokens.next_token().unwrap_unchecked() }))
-            } else {
-              let token = unsafe { tokens.peek().unwrap_unchecked() };
-              #laps::return_error!(token.span, "unexpected token {}", token);
+          fn parse(tokens: &mut TS) -> laps::span::Result<Self> {
+            let token = tokens.next_token()?;
+            match token.kind {
+              #kind::#pat => Ok(Self(token)),
+              _ => laps::return_error!(token.span, "unexpected token {}", token),
             }
           }
-          fn maybe(tokens: &mut TS) -> #laps::span::Result<bool> {
-            Ok(matches!(tokens.peek()?.kind, #pat))
+          fn maybe(tokens: &mut TS) -> laps::span::Result<bool> {
+            Ok(matches!(tokens.peek()?.kind, #kind::#pat))
           }
         }
       }
@@ -127,7 +128,10 @@ fn gen_ast_defs(input: &TokenAst) -> Result<(TokenStream2, Vec<TokenStream2>)> {
   let mod_name = ident(&format!("__token_ast_{}", input.ident));
   let ast_defs = quote! {
     #[doc(hidden)]
-    #vis mod #mod_name { #(#defs)* }
+    #vis mod #mod_name {
+      use super::*;
+      #(#defs)*
+    }
   };
   // generate full paths for all ASTs
   let current_mod = &input.mod_and_kind.current_mod;
