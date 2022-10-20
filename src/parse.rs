@@ -24,7 +24,7 @@ where
   T: Parse<TS>,
 {
   fn parse(tokens: &mut TS) -> Result<Self> {
-    T::parse(tokens).map(Box::new)
+    tokens.parse().map(Box::new)
   }
 
   fn maybe(tokens: &mut TS) -> Result<bool> {
@@ -38,7 +38,7 @@ where
   T: Parse<TS>,
 {
   fn parse(tokens: &mut TS) -> Result<Self> {
-    T::maybe(tokens)?.then(|| T::parse(tokens)).transpose()
+    T::maybe(tokens)?.then(|| tokens.parse()).transpose()
   }
 
   fn maybe(_: &mut TS) -> Result<bool> {
@@ -54,7 +54,7 @@ where
   fn parse(tokens: &mut TS) -> Result<Self> {
     let mut ts = Vec::new();
     while T::maybe(tokens)? {
-      ts.push(T::parse(tokens)?);
+      ts.push(tokens.parse()?);
     }
     Ok(ts)
   }

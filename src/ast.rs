@@ -31,9 +31,9 @@ where
   T: Parse<TS>,
 {
   fn parse(tokens: &mut TS) -> Result<Self> {
-    let mut ts = vec![T::parse(tokens)?];
+    let mut ts = vec![tokens.parse()?];
     while T::maybe(tokens)? {
-      ts.push(T::parse(tokens)?);
+      ts.push(tokens.parse()?);
     }
     Ok(Self(ts))
   }
@@ -57,7 +57,7 @@ where
     let mut ts = Vec::new();
     if T::maybe(tokens)? {
       loop {
-        ts.push(T::parse(tokens)?);
+        ts.push(tokens.parse()?);
         if !S::maybe(tokens)? {
           break;
         }
@@ -85,10 +85,10 @@ where
   S: Parse<TS>,
 {
   fn parse(tokens: &mut TS) -> Result<Self> {
-    let mut ts = vec![T::parse(tokens)?];
+    let mut ts = vec![tokens.parse()?];
     while S::maybe(tokens)? {
       S::parse(tokens)?;
-      ts.push(T::parse(tokens)?);
+      ts.push(tokens.parse()?);
     }
     Ok(Self(ts, PhantomData))
   }
@@ -109,11 +109,7 @@ where
   R: Parse<TS>,
 {
   fn parse(tokens: &mut TS) -> Result<Self> {
-    Ok(Self(
-      L::parse(tokens)?,
-      T::parse(tokens)?,
-      R::parse(tokens)?,
-    ))
+    Ok(Self(tokens.parse()?, tokens.parse()?, tokens.parse()?))
   }
 
   fn maybe(tokens: &mut TS) -> Result<bool> {
