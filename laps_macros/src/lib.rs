@@ -106,13 +106,13 @@ pub fn token_kind(attr: TokenStream, item: TokenStream) -> TokenStream {
 ///   // `mod` indicates the path to the module where the `token_ast` is invocated.
 ///   // `Kind` indicates the name of the token kind type.
 ///   pub(crate) macro Token(mod = crate, Kind = crate::TokenKind) {
-///     str => Str(_),
-///     int => Int(_),
-///     + => Other('+'),
-///     - => Other('-'),
-///     * => Other('*'),
-///     / => Other('/'),
-///     eof => Eof,
+///     [str] => Str(_),
+///     [int] => Int(_),
+///     [+] => Other('+'),
+///     [-] => Other('-'),
+///     [*] => Other('*'),
+///     [/] => Other('/'),
+///     [eof] => Eof,
 ///   }
 /// }
 /// ```
