@@ -4,8 +4,8 @@ use proc_macro2::{Ident, TokenStream as TokenStream2};
 use quote::{quote, ToTokens, TokenStreamExt};
 use syn::{
   punctuated::Punctuated, spanned::Spanned, AttrStyle, Attribute, Data, DataEnum, DataStruct,
-  DeriveInput, Expr, Field, Fields, GenericParam, Generics, ImplGenerics, Path, PathArguments,
-  PredicateType, Result, Token, Type, TypePath, WhereClause, WherePredicate,
+  DeriveInput, Expr, Field, Fields, GenericParam, Generics, ImplGenerics, Path, PredicateType,
+  Result, Token, Type, TypePath, WhereClause, WherePredicate,
 };
 
 /// Entry function of `#[derive(Parse)]`.
@@ -46,7 +46,7 @@ pub fn derive_parse(tokens: TokenStream) -> Result<TokenStream> {
 macro_rules! match_attr {
   (for $attr:ident in $attrs:ident if $name:literal && $cond:expr => $body:block) => {
     for $attr in $attrs {
-      if is_path_eq(&$attr.path, $name) {
+      if $attr.path.is_ident($name) {
         if $cond $body else {
           return_error!(
             $attr.span(),
@@ -80,14 +80,6 @@ fn parse_maybe(attrs: &Vec<Attribute>) -> Result<Option<Expr>> {
     }
   }
   Ok(maybe)
-}
-
-/// Checks if the given path equals to the given string.
-fn is_path_eq(path: &Path, s: &str) -> bool {
-  path.leading_colon.is_none()
-    && path.segments.len() == 1
-    && matches!(path.segments[0].arguments, PathArguments::None)
-    && path.segments[0].ident == s
 }
 
 /// Collects types of all fields in the given data of the derive input.
