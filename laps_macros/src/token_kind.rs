@@ -61,8 +61,8 @@ fn gen_display_impl(input: &ItemEnum) -> TokenStream2 {
     );
     arms.extend(match &variant.fields {
       Fields::Unnamed(f) if f.unnamed.len() == 1 => {
-        let prompt = prompt + " `{v}`";
-        quote!(Self::#ident(v) => write!(f, #prompt),)
+        let prompt = prompt + " `{}`";
+        quote!(Self::#ident(v) => write!(f, #prompt, v),)
       }
       Fields::Named(_) => quote!(Self::#ident { .. } => write!(f, #prompt),),
       Fields::Unnamed(_) => quote!(Self::#ident(..) => write!(f, #prompt),),
