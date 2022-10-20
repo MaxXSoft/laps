@@ -24,6 +24,17 @@ macro_rules! return_error {
 }
 pub(crate) use return_error;
 
+/// Converts `Result<TokenStream>` to `TokenStream`.
+macro_rules! result_to_tokens {
+  ($result:expr) => {
+    match $result {
+      Ok(data) => data,
+      Err(err) => err.to_compile_error().into(),
+    }
+  };
+}
+pub(crate) use result_to_tokens;
+
 /// Data of `(...)`.
 pub struct Parenthesized<T>(pub T);
 
