@@ -7,10 +7,11 @@ use syn::{
   parse::{Parse, ParseStream},
   punctuated::Punctuated,
   token::{Brace, Paren},
-  Pat, Path, Result, Token, Visibility,
+  Attribute, Pat, Path, Result, Token, Visibility,
 };
 
 struct TokenAst {
+  attrs: Vec<Attribute>,
   vis: Visibility,
   _macro_token: Token![macro],
   ident: Ident,
@@ -25,6 +26,7 @@ impl Parse for TokenAst {
     let paren_content;
     let brace_content;
     Ok(Self {
+      attrs: input.call(Attribute::parse_outer)?,
       vis: input.parse()?,
       _macro_token: input.parse()?,
       ident: input.parse()?,
@@ -122,11 +124,11 @@ fn gen_ast_defs(input: &TokenAst) -> Result<(TokenStream2, Vec<TokenStream2>)> {
       }
     });
   let vis = &input.vis;
-  let mod_name = ident(&format!(
-    "token_ast_{}",
-    camel_to_snake(input.ident.to_string())
-  ));
-  let ast_defs = quote!(#vis mod #mod_name { #(#defs)* });
+  let mod_name = ident(&format!("__token_ast_{}", input.ident));
+  let ast_defs = quote! {
+    #[doc(hidden)]
+    #vis mod #mod_name { #(#defs)* }
+  };
   // generate full paths for all ASTs
   let current_mod = &input.mod_and_kind.current_mod;
   let ast_names = names.map(|ident| quote!(#current_mod::#mod_name::#ident));
@@ -141,8 +143,14 @@ fn gen_macro_def(input: &TokenAst, ast_names: Vec<TokenStream2>) -> TokenStream2
     .zip(&input.arms)
     .map(|(name, TokenAstArm { token, .. })| quote!([#token] => {#name};));
   // generate definition
+  let attrs = &input.attrs;
   let name = &input.ident;
-  let macro_def = quote!(macro_rules! #name { #(#arms)* });
+  let macro_def = quote! {
+    #(#attrs)*
+    macro_rules! #name {
+      #(#arms)*
+    }
+  };
   // generate definition with visibility
   match &input.vis {
     Visibility::Inherited => quote!(#macro_def),
@@ -152,20 +160,4 @@ fn gen_macro_def(input: &TokenAst, ast_names: Vec<TokenStream2>) -> TokenStream2
       #vis use #name;
     },
   }
-}
-
-/// Converts the given camel case string to snake case.
-pub fn camel_to_snake(s: String) -> String {
-  let mut ans = String::new();
-  for c in s.chars() {
-    if c.is_ascii_uppercase() {
-      if !ans.is_empty() {
-        ans.push('_');
-      }
-      ans.push(c.to_ascii_lowercase());
-    } else {
-      ans.push(c);
-    }
-  }
-  ans
 }
