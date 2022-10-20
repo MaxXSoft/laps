@@ -1,4 +1,4 @@
-use crate::utils::{ident, laps_crate, return_error, Parenthesized};
+use crate::utils::{ident, return_error, Parenthesized};
 use proc_macro::TokenStream;
 use proc_macro2::{Ident, TokenStream as TokenStream2};
 use quote::{quote, ToTokens, TokenStreamExt};
@@ -34,9 +34,8 @@ pub fn derive_parse(tokens: TokenStream) -> Result<TokenStream> {
     _ => unreachable!(),
   }?;
   // generate implementations
-  let laps = laps_crate()?;
   Ok(TokenStream::from(quote! {
-    impl #impl_generics #laps::parse::Parse<#trait_param>
+    impl #impl_generics laps::parse::Parse<#trait_param>
     for #name #ty_generics #where_clause {
       #parse
       #maybe
@@ -168,13 +167,12 @@ fn gen_where_clause(
   tys: Vec<&Type>,
   trait_param: &Path,
 ) -> Result<WhereClause> {
-  let laps = laps_crate()?;
   // `Parse` trait bound
   let mut parse_trait = Punctuated::new();
-  parse_trait.push(syn::parse2(quote!(#laps::parse::Parse<#trait_param>)).unwrap());
+  parse_trait.push(syn::parse2(quote!(laps::parse::Parse<#trait_param>)).unwrap());
   // `TokenStream` trait bound
   let mut ts_trait = Punctuated::new();
-  ts_trait.push(syn::parse2(quote!(#laps::token::TokenStream)).unwrap());
+  ts_trait.push(syn::parse2(quote!(laps::token::TokenStream)).unwrap());
   // turns types into where predicates
   let param_ty = Type::Path(TypePath {
     qself: None,
@@ -216,11 +214,10 @@ fn gen_struct_methods(
   trait_param: &Path,
   maybe: &Option<Expr>,
 ) -> Result<(TokenStream2, TokenStream2)> {
-  let laps = laps_crate()?;
   // generate `parse` method
   let constructor = gen_constructor(&data.fields);
   let parse = quote! {
-    fn parse(tokens: &mut #trait_param) -> #laps::span::Result<Self> {
+    fn parse(tokens: &mut #trait_param) -> laps::span::Result<Self> {
       Ok(Self #constructor)
     }
   };
@@ -233,7 +230,7 @@ fn gen_struct_methods(
     quote!(Ok(true))
   };
   let maybe = quote! {
-    fn maybe(tokens: &mut #trait_param) -> #laps::span::Result<bool> {
+    fn maybe(tokens: &mut #trait_param) -> laps::span::Result<bool> {
       #result
     }
   };
@@ -246,7 +243,6 @@ fn gen_enum_methods(
   trait_param: &Path,
   maybe: &Option<Expr>,
 ) -> Result<(TokenStream2, TokenStream2)> {
-  let laps = laps_crate()?;
   // generate `parse` method
   let mut branches = TokenStream2::new();
   for (i, variant) in data.variants.iter().enumerate() {
@@ -265,7 +261,7 @@ fn gen_enum_methods(
     branches.append_all(quote!({ Self::#ident #constructor }));
   }
   let parse = quote! {
-    fn parse(tokens: &mut #trait_param) -> #laps::span::Result<Self> {
+    fn parse(tokens: &mut #trait_param) -> laps::span::Result<Self> {
       Ok(#branches)
     }
   };
@@ -288,7 +284,7 @@ fn gen_enum_methods(
     quote!(Ok(#tokens))
   };
   let maybe = quote! {
-    fn maybe(tokens: &mut #trait_param) -> #laps::span::Result<bool> {
+    fn maybe(tokens: &mut #trait_param) -> laps::span::Result<bool> {
       #result
     }
   };
