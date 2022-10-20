@@ -1,4 +1,5 @@
 mod parse;
+mod token_ast;
 mod token_kind;
 mod utils;
 
@@ -9,8 +10,10 @@ use utils::result_to_tokens;
 ///
 /// # Helper attributes
 ///
-/// * `#[token_stream(...)]`: implements `Parse` trait for the specific token stream.
-/// * `#[maybe(...)]`: specify the implementation of method `maybe` of the `Parse` trait.
+/// * `#[token_stream(...)]`: implements `Parse` trait for
+///   the specific token stream.
+/// * `#[maybe(...)]`: specify the implementation of method
+///   `maybe` of the `Parse` trait.
 #[proc_macro_derive(Parse, attributes(token_stream, maybe))]
 pub fn derive_parse(tokens: TokenStream) -> TokenStream {
   result_to_tokens!(parse::derive_parse(tokens))
@@ -71,4 +74,47 @@ pub fn derive_parse(tokens: TokenStream) -> TokenStream {
 #[proc_macro_attribute]
 pub fn token_kind(attr: TokenStream, item: TokenStream) -> TokenStream {
   result_to_tokens!(token_kind::token_kind(attr, item))
+}
+
+/// Generates ASTs for tokens, also generates a macro
+/// for referencing AST types.
+///
+/// The generated ASTs can be parsed from token stream that produces
+/// [`laps::tokens::Token`] with the given type as its kind.
+///
+/// # Examples
+///
+/// ```
+/// # use laps_macros::token_ast;
+/// enum TokenKind {
+///   /// String literal.
+///   Str(String),
+///   /// Integer literal.
+///   Int(i32),
+///   /// Other character.
+///   Other(char),
+///   /// End-of-file.
+///   Eof,
+/// }
+///
+/// // Declare ASTs and there name, define macro `Token` for referencing ASTs.
+/// // You can use `Token![..]` to represent the generated ASTs,
+/// // such as `Token![str]`, `Token![+]`, ...
+/// // All of the generated ASTs are single-field structures, you can access
+/// // the token inside of them just by using `ast.0`.
+/// token_ast! {
+///   pub(crate) macro Token(use crate::TokenKind) {
+///     str => Str(_),
+///     int => Int(_),
+///     + => Other('+'),
+///     - => Other('-'),
+///     * => Other('*'),
+///     / => Other('/'),
+///     eof => Eof,
+///   }
+/// }
+/// ```
+#[proc_macro]
+pub fn token_ast(item: TokenStream) -> TokenStream {
+  result_to_tokens!(token_ast::token_ast(item))
 }
