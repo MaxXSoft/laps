@@ -101,9 +101,11 @@ pub fn token_kind(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// // You can use `Token![..]` to represent the generated ASTs,
 /// // such as `Token![str]`, `Token![+]`, ...
 /// // All of the generated ASTs are single-field structures, you can access
-/// // the token inside of them just by using `ast.0`.
+/// // the inner token by using `ast.0`.
 /// token_ast! {
-///   pub(crate) macro Token(use crate::TokenKind) {
+///   // `mod` indicates the path to the module where the `token_ast` is invocated.
+///   // `Kind` indicates the name of the token kind type.
+///   pub(crate) macro Token(mod = crate, Kind = crate::TokenKind) {
 ///     str => Str(_),
 ///     int => Int(_),
 ///     + => Other('+'),
