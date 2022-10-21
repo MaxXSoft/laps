@@ -261,7 +261,7 @@ fn gen_enum_methods(
         <Token![||]>::default().to_tokens(&mut tokens);
       }
       tokens.append_all(match first_field(&variant.fields) {
-        Some(Field { ty, .. }) => quote!(<#ty>::maybe(tokens)),
+        Some(Field { ty, .. }) => quote!(<#ty>::maybe(tokens)?),
         None => quote!(true),
       });
     }
