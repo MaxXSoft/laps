@@ -117,6 +117,10 @@ fn gen_ast_defs(input: &TokenAst) -> Result<(TokenStream2, Vec<TokenStream2>)> {
   let names = (0..input.arms.len()).map(|i| ident(&format!("Token{i}")));
   // generate AST definitions
   let kind = &input.mod_and_kind.token_kind;
+  let field_vis = match &input.vis {
+    Visibility::Inherited => quote!(pub(super)),
+    vis @ _ => quote!(#vis),
+  };
   let token = quote!(laps::token::Token<#kind>);
   let defs = names
     .clone()
@@ -134,7 +138,7 @@ fn gen_ast_defs(input: &TokenAst) -> Result<(TokenStream2, Vec<TokenStream2>)> {
       };
       quote! {
         #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-        pub struct #name(#token);
+        pub struct #name(#field_vis #token);
         impl<TS> laps::parse::Parse<TS> for #name
         where
           TS: laps::token::TokenStream<Token = #token>
