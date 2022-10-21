@@ -12,9 +12,9 @@ use utils::result_to_tokens;
 ///
 /// * `#[token(...)]`: implements `Parse` trait for token streams
 ///   that produce tokens of the given type.
-/// * `#[maybe(...)]`: specify the implementation of method
-///   `maybe` of the `Parse` trait.
-#[proc_macro_derive(Parse, attributes(token, maybe))]
+/// * `#[starts_with(...)]`: specifies which tokens the current AST starts with.
+///   This will affect the implementation of method `maybe` of the `Parse` trait.
+#[proc_macro_derive(Parse, attributes(token, starts_with))]
 pub fn derive_parse(tokens: TokenStream) -> TokenStream {
   result_to_tokens!(parse::derive_parse(tokens))
 }
