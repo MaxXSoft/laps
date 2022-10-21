@@ -10,11 +10,11 @@ use utils::result_to_tokens;
 ///
 /// # Helper attributes
 ///
-/// * `#[token_stream(...)]`: implements `Parse` trait for
-///   the specific token stream.
+/// * `#[token(...)]`: implements `Parse` trait for token streams
+///   that produce tokens of the given type.
 /// * `#[maybe(...)]`: specify the implementation of method
 ///   `maybe` of the `Parse` trait.
-#[proc_macro_derive(Parse, attributes(token_stream, maybe))]
+#[proc_macro_derive(Parse, attributes(token, maybe))]
 pub fn derive_parse(tokens: TokenStream) -> TokenStream {
   result_to_tokens!(parse::derive_parse(tokens))
 }
