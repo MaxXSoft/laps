@@ -4,9 +4,9 @@ use proc_macro2::{Ident, TokenStream as TokenStream2};
 use quote::{quote, ToTokens, TokenStreamExt};
 use std::iter;
 use syn::{
-  punctuated::Punctuated, spanned::Spanned, AttrStyle, Attribute, Data, DataEnum, DataStruct,
-  DeriveInput, Expr, Field, Fields, GenericParam, Generics, Path, PredicateType, Result, Token,
-  Type, TypePath, WhereClause, WherePredicate,
+  parse::Parser, punctuated::Punctuated, spanned::Spanned, AttrStyle, Attribute, Data, DataEnum,
+  DataStruct, DeriveInput, Expr, Field, Fields, GenericParam, Generics, Path, PredicateType,
+  Result, Token, Type, TypePath, WhereClause, WherePredicate,
 };
 
 /// Entry function of `#[derive(Parse)]`.
@@ -18,7 +18,7 @@ pub fn derive_parse(tokens: TokenStream) -> Result<TokenStream> {
   }
   // parse attributes
   let token = parse_token(&input.attrs)?;
-  let maybe = parse_maybe(&input.attrs)?;
+  let starts_with = parse_starts_with(&input.attrs)?;
   // get name and field types
   let name = input.ident;
   let tys = collect_data_types(&input.data);
@@ -29,8 +29,8 @@ pub fn derive_parse(tokens: TokenStream) -> Result<TokenStream> {
   let where_clause = gen_where_clause(&ts_type, token, tys, where_clause)?;
   // get method implementations
   let (parse, maybe) = match &input.data {
-    Data::Struct(s) => gen_struct_methods(s, &ts_type, &maybe),
-    Data::Enum(e) => gen_enum_methods(e, &ts_type, &maybe),
+    Data::Struct(s) => gen_struct_methods(s, &ts_type, starts_with),
+    Data::Enum(e) => gen_enum_methods(e, &ts_type, starts_with),
     _ => unreachable!(),
   }?;
   // generate implementations
@@ -71,16 +71,17 @@ fn parse_token(attrs: &Vec<Attribute>) -> Result<Option<Path>> {
   Ok(token)
 }
 
-/// Parses attribute `#[maybe(...)]`.
-fn parse_maybe(attrs: &Vec<Attribute>) -> Result<Option<Expr>> {
-  let mut maybe = None;
+/// Parses attribute `#[starts_with(...)]`.
+fn parse_starts_with(attrs: &Vec<Attribute>) -> Result<Vec<Expr>> {
+  let mut starts_with = Vec::new();
   match_attr! {
-    for attr in attrs if "maybe" && maybe.is_none() => {
-      let Parenthesized(expr) = syn::parse2(attr.tokens.clone())?;
-      maybe = Some(expr);
+    for attr in attrs if "starts_with" && starts_with.is_empty() => {
+      let Parenthesized(exprs) = syn::parse2(attr.tokens.clone())?;
+      let exprs: Punctuated<Expr, Token![,]> = Punctuated::parse_separated_nonempty.parse2(exprs)?;
+      starts_with = exprs.into_iter().collect();
     }
   }
-  Ok(maybe)
+  Ok(starts_with)
 }
 
 /// Collects types of all fields in the given data of the derive input.
@@ -196,7 +197,7 @@ fn gen_where_clause(
 fn gen_struct_methods(
   data: &DataStruct,
   ts_type: &Ident,
-  maybe: &Option<Expr>,
+  starts_with: Vec<Expr>,
 ) -> Result<(TokenStream2, TokenStream2)> {
   // generate `parse` method
   let constructor = gen_constructor(&data.fields);
@@ -206,8 +207,8 @@ fn gen_struct_methods(
     }
   };
   // generate `maybe` method
-  let result = if let Some(maybe) = maybe {
-    quote!((#maybe)(tokens))
+  let result = if !starts_with.is_empty() {
+    gen_maybe(starts_with)
   } else if let Some(Field { ty, .. }) = first_field(&data.fields) {
     quote!(<#ty>::maybe(tokens))
   } else {
@@ -225,7 +226,7 @@ fn gen_struct_methods(
 fn gen_enum_methods(
   data: &DataEnum,
   ts_type: &Ident,
-  maybe: &Option<Expr>,
+  starts_with: Vec<Expr>,
 ) -> Result<(TokenStream2, TokenStream2)> {
   // generate `parse` method
   let mut branches = TokenStream2::new();
@@ -250,8 +251,8 @@ fn gen_enum_methods(
     }
   };
   // generate `maybe` method
-  let result = if let Some(maybe) = maybe {
-    quote!((#maybe)(tokens))
+  let result = if !starts_with.is_empty() {
+    gen_maybe(starts_with)
   } else if data.variants.is_empty() {
     quote!(Ok(true))
   } else {
@@ -291,6 +292,15 @@ fn gen_constructor(fields: &Fields) -> TokenStream2 {
     }
     Fields::Unit => quote!(),
   }
+}
+
+/// Generates the body of the `maybe` method by the given tokens.
+fn gen_maybe(starts_with: Vec<Expr>) -> TokenStream2 {
+  let maybe_chain: TokenStream2 = starts_with
+    .into_iter()
+    .flat_map(|expr| quote!(.maybe(#expr)?))
+    .collect();
+  quote!(tokens.lookahead()#maybe_chain.result())
 }
 
 /// Returns the first field of the given fields.
