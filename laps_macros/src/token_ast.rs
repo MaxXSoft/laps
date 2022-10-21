@@ -126,11 +126,11 @@ fn gen_ast_defs(input: &TokenAst) -> Result<(TokenStream2, Vec<TokenStream2>)> {
         Some(prompt) => quote! {
           let token = tokens.next_token()?;
           match token.kind {
-            #kind::#pat => Ok(Self(token)),
+            #pat => Ok(Self(token)),
             _ => laps::return_error!(token.span, concat!("expected ", #prompt, ", found {}"), token),
           }
         },
-        None => quote!(tokens.expect(#kind::#pat).map(Self))
+        None => quote!(tokens.expect(#pat).map(Self))
       };
       quote! {
         #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -143,7 +143,7 @@ fn gen_ast_defs(input: &TokenAst) -> Result<(TokenStream2, Vec<TokenStream2>)> {
             #parse_body
           }
           fn maybe(tokens: &mut TS) -> laps::span::Result<bool> {
-            Ok(matches!(tokens.peek()?.kind, #kind::#pat))
+            Ok(matches!(tokens.peek()?.kind, #pat))
           }
         }
       }
