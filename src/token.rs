@@ -285,6 +285,7 @@ pub trait TokenStream: Tokenizer {
     Lookahead {
       tokens: self,
       buf: Vec::new(),
+      last_result: true,
     }
   }
 }
@@ -297,6 +298,7 @@ where
 {
   tokens: &'ts mut TS,
   buf: Vec<T>,
+  last_result: bool,
 }
 
 impl<'ts, TS, T> Lookahead<'ts, TS, T>
@@ -311,6 +313,26 @@ where
     let token = self.tokens.next_token()?;
     self.buf.push(token.clone());
     Ok(token)
+  }
+
+  /// Checks if the next token maybe the given token.
+  ///
+  /// Accepts token AST types only, see [`token_ast`].
+  pub fn maybe<F, TA>(mut self, _: F) -> Result<Self>
+  where
+    F: FnOnce(T) -> TA,
+    TA: Parse<TS>,
+  {
+    if self.last_result {
+      self.last_result = TA::maybe(self.tokens)?;
+    }
+    self.buf.push(self.tokens.next_token()?);
+    Ok(self)
+  }
+
+  /// Consumes and returns the final result of the [`maybe`] chain.
+  pub fn result(self) -> Result<bool> {
+    Ok(self.last_result)
   }
 }
 
