@@ -3,23 +3,6 @@ use crate::span::Result;
 use crate::token::TokenStream;
 use std::marker::PhantomData;
 
-/// An empty AST.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Empty;
-
-impl<TS> Parse<TS> for Empty
-where
-  TS: TokenStream,
-{
-  fn parse(_: &mut TS) -> Result<Self> {
-    Ok(Empty)
-  }
-
-  fn maybe(_: &mut TS) -> Result<bool> {
-    Ok(true)
-  }
-}
-
 /// A non-empty sequence of AST `T`, which `T` can occur one or more times,
 /// like `T`, `T T`, `T T T`, ...
 ///
