@@ -12,7 +12,7 @@ use std::{fmt::Write, fs::File, io::BufRead, io::BufReader, io::Result as IoResu
 
 /// The type of error returned by logger methods of [`Span`].
 #[cfg(feature = "no-logger")]
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Error {
   /// Normal error.
   Normal(String),
@@ -22,7 +22,7 @@ pub enum Error {
 
 /// The type of error returned by logger methods of [`Span`].
 #[cfg(not(feature = "no-logger"))]
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Error {
   /// Normal error.
   Normal,
