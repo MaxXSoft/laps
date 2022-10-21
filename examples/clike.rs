@@ -1,9 +1,10 @@
+use laps::ast::{NonEmptySepSeq, SepSeq};
 use laps::input::InputStream;
 use laps::parse::Parse;
 use laps::reader::Reader;
 use laps::return_error;
 use laps::span::Result;
-use laps::token::{token_ast, token_kind, Ident, TokenBuilder, Tokenizer};
+use laps::token::{token_ast, token_kind, Ident, TokenBuilder, TokenStream, Tokenizer};
 use std::{collections::HashMap, fmt, io::Read};
 
 // ==============================
@@ -99,7 +100,7 @@ impl fmt::Display for Operator {
 // Lexer.
 // ==============================
 
-type TokenStream<T> = laps::token::TokenBuffer<Lexer<T>, Token>;
+type TokenBuffer<T> = laps::token::TokenBuffer<Lexer<T>, Token>;
 
 struct Lexer<T>(Reader<T>);
 
@@ -258,16 +259,254 @@ token_ast! {
     [&&] => (TokenKind::Operator(Operator::And), _),
     [||] => (TokenKind::Operator(Operator::Or), _),
     [!] => (TokenKind::Operator(Operator::Not), _),
+    [=] => (TokenKind::Other('='), _),
     [,] => (TokenKind::Other(','), _),
     [;] => (TokenKind::Other(';'), _),
     [lpr] => (TokenKind::Other('('), _),
     [rpr] => (TokenKind::Other(')'), _),
     [lbk] => (TokenKind::Other('{'), _),
     [rbk] => (TokenKind::Other('}'), _),
-    [rbc] => (TokenKind::Other('['), _),
+    [lbc] => (TokenKind::Other('['), _),
     [rbc] => (TokenKind::Other(']'), _),
     [eof] => (TokenKind::Eof, _),
   }
+}
+
+#[derive(Parse)]
+enum DeclDef {
+  FuncDef(FuncDef),
+  Decl(Decl),
+}
+
+#[derive(Parse)]
+struct Decl {
+  _int: Token![int],
+  var_defs: NonEmptySepSeq<VarDef, Token![,]>,
+  _semi: Token![;],
+}
+
+#[derive(Parse)]
+struct VarDef {
+  ident: Token![ident],
+  dim: Option<DimDef>,
+  init_val: Option<Init>,
+}
+
+#[derive(Parse)]
+struct DimDef {
+  _lbc: Token![lbc],
+  len: Token![litint],
+  _rbc: Token![rbc],
+}
+
+#[derive(Parse)]
+struct Init {
+  _assign: Token![=],
+  init_val: InitVal,
+}
+
+#[derive(Parse)]
+enum InitVal {
+  Aggregate(Aggregate),
+  Exp(Exp),
+}
+
+#[derive(Parse)]
+struct Aggregate {
+  _lbk: Token![lbk],
+  exps: SepSeq<Exp, Token![,]>,
+  _rbk: Token![rbk],
+}
+
+#[derive(Parse)]
+#[token(Token)]
+#[starts_with(Token![int], Token![ident], Token![lpr])]
+struct FuncDef {
+  _int: Token![int],
+  ident: Token![ident],
+  _lpr: Token![lpr],
+  params: SepSeq<FuncParam, Token![,]>,
+  _rpr: Token![rpr],
+  block: Block,
+}
+
+#[derive(Parse)]
+struct FuncParam {
+  _int: Token![int],
+  ident: Token![ident],
+}
+
+#[derive(Parse)]
+struct Block {
+  _lbk: Token![lbk],
+  items: Vec<BlockItem>,
+  _rbk: Token![rbk],
+}
+
+#[derive(Parse)]
+enum BlockItem {
+  Decl(Decl),
+  Stmt(Stmt),
+}
+
+#[derive(Parse)]
+enum Stmt {
+  Assign(Assign),
+  ExpStmt(ExpStmt),
+  Block(Block),
+  If(Box<If>),
+  While(Box<While>),
+  Break(Break),
+  Continue(Continue),
+  Return(Return),
+}
+
+#[derive(Parse)]
+struct Assign {
+  lval: LVal,
+  _assign: Token![=],
+  rval: Exp,
+  _semi: Token![;],
+}
+
+#[derive(Parse)]
+enum ExpStmt {
+  Exp(Exp, Token![;]),
+  Empty(Token![;]),
+}
+
+#[derive(Parse)]
+struct If {
+  _if: Token![if],
+  _lpr: Token![lpr],
+  cond: Exp,
+  _rpr: Token![rpr],
+  then: Stmt,
+  else_then: Option<Else>,
+}
+
+#[derive(Parse)]
+struct Else {
+  _else: Token![else],
+  body: Stmt,
+}
+
+#[derive(Parse)]
+struct While {
+  _while: Token![while],
+  _lpr: Token![lpr],
+  cond: Exp,
+  _rpr: Token![rpr],
+  body: Stmt,
+}
+
+#[derive(Parse)]
+struct Break {
+  _break: Token![break],
+  _semi: Token![;],
+}
+
+#[derive(Parse)]
+struct Continue {
+  _continue: Token![continue],
+  _semi: Token![;],
+}
+
+#[derive(Parse)]
+struct Return {
+  _return: Token![return],
+  value: Exp,
+  _semi: Token![;],
+}
+
+type Exp = NonEmptySepSeq<AndExp, Token![||]>;
+
+type AndExp = NonEmptySepSeq<EqExp, Token![&&]>;
+
+type EqExp = NonEmptySepSeq<RelExp, EqOps>;
+
+#[derive(Parse)]
+enum EqOps {
+  Eq(Token![==]),
+  Ne(Token![!=]),
+}
+
+type RelExp = NonEmptySepSeq<AddExp, RelOps>;
+
+#[derive(Parse)]
+enum RelOps {
+  Lt(Token![<]),
+  Gt(Token![>]),
+  Le(Token![<=]),
+  Ge(Token![>=]),
+}
+
+type AddExp = NonEmptySepSeq<MulExp, AddOps>;
+
+#[derive(Parse)]
+enum AddOps {
+  Add(Token![+]),
+  Sub(Token![-]),
+}
+
+type MulExp = NonEmptySepSeq<UnaryExp, MulOps>;
+
+#[derive(Parse)]
+enum MulOps {
+  Mul(Token![*]),
+  Div(Token![/]),
+  Mod(Token![%]),
+}
+
+#[derive(Parse)]
+enum UnaryExp {
+  Unary(UnaryOps, Box<Self>),
+  Primary(PrimaryExp),
+}
+
+#[derive(Parse)]
+enum UnaryOps {
+  Pos(Token![+]),
+  Neg(Token![-]),
+  Not(Token![!]),
+}
+
+#[derive(Parse)]
+enum PrimaryExp {
+  ParenExp(ParenExp),
+  FuncCall(FuncCall),
+  LVal(LVal),
+  LitInt(Token![litint]),
+}
+
+#[derive(Parse)]
+struct ParenExp {
+  _lpr: Token![lpr],
+  exp: Exp,
+  _rpr: Token![rpr],
+}
+
+#[derive(Parse)]
+struct LVal {
+  ident: Token![ident],
+  dim: Option<DimDeref>,
+}
+
+#[derive(Parse)]
+struct DimDeref {
+  _lbc: Token![lbc],
+  len: Exp,
+  _rbc: Token![rbc],
+}
+
+#[derive(Parse)]
+#[token(Token)]
+#[starts_with(Token![ident], Token![lpr])]
+struct FuncCall {
+  ident: Token![ident],
+  _lpr: Token![lpr],
+  exps: SepSeq<Exp, Token![,]>,
+  _rpr: Token![rpr],
 }
 
 // ==============================
@@ -282,6 +521,6 @@ token_ast! {
 
 fn main() {
   let lexer = Lexer(Reader::from_stdin());
-  let mut tokens = TokenStream::new(lexer);
+  let mut tokens = TokenBuffer::new(lexer);
   // TODO
 }
