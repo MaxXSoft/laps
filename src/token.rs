@@ -6,7 +6,7 @@ use std::collections::VecDeque;
 use std::{fmt, hash};
 
 #[cfg(feature = "macros")]
-pub use laps_macros::{token_kind, token_ast};
+pub use laps_macros::{token_ast, token_kind};
 
 /// Trait for creating tokens that holding values of type `T`.
 pub trait TokenBuilder<T> {
@@ -42,6 +42,30 @@ impl<'a> From<&'a str> for Ident {
 impl fmt::Display for Ident {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
     self.0.fmt(f)
+  }
+}
+
+impl AsMut<str> for Ident {
+  fn as_mut(&mut self) -> &mut str {
+    self.0.as_mut()
+  }
+}
+
+impl AsRef<str> for Ident {
+  fn as_ref(&self) -> &str {
+    self.0.as_ref()
+  }
+}
+
+impl Borrow<str> for Ident {
+  fn borrow(&self) -> &str {
+    self.0.borrow()
+  }
+}
+
+impl BorrowMut<str> for Ident {
+  fn borrow_mut(&mut self) -> &mut str {
+    self.0.borrow_mut()
   }
 }
 
