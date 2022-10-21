@@ -17,7 +17,7 @@ pub trait TokenBuilder<T> {
 /// Wrapper type representing an identifier.
 ///
 /// In order not to be confused with string literals
-/// in built-in methods of [`Lexer`](crate::lexer::Lexer) trait.
+/// in built-in methods of [`InputStream`](crate::input::InputStream) trait.
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Ident(pub String);
 
