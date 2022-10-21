@@ -86,6 +86,38 @@ pub fn token_kind(attr: TokenStream, item: TokenStream) -> TokenStream {
 ///
 /// ```
 /// # use laps_macros::token_ast;
+/// # mod laps {
+/// #   pub mod span {
+/// #     pub type Result<T> = std::result::Result<T, ()>;
+/// #   }
+/// #   pub mod token {
+/// #     #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+/// #     pub struct Token<Kind> {
+/// #       pub kind: Kind,
+/// #       pub span: (),
+/// #     }
+/// #     pub trait TokenStream {
+/// #       type Token;
+/// #       fn next_token(&mut self) -> super::span::Result<Self::Token>;
+/// #       fn peek(&mut self) -> super::span::Result<Self::Token>;
+/// #       fn expect<T>(&mut self, _: T) -> super::span::Result<Self::Token>;
+/// #     }
+/// #   }
+/// #   pub mod parse {
+/// #     pub trait Parse<TS>: Sized {
+/// #       fn parse(_: &mut TS) -> super::span::Result<Self>;
+/// #       fn maybe(_: &mut TS) -> super::span::Result<bool>;
+/// #     }
+/// #   }
+/// #   macro_rules! return_error {
+/// #     ($span:expr, $($arg:tt)+) => {
+/// #       return Err(())
+/// #     };
+/// #   }
+/// #   pub(crate) use return_error;
+/// # }
+/// # fn main() {}
+/// #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 /// enum TokenKind {
 ///   /// String literal.
 ///   Str(String),
