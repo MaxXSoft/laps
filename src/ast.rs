@@ -1,5 +1,5 @@
 use crate::parse::Parse;
-use crate::span::Result;
+use crate::span::{Result, Span, Spanned};
 use crate::token::TokenStream;
 use std::marker::PhantomData;
 
@@ -25,6 +25,24 @@ where
 
   fn maybe(tokens: &mut TS) -> Result<bool> {
     T::maybe(tokens)
+  }
+}
+
+impl<T> Spanned for NonEmptySeq<T>
+where
+  T: Spanned,
+{
+  fn span(&self) -> Span {
+    if self.0.len() == 1 {
+      self.0.first().unwrap().span()
+    } else {
+      self
+        .0
+        .first()
+        .unwrap()
+        .span()
+        .into_end_updated(self.0.last().unwrap().span())
+    }
   }
 }
 
@@ -85,6 +103,24 @@ where
   }
 }
 
+impl<T, S> Spanned for NonEmptySepSeq<T, S>
+where
+  T: Spanned,
+{
+  fn span(&self) -> Span {
+    if self.0.len() == 1 {
+      self.0.first().unwrap().span()
+    } else {
+      self
+        .0
+        .first()
+        .unwrap()
+        .span()
+        .into_end_updated(self.0.last().unwrap().span())
+    }
+  }
+}
+
 /// An AST `T` quoted by AST `L` and AST `R`, like `L T R`.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Quoted<L, T, R>(pub L, pub T, pub R);
@@ -102,5 +138,15 @@ where
 
   fn maybe(tokens: &mut TS) -> Result<bool> {
     L::maybe(tokens)
+  }
+}
+
+impl<L, T, R> Spanned for Quoted<L, T, R>
+where
+  L: Spanned,
+  R: Spanned,
+{
+  fn span(&self) -> Span {
+    self.0.span().into_end_updated(self.2.span())
   }
 }
