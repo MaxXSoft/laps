@@ -10,6 +10,9 @@ use colored::{Color, Colorize};
 #[cfg(not(feature = "no-logger"))]
 use std::{fmt::Write, fs::File, io::BufRead, io::BufReader, io::Result as IoResult};
 
+#[cfg(feature = "macros")]
+pub use laps_macros::Spanned;
+
 /// The type of error returned by logger methods of [`Span`].
 #[cfg(feature = "no-logger")]
 #[derive(Clone, Debug, PartialEq, Eq)]
