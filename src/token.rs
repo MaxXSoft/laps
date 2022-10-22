@@ -69,10 +69,10 @@ impl BorrowMut<str> for Ident {
   }
 }
 
-/// Trait for getting span from tokens.
-pub trait TokenSpan {
-  /// Returns a reference to the span of the current token.
-  fn span(&self) -> &Span;
+/// Trait for getting span from objects.
+pub trait Spanned {
+  /// Returns a reference to the span of the current object.
+  fn span(&self) -> Span;
 }
 
 /// A generic token.
@@ -96,9 +96,9 @@ where
   }
 }
 
-impl<Kind> TokenSpan for Token<Kind> {
-  fn span(&self) -> &Span {
-    &self.span
+impl<Kind> Spanned for Token<Kind> {
+  fn span(&self) -> Span {
+    self.span.clone()
   }
 }
 
@@ -264,7 +264,7 @@ pub trait TokenStream: Tokenizer {
   /// and returns the token if it is, otherwise returns an error.
   fn expect<T>(&mut self, token: T) -> Result<Self::Token>
   where
-    Self::Token: PartialEq<T> + TokenSpan + fmt::Display,
+    Self::Token: PartialEq<T> + Spanned + fmt::Display,
     T: fmt::Display,
   {
     let next = self.next_token()?;
