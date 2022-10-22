@@ -150,6 +150,11 @@ fn gen_ast_defs(input: &TokenAst) -> Result<(TokenStream2, Vec<TokenStream2>)> {
             Ok(matches!(tokens.peek()?.kind, #pat))
           }
         }
+        impl laps::span::Spanned for #name {
+          fn span(&self) -> laps::span::Span {
+            self.0.span()
+          }
+        }
       }
     });
   let vis = &input.vis;
