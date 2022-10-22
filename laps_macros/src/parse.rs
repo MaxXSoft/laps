@@ -10,9 +10,9 @@ use syn::{
 };
 
 /// Entry function of `#[derive(Parse)]`.
-pub fn derive_parse(tokens: TokenStream) -> Result<TokenStream> {
+pub fn derive_parse(item: TokenStream) -> Result<TokenStream> {
   // parse input tokens and check
-  let input: DeriveInput = syn::parse(tokens)?;
+  let input: DeriveInput = syn::parse(item)?;
   if !matches!(&input.data, Data::Struct(_) | Data::Enum(_)) {
     return_error!("`#[derive(Parse)]` only supports structs and enums");
   }
