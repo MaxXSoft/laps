@@ -277,6 +277,7 @@ token_ast! {
 enum DeclDef {
   FuncDef(FuncDef),
   Decl(Decl),
+  End(Token![eof]),
 }
 
 #[derive(Parse, Debug)]
@@ -573,8 +574,14 @@ struct DimDeref {
 // Driver.
 // ==============================
 
-fn main() {
+fn main() -> Result<()> {
   let lexer = Lexer(Reader::from_stdin());
   let mut tokens = TokenBuffer::new(lexer);
-  // TODO
+  loop {
+    let decl_def: DeclDef = tokens.parse()?;
+    match decl_def {
+      DeclDef::End(_) => break Ok(()),
+      _ => println!("{decl_def:#?}"),
+    }
+  }
 }
