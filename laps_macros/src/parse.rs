@@ -19,14 +19,11 @@ pub fn derive_parse(tokens: TokenStream) -> Result<TokenStream> {
   // parse attributes
   let token = parse_token(&input.attrs)?;
   let starts_with = parse_starts_with(&input.attrs)?;
-  // get name and field types
-  let name = input.ident;
-  let tys = collect_data_types(&input.data);
   // get generic related stuffs
   let ts_type = ident("__LAPS_MACROS_TS");
   let (_, ty_generics, where_clause) = input.generics.split_for_impl();
   let impl_generics = gen_impl_generics(&input.generics, &ts_type);
-  let where_clause = gen_where_clause(&ts_type, token, tys, where_clause)?;
+  let where_clause = gen_where_clause(&ts_type, token, where_clause)?;
   // get method implementations
   let (parse, maybe) = match &input.data {
     Data::Struct(s) => gen_struct_methods(s, &ts_type, starts_with),
@@ -34,6 +31,7 @@ pub fn derive_parse(tokens: TokenStream) -> Result<TokenStream> {
     _ => unreachable!(),
   }?;
   // generate implementations
+  let name = input.ident;
   Ok(TokenStream::from(quote! {
     impl #impl_generics laps::parse::Parse<#ts_type>
     for #name #ty_generics #where_clause {
@@ -84,28 +82,6 @@ fn parse_starts_with(attrs: &Vec<Attribute>) -> Result<Vec<Expr>> {
   Ok(starts_with)
 }
 
-/// Collects types of all fields in the given data of the derive input.
-fn collect_data_types(data: &Data) -> Vec<&Type> {
-  match data {
-    Data::Struct(DataStruct { fields, .. }) => collect_field_types(fields),
-    Data::Enum(DataEnum { variants, .. }) => variants
-      .iter()
-      .map(|v| collect_field_types(&v.fields))
-      .flatten()
-      .collect(),
-    _ => unreachable!(),
-  }
-}
-
-/// Collects all types in the given field.
-fn collect_field_types(fields: &Fields) -> Vec<&Type> {
-  match fields {
-    Fields::Named(f) => f.named.iter().map(|f| &f.ty).collect(),
-    Fields::Unnamed(f) => f.unnamed.iter().map(|f| &f.ty).collect(),
-    Fields::Unit => Vec::new(),
-  }
-}
-
 /// Generates `impl` generics.
 fn gen_impl_generics(generics: &Generics, ts_type: &Ident) -> TokenStream2 {
   let mut tokens = TokenStream2::new();
@@ -150,12 +126,8 @@ fn gen_impl_generics(generics: &Generics, ts_type: &Ident) -> TokenStream2 {
 fn gen_where_clause(
   ts_type: &Ident,
   token: Option<Path>,
-  tys: Vec<&Type>,
   where_clause: Option<&WhereClause>,
 ) -> Result<WhereClause> {
-  // `Parse` trait bound
-  let mut parse_trait = Punctuated::new();
-  parse_trait.push(syn::parse2(quote!(laps::parse::Parse<#ts_type>)).unwrap());
   // `TokenStream` trait bound
   let mut ts_trait = Punctuated::new();
   let ts_trait_tokens = match token {
@@ -163,33 +135,26 @@ fn gen_where_clause(
     None => quote!(laps::token::TokenStream),
   };
   ts_trait.push(syn::parse2(ts_trait_tokens).unwrap());
-  // turns types into where predicates
+  // generate where predicates for token stream type
   let param_ty = Type::Path(TypePath {
     qself: None,
     path: ts_type.clone().into(),
   });
-  let preds = tys.into_iter().cloned().map(|t| {
-    WherePredicate::Type(PredicateType {
-      lifetimes: None,
-      bounded_ty: t,
-      colon_token: Default::default(),
-      bounds: parse_trait.clone(),
-    })
-  });
-  let preds = preds.chain(iter::once(WherePredicate::Type(PredicateType {
+  let pred = WherePredicate::Type(PredicateType {
     lifetimes: None,
     bounded_ty: param_ty,
     colon_token: Default::default(),
     bounds: ts_trait,
-  })));
+  });
   // create where clause
+  let mut predicates = Punctuated::new();
+  if let Some(wc) = where_clause {
+    predicates.extend(wc.predicates.iter().cloned());
+  }
+  predicates.push(pred);
   Ok(WhereClause {
     where_token: Default::default(),
-    predicates: if let Some(wc) = where_clause {
-      wc.predicates.iter().cloned().chain(preds).collect()
-    } else {
-      preds.collect()
-    },
+    predicates,
   })
 }
 
