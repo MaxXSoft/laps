@@ -1,4 +1,5 @@
 mod parse;
+mod spanned;
 mod token_ast;
 mod token_kind;
 mod utils;
@@ -15,8 +16,14 @@ use utils::result_to_tokens;
 /// * `#[starts_with(...)]`: specifies which tokens the current AST starts with.
 ///   This will affect the implementation of method `maybe` of the `Parse` trait.
 #[proc_macro_derive(Parse, attributes(token, starts_with))]
-pub fn derive_parse(tokens: TokenStream) -> TokenStream {
-  result_to_tokens!(parse::derive_parse(tokens))
+pub fn derive_parse(item: TokenStream) -> TokenStream {
+  result_to_tokens!(parse::derive_parse(item))
+}
+
+/// Generates the `Spanned` trait implementation.
+#[proc_macro_derive(Spanned)]
+pub fn derive_spanned(item: TokenStream) -> TokenStream {
+  result_to_tokens!(spanned::derive_spanned(item))
 }
 
 /// Implements `From` and `Display` trait for token kind enums.
