@@ -1,6 +1,6 @@
 use crate::log_error;
 use crate::parse::Parse;
-use crate::span::{Result, Span};
+use crate::span::{Result, Span, Spanned};
 use std::borrow::{Borrow, BorrowMut};
 use std::collections::VecDeque;
 use std::{fmt, hash};
@@ -67,12 +67,6 @@ impl BorrowMut<str> for Ident {
   fn borrow_mut(&mut self) -> &mut str {
     self.0.borrow_mut()
   }
-}
-
-/// Trait for getting span from objects.
-pub trait Spanned {
-  /// Returns a reference to the span of the current object.
-  fn span(&self) -> Span;
 }
 
 /// A generic token.

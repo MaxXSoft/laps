@@ -542,6 +542,12 @@ impl fmt::Display for FileType {
   }
 }
 
+/// Trait for getting span from objects.
+pub trait Spanned {
+  /// Returns a reference to the span of the current object.
+  fn span(&self) -> Span;
+}
+
 /// Logs normal error with no span provided.
 #[macro_export]
 macro_rules! log_raw_error {
