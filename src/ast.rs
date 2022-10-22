@@ -2,6 +2,35 @@ use crate::parse::Parse;
 use crate::span::{Result, Span, Spanned};
 use crate::token::TokenStream;
 use std::marker::PhantomData;
+use std::slice::{Iter, IterMut};
+use std::vec::IntoIter;
+
+/// Implements `IntoIterator` trait for the given wrapper type.
+macro_rules! impl_into_iterator {
+  ($t:ident<$($generic:ident),+>, $item:ident) => {
+    impl<'a, $($generic),+> IntoIterator for &'a $t<$($generic),+> {
+      type Item = &'a $item;
+      type IntoIter = Iter<'a, $item>;
+      fn into_iter(self) -> Self::IntoIter {
+        self.0.as_slice().into_iter()
+      }
+    }
+    impl<'a, $($generic),+> IntoIterator for &'a mut $t<$($generic),+> {
+      type Item = &'a mut $item;
+      type IntoIter = IterMut<'a, $item>;
+      fn into_iter(self) -> Self::IntoIter {
+        self.0.as_mut_slice().into_iter()
+      }
+    }
+    impl<$($generic),+> IntoIterator for $t<$($generic),+> {
+      type Item = $item;
+      type IntoIter = IntoIter<$item>;
+      fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+      }
+    }
+  };
+}
 
 /// A non-empty sequence of AST `T`, which `T` can occur one or more times,
 /// like `T`, `T T`, `T T T`, ...
@@ -9,6 +38,7 @@ use std::marker::PhantomData;
 /// The inner [`Vec`] is guaranteed not to be empty.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct NonEmptySeq<T>(pub Vec<T>);
+impl_into_iterator!(NonEmptySeq<T>, T);
 
 impl<TS, T> Parse<TS> for NonEmptySeq<T>
 where
@@ -50,6 +80,7 @@ where
 /// like `<empty>`, `T`, `T S T`, `T S T S T`, ...
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct SepSeq<T, S>(pub Vec<T>, PhantomData<S>);
+impl_into_iterator!(SepSeq<T, S>, T);
 
 impl<TS, T, S> Parse<TS> for SepSeq<T, S>
 where
@@ -82,6 +113,7 @@ where
 /// The inner [`Vec`] is guaranteed not to be empty.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct NonEmptySepSeq<T, S>(pub Vec<T>, PhantomData<S>);
+impl_into_iterator!(NonEmptySepSeq<T, S>, T);
 
 impl<TS, T, S> Parse<TS> for NonEmptySepSeq<T, S>
 where
