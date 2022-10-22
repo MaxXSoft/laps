@@ -272,53 +272,14 @@ token_ast! {
   }
 }
 
-#[derive(Parse)]
+#[derive(Parse, Debug)]
+#[token(Token)]
 enum DeclDef {
   FuncDef(FuncDef),
   Decl(Decl),
 }
 
-#[derive(Parse)]
-struct Decl {
-  _int: Token![int],
-  var_defs: NonEmptySepSeq<VarDef, Token![,]>,
-  _semi: Token![;],
-}
-
-#[derive(Parse)]
-struct VarDef {
-  ident: Token![ident],
-  dim: Option<DimDef>,
-  init_val: Option<Init>,
-}
-
-#[derive(Parse)]
-struct DimDef {
-  _lbc: Token![lbc],
-  len: Token![litint],
-  _rbc: Token![rbc],
-}
-
-#[derive(Parse)]
-struct Init {
-  _assign: Token![=],
-  init_val: InitVal,
-}
-
-#[derive(Parse)]
-enum InitVal {
-  Aggregate(Aggregate),
-  Exp(Exp),
-}
-
-#[derive(Parse)]
-struct Aggregate {
-  _lbk: Token![lbk],
-  exps: SepSeq<Exp, Token![,]>,
-  _rbk: Token![rbk],
-}
-
-#[derive(Parse)]
+#[derive(Parse, Debug)]
 #[token(Token)]
 #[starts_with(Token![int], Token![ident], Token![lpr])]
 struct FuncDef {
@@ -330,28 +291,77 @@ struct FuncDef {
   block: Block,
 }
 
-#[derive(Parse)]
+#[derive(Parse, Debug)]
+#[token(Token)]
 struct FuncParam {
   _int: Token![int],
   ident: Token![ident],
 }
 
-#[derive(Parse)]
+#[derive(Parse, Debug)]
+#[token(Token)]
+struct Decl {
+  _int: Token![int],
+  var_defs: NonEmptySepSeq<VarDef, Token![,]>,
+  _semi: Token![;],
+}
+
+#[derive(Parse, Debug)]
+#[token(Token)]
+struct VarDef {
+  ident: Token![ident],
+  dim: Option<DimDef>,
+  init_val: Option<Init>,
+}
+
+#[derive(Parse, Debug)]
+#[token(Token)]
+struct DimDef {
+  _lbc: Token![lbc],
+  len: Token![litint],
+  _rbc: Token![rbc],
+}
+
+#[derive(Parse, Debug)]
+#[token(Token)]
+struct Init {
+  _assign: Token![=],
+  init_val: InitVal,
+}
+
+#[derive(Parse, Debug)]
+#[token(Token)]
+enum InitVal {
+  Aggregate(Aggregate),
+  Exp(Exp),
+}
+
+#[derive(Parse, Debug)]
+#[token(Token)]
+struct Aggregate {
+  _lbk: Token![lbk],
+  exps: SepSeq<Exp, Token![,]>,
+  _rbk: Token![rbk],
+}
+
+#[derive(Parse, Debug)]
+#[token(Token)]
 struct Block {
   _lbk: Token![lbk],
   items: Vec<BlockItem>,
   _rbk: Token![rbk],
 }
 
-#[derive(Parse)]
+#[derive(Parse, Debug)]
+#[token(Token)]
 enum BlockItem {
   Decl(Decl),
   Stmt(Stmt),
 }
 
-#[derive(Parse)]
+#[derive(Parse, Debug)]
+#[token(Token)]
 enum Stmt {
-  Assign(Assign),
   ExpStmt(ExpStmt),
   Block(Block),
   If(Box<If>),
@@ -361,21 +371,50 @@ enum Stmt {
   Return(Return),
 }
 
-#[derive(Parse)]
+#[derive(Debug)]
+enum ExpStmt {
+  Empty(Token![;]),
+  Exp(Exp, Token![;]),
+  Assign(Assign),
+}
+
+impl<TS> Parse<TS> for ExpStmt
+where
+  TS: TokenStream<Token = Token>,
+{
+  fn parse(tokens: &mut TS) -> Result<Self> {
+    Ok(if <Token![;]>::maybe(tokens)? {
+      Self::Empty(tokens.parse()?)
+    } else {
+      let exp = tokens.parse()?;
+      if <Token![=]>::maybe(tokens)? {
+        Self::Assign(Assign {
+          lval: exp,
+          _assign: tokens.parse()?,
+          rval: tokens.parse()?,
+          _semi: tokens.parse()?,
+        })
+      } else {
+        Self::Exp(exp, tokens.parse()?)
+      }
+    })
+  }
+
+  fn maybe(tokens: &mut TS) -> Result<bool> {
+    Ok(<Token![;]>::maybe(tokens)? || Exp::maybe(tokens)?)
+  }
+}
+
+#[derive(Debug)]
 struct Assign {
-  lval: LVal,
+  lval: Exp,
   _assign: Token![=],
   rval: Exp,
   _semi: Token![;],
 }
 
-#[derive(Parse)]
-enum ExpStmt {
-  Exp(Exp, Token![;]),
-  Empty(Token![;]),
-}
-
-#[derive(Parse)]
+#[derive(Parse, Debug)]
+#[token(Token)]
 struct If {
   _if: Token![if],
   _lpr: Token![lpr],
@@ -385,13 +424,15 @@ struct If {
   else_then: Option<Else>,
 }
 
-#[derive(Parse)]
+#[derive(Parse, Debug)]
+#[token(Token)]
 struct Else {
   _else: Token![else],
   body: Stmt,
 }
 
-#[derive(Parse)]
+#[derive(Parse, Debug)]
+#[token(Token)]
 struct While {
   _while: Token![while],
   _lpr: Token![lpr],
@@ -400,19 +441,22 @@ struct While {
   body: Stmt,
 }
 
-#[derive(Parse)]
+#[derive(Parse, Debug)]
+#[token(Token)]
 struct Break {
   _break: Token![break],
   _semi: Token![;],
 }
 
-#[derive(Parse)]
+#[derive(Parse, Debug)]
+#[token(Token)]
 struct Continue {
   _continue: Token![continue],
   _semi: Token![;],
 }
 
-#[derive(Parse)]
+#[derive(Parse, Debug)]
+#[token(Token)]
 struct Return {
   _return: Token![return],
   value: Exp,
@@ -425,7 +469,8 @@ type AndExp = NonEmptySepSeq<EqExp, Token![&&]>;
 
 type EqExp = NonEmptySepSeq<RelExp, EqOps>;
 
-#[derive(Parse)]
+#[derive(Parse, Debug)]
+#[token(Token)]
 enum EqOps {
   Eq(Token![==]),
   Ne(Token![!=]),
@@ -433,7 +478,8 @@ enum EqOps {
 
 type RelExp = NonEmptySepSeq<AddExp, RelOps>;
 
-#[derive(Parse)]
+#[derive(Parse, Debug)]
+#[token(Token)]
 enum RelOps {
   Lt(Token![<]),
   Gt(Token![>]),
@@ -443,7 +489,8 @@ enum RelOps {
 
 type AddExp = NonEmptySepSeq<MulExp, AddOps>;
 
-#[derive(Parse)]
+#[derive(Parse, Debug)]
+#[token(Token)]
 enum AddOps {
   Add(Token![+]),
   Sub(Token![-]),
@@ -451,55 +498,47 @@ enum AddOps {
 
 type MulExp = NonEmptySepSeq<UnaryExp, MulOps>;
 
-#[derive(Parse)]
+#[derive(Parse, Debug)]
+#[token(Token)]
 enum MulOps {
   Mul(Token![*]),
   Div(Token![/]),
   Mod(Token![%]),
 }
 
-#[derive(Parse)]
+#[derive(Parse, Debug)]
+#[token(Token)]
 enum UnaryExp {
   Unary(UnaryOps, Box<Self>),
   Primary(PrimaryExp),
 }
 
-#[derive(Parse)]
+#[derive(Parse, Debug)]
+#[token(Token)]
 enum UnaryOps {
   Pos(Token![+]),
   Neg(Token![-]),
   Not(Token![!]),
 }
 
-#[derive(Parse)]
+#[derive(Parse, Debug)]
+#[token(Token)]
 enum PrimaryExp {
   ParenExp(ParenExp),
   FuncCall(FuncCall),
-  LVal(LVal),
+  Access(Access),
   LitInt(Token![litint]),
 }
 
-#[derive(Parse)]
+#[derive(Parse, Debug)]
+#[token(Token)]
 struct ParenExp {
   _lpr: Token![lpr],
   exp: Exp,
   _rpr: Token![rpr],
 }
 
-#[derive(Parse)]
-struct LVal {
-  ident: Token![ident],
-  dim: Option<DimDeref>,
-}
-
-#[derive(Parse)]
-struct DimDeref {
-  _lbc: Token![lbc],
-  len: Exp,
-  _rbc: Token![rbc],
-}
-
-#[derive(Parse)]
+#[derive(Parse, Debug)]
 #[token(Token)]
 #[starts_with(Token![ident], Token![lpr])]
 struct FuncCall {
@@ -507,6 +546,21 @@ struct FuncCall {
   _lpr: Token![lpr],
   exps: SepSeq<Exp, Token![,]>,
   _rpr: Token![rpr],
+}
+
+#[derive(Parse, Debug)]
+#[token(Token)]
+struct Access {
+  ident: Token![ident],
+  dim: Option<DimDeref>,
+}
+
+#[derive(Parse, Debug)]
+#[token(Token)]
+struct DimDeref {
+  _lbc: Token![lbc],
+  len: Exp,
+  _rbc: Token![rbc],
 }
 
 // ==============================
