@@ -551,6 +551,15 @@ pub trait Spanned {
   fn span(&self) -> Span;
 }
 
+impl<T> Spanned for Box<T>
+where
+  T: Spanned,
+{
+  fn span(&self) -> Span {
+    self.as_ref().span()
+  }
+}
+
 /// Logs normal error with no span provided.
 #[macro_export]
 macro_rules! log_raw_error {
