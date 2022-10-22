@@ -96,12 +96,19 @@ pub fn token_kind(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// # mod laps {
 /// #   pub mod span {
 /// #     pub type Result<T> = std::result::Result<T, ()>;
+/// #     pub struct Span;
+/// #     pub trait Spanned {
+/// #       fn span(&self) -> Span;
+/// #     }
 /// #   }
 /// #   pub mod token {
 /// #     #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 /// #     pub struct Token<Kind> {
 /// #       pub kind: Kind,
 /// #       pub span: (),
+/// #     }
+/// #     impl<Kind> super::span::Spanned for Token<Kind> {
+/// #       fn span(&self) -> super::span::Span { super::span::Span }
 /// #     }
 /// #     pub trait TokenStream {
 /// #       type Token;
