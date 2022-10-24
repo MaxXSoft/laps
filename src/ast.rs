@@ -160,6 +160,7 @@ where
 /// like `T`, `T S T`, `T S T S T`, ...
 ///
 /// The delimiter will be stored.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum NonEmptySepList<T, S> {
   /// One element.
   One(T),
