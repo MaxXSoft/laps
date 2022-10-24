@@ -78,6 +78,8 @@ where
 
 /// A sequence of AST `T`, separated by AST `S`,
 /// like `<empty>`, `T`, `T S T`, `T S T S T`, ...
+///
+/// The delimiter will not be stored.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct SepSeq<T, S>(pub Vec<T>, PhantomData<S>);
 impl_into_iterator!(SepSeq<T, S>, T);
@@ -110,7 +112,8 @@ where
 /// A non-empty sequence of AST `T`, separated by AST `S`,
 /// like `T`, `T S T`, `T S T S T`, ...
 ///
-/// The inner [`Vec`] is guaranteed not to be empty.
+/// The delimiter will not be stored, and the inner [`Vec`]
+/// is guaranteed not to be empty.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct NonEmptySepSeq<T, S>(pub Vec<T>, PhantomData<S>);
 impl_into_iterator!(NonEmptySepSeq<T, S>, T);
@@ -152,6 +155,55 @@ where
     }
   }
 }
+
+/// A non-empty linked list of AST `T`, separated by AST `S`,
+/// like `T`, `T S T`, `T S T S T`, ...
+///
+/// The delimiter will be stored.
+pub enum NonEmptySepList<T, S> {
+  /// One element.
+  One(T),
+  /// More than one element.
+  More(T, S, Box<Self>),
+}
+
+impl<TS, T, S> Parse<TS> for NonEmptySepList<T, S>
+where
+  TS: TokenStream,
+  T: Parse<TS>,
+  S: Parse<TS>,
+{
+  fn parse(tokens: &mut TS) -> Result<Self> {
+    let t = tokens.parse()?;
+    Ok(if S::maybe(tokens)? {
+      Self::More(t, tokens.parse()?, tokens.parse()?)
+    } else {
+      Self::One(t)
+    })
+  }
+
+  fn maybe(tokens: &mut TS) -> Result<bool> {
+    T::maybe(tokens)
+  }
+}
+
+impl<T, S> Spanned for NonEmptySepList<T, S>
+where
+  T: Spanned,
+{
+  fn span(&self) -> Span {
+    match self {
+      Self::One(t) => t.span(),
+      Self::More(t, _, l) => t.span().into_end_updated(l.span()),
+    }
+  }
+}
+
+/// A linked list of AST `T`, separated by AST `S`,
+/// like `<empty>`, `T`, `T S T`, `T S T S T`, ...
+///
+/// The delimiter will be stored.
+pub type SepList<T, S> = Option<NonEmptySepList<T, S>>;
 
 /// An AST `T` quoted by AST `L` and AST `R`, like `L T R`.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
