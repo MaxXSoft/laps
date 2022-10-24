@@ -285,7 +285,7 @@ enum DeclDef {
 #[starts_with(Token![int], Token![ident], Token![lpr])]
 struct FuncDef {
   _int: Token![int],
-  ident: Token![ident],
+  _ident: Token![ident],
   _lpr: Token![lpr],
   params: SepSeq<FuncParam, Token![,]>,
   _rpr: Token![rpr],
@@ -553,12 +553,12 @@ struct FuncCall {
 #[token(Token)]
 struct Access {
   ident: Token![ident],
-  dim: Option<DimDeref>,
+  index: Option<Index>,
 }
 
 impl Spanned for Access {
   fn span(&self) -> laps::span::Span {
-    match &self.dim {
+    match &self.index {
       Some(dim) => self.ident.span().into_end_updated(dim.span()),
       None => self.ident.span(),
     }
@@ -567,9 +567,9 @@ impl Spanned for Access {
 
 #[derive(Parse, Spanned, Debug)]
 #[token(Token)]
-struct DimDeref {
+struct Index {
   _lbc: Token![lbc],
-  len: Exp,
+  index: Exp,
   _rbc: Token![rbc],
 }
 
@@ -1002,7 +1002,42 @@ impl Eval for FuncCall {
 
 impl Eval for Access {
   fn eval(&self, scopes: &mut Scopes, funcs: &Funcs) -> EvalResult {
-    todo!()
+    // evaluate index
+    let index = self
+      .index
+      .as_ref()
+      .map(|Index { index, .. }| match index.eval(scopes, funcs)? {
+        EvalValue::Value(Value::Int(i)) => Ok((i, index.span())),
+        _ => eval_err!(index.span()),
+      })
+      .transpose()?;
+    // get the current scope
+    let scope = match scopes.local.last() {
+      Some(scope) => scope,
+      None => &scopes.global,
+    };
+    // find the value
+    let ident = unwrap_token!(self.ident, Ident);
+    let value = match scope.get(ident) {
+      Some(value) => value,
+      None => eval_err!(self.ident.span(), "variable `{ident}` not found"),
+    };
+    // handle array access
+    match (value, index) {
+      (Value::Int(i), None) => Ok(EvalValue::Value(Value::Int(*i))),
+      (Value::Array(a), Some((index, span))) => {
+        if index < 0 || index as usize >= a.len() {
+          eval_err!(
+            span,
+            "index {index} out of bounds, the length is {}",
+            a.len()
+          );
+        }
+        Ok(EvalValue::Value(Value::Int(a[index as usize])))
+      }
+      (Value::Int(_), Some(_)) => eval_err!(self.span(), "integer type can not be indexed"),
+      (Value::Array(_), None) => eval_err!(self.span()),
+    }
   }
 }
 
