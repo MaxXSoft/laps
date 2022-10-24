@@ -598,11 +598,11 @@ enum Value {
 }
 
 type SymTab<T> = HashMap<Ident, T>;
-type Scopes = Vec<SymTab<Value>>;
+type Funcs = SymTab<FuncDef>;
 
-struct GlobalEnv {
-  vars: SymTab<Value>,
-  funcs: SymTab<FuncDef>,
+struct Scopes {
+  global: SymTab<Value>,
+  local: Vec<SymTab<Value>>,
 }
 
 enum EvalValue {
@@ -635,12 +635,12 @@ macro_rules! eval_err {
 }
 
 trait Eval {
-  fn eval(&self, scopes: &mut Scopes, global: &mut GlobalEnv) -> EvalResult;
+  fn eval(&self, scopes: &mut Scopes, funcs: &Funcs) -> EvalResult;
 }
 
 impl Eval for FuncDef {
-  fn eval(&self, scopes: &mut Scopes, global: &mut GlobalEnv) -> EvalResult {
-    match self.block.eval(scopes, global) {
+  fn eval(&self, scopes: &mut Scopes, funcs: &Funcs) -> EvalResult {
+    match self.block.eval(scopes, funcs) {
       Err(EvalError::Return(v)) => Ok(EvalValue::Value(Value::Int(v))),
       e @ Err(_) => e,
       _ => eval_err!(self.block.span(), "function has no `return`"),
@@ -651,7 +651,7 @@ impl Eval for FuncDef {
 struct LibFunc<'id>(&'id Token![ident], Vec<i32>);
 
 impl<'id> Eval for LibFunc<'id> {
-  fn eval(&self, _: &mut Scopes, _: &mut GlobalEnv) -> EvalResult {
+  fn eval(&self, _: &mut Scopes, _: &Funcs) -> EvalResult {
     macro_rules! assert_args_len {
       ($len:expr) => {
         if self.1.len() != $len {
@@ -688,20 +688,20 @@ impl<'id> Eval for LibFunc<'id> {
 }
 
 impl Eval for Decl {
-  fn eval(&self, scopes: &mut Scopes, global: &mut GlobalEnv) -> EvalResult {
+  fn eval(&self, scopes: &mut Scopes, funcs: &Funcs) -> EvalResult {
     for defs in &self.var_defs {
-      defs.eval(scopes, global)?;
+      defs.eval(scopes, funcs)?;
     }
     Ok(EvalValue::Unit)
   }
 }
 
 impl Eval for VarDef {
-  fn eval(&self, scopes: &mut Scopes, global: &mut GlobalEnv) -> EvalResult {
+  fn eval(&self, scopes: &mut Scopes, funcs: &Funcs) -> EvalResult {
     // evaluate initial value
     let dim = self.dim.as_ref().map(|d| *unwrap_token!(d.len, Int));
     let init_val_span = match &self.init_val {
-      Some(init) => Some((init.init_val.eval(scopes, global)?, init.init_val.span())),
+      Some(init) => Some((init.init_val.eval(scopes, funcs)?, init.init_val.span())),
       None => None,
     };
     // check and get initial value
@@ -726,9 +726,9 @@ impl Eval for VarDef {
       _ => Value::Int(0),
     };
     // get the current scope
-    let scope = match scopes.last_mut() {
+    let scope = match scopes.local.last_mut() {
       Some(scope) => scope,
-      None => &mut global.vars,
+      None => &mut scopes.global,
     };
     // add definition to scope
     let ident = unwrap_token!(self.ident, Ident);
@@ -743,60 +743,60 @@ impl Eval for VarDef {
 }
 
 impl Eval for InitVal {
-  fn eval(&self, scopes: &mut Scopes, global: &mut GlobalEnv) -> EvalResult {
+  fn eval(&self, scopes: &mut Scopes, funcs: &Funcs) -> EvalResult {
     match self {
       Self::Aggregate(Aggregate { exps, .. }) => exps
         .0
         .iter()
         .map(|e| {
-          e.eval(scopes, global)
+          e.eval(scopes, funcs)
             .map(|v| unwrap_enum!(unwrap_enum!(v, EvalValue::Value), Value::Int))
         })
         .collect::<std::result::Result<Vec<_>, _>>()
         .map(|es| EvalValue::Value(Value::Array(es.into_boxed_slice()))),
-      Self::Exp(exp) => exp.eval(scopes, global),
+      Self::Exp(exp) => exp.eval(scopes, funcs),
     }
   }
 }
 
 impl Eval for Block {
-  fn eval(&self, scopes: &mut Scopes, global: &mut GlobalEnv) -> EvalResult {
-    scopes.push(SymTab::new());
+  fn eval(&self, scopes: &mut Scopes, funcs: &Funcs) -> EvalResult {
+    scopes.local.push(SymTab::new());
     for item in &self.items {
       match item {
-        BlockItem::Decl(d) => d.eval(scopes, global)?,
-        BlockItem::Stmt(s) => s.eval(scopes, global)?,
+        BlockItem::Decl(d) => d.eval(scopes, funcs)?,
+        BlockItem::Stmt(s) => s.eval(scopes, funcs)?,
       };
     }
-    scopes.pop();
+    scopes.local.pop();
     Ok(EvalValue::Unit)
   }
 }
 
 impl Eval for Stmt {
-  fn eval(&self, scopes: &mut Scopes, global: &mut GlobalEnv) -> EvalResult {
+  fn eval(&self, scopes: &mut Scopes, funcs: &Funcs) -> EvalResult {
     match self {
-      Self::ExpStmt(s) => s.eval(scopes, global),
-      Self::Block(s) => s.eval(scopes, global),
-      Self::If(s) => s.eval(scopes, global),
-      Self::While(s) => s.eval(scopes, global),
+      Self::ExpStmt(s) => s.eval(scopes, funcs),
+      Self::Block(s) => s.eval(scopes, funcs),
+      Self::If(s) => s.eval(scopes, funcs),
+      Self::While(s) => s.eval(scopes, funcs),
       Self::Break(_) => Err(EvalError::Break),
       Self::Continue(_) => Err(EvalError::Continue),
-      Self::Return(s) => s.eval(scopes, global),
+      Self::Return(s) => s.eval(scopes, funcs),
     }
   }
 }
 
 impl Eval for ExpStmt {
-  fn eval(&self, scopes: &mut Scopes, global: &mut GlobalEnv) -> EvalResult {
+  fn eval(&self, scopes: &mut Scopes, funcs: &Funcs) -> EvalResult {
     Ok(match self {
       Self::Empty(_) => EvalValue::Unit,
-      Self::Assign(Assign { lval, rval, .. }) => match rval.eval(scopes, global)? {
-        EvalValue::Value(Value::Int(v)) => lval.assign(scopes, global, v)?,
+      Self::Assign(Assign { lval, rval, .. }) => match rval.eval(scopes, funcs)? {
+        EvalValue::Value(Value::Int(v)) => lval.assign(scopes, funcs, v)?,
         _ => eval_err!(rval.span(), "invalid assignment, expected integer type"),
       },
       Self::Exp(e, _) => {
-        e.eval(scopes, global)?;
+        e.eval(scopes, funcs)?;
         EvalValue::Unit
       }
     })
@@ -804,12 +804,12 @@ impl Eval for ExpStmt {
 }
 
 impl Eval for If {
-  fn eval(&self, scopes: &mut Scopes, global: &mut GlobalEnv) -> EvalResult {
-    Ok(match self.cond.eval(scopes, global)? {
-      EvalValue::Value(Value::Int(v)) if v != 0 => self.then.eval(scopes, global)?,
+  fn eval(&self, scopes: &mut Scopes, funcs: &Funcs) -> EvalResult {
+    Ok(match self.cond.eval(scopes, funcs)? {
+      EvalValue::Value(Value::Int(v)) if v != 0 => self.then.eval(scopes, funcs)?,
       EvalValue::Value(Value::Int(v)) if v == 0 => {
         if let Some(Else { body, .. }) = &self.else_then {
-          body.eval(scopes, global)?;
+          body.eval(scopes, funcs)?;
         }
         EvalValue::Unit
       }
@@ -819,16 +819,16 @@ impl Eval for If {
 }
 
 impl Eval for While {
-  fn eval(&self, scopes: &mut Scopes, global: &mut GlobalEnv) -> EvalResult {
+  fn eval(&self, scopes: &mut Scopes, funcs: &Funcs) -> EvalResult {
     Ok(loop {
       // check condition
-      match self.cond.eval(scopes, global)? {
+      match self.cond.eval(scopes, funcs)? {
         EvalValue::Value(Value::Int(v)) if v != 0 => {}
         EvalValue::Value(Value::Int(v)) if v == 0 => break EvalValue::Unit,
         _ => eval_err!(self.cond.span()),
       }
       // evaluate body
-      let result = self.body.eval(scopes, global);
+      let result = self.body.eval(scopes, funcs);
       match result {
         Err(EvalError::Break) => break EvalValue::Unit,
         Err(EvalError::Continue) => continue,
@@ -840,23 +840,21 @@ impl Eval for While {
 }
 
 impl Eval for Return {
-  fn eval(&self, scopes: &mut Scopes, global: &mut GlobalEnv) -> EvalResult {
-    Err(EvalError::Return(
-      match self.value.eval(scopes, global)? {
-        EvalValue::Value(Value::Int(v)) => v,
-        _ => eval_err!(self.value.span()),
-      },
-    ))
+  fn eval(&self, scopes: &mut Scopes, funcs: &Funcs) -> EvalResult {
+    Err(EvalError::Return(match self.value.eval(scopes, funcs)? {
+      EvalValue::Value(Value::Int(v)) => v,
+      _ => eval_err!(self.value.span()),
+    }))
   }
 }
 
 impl Eval for Exp {
-  fn eval(&self, scopes: &mut Scopes, global: &mut GlobalEnv) -> EvalResult {
+  fn eval(&self, scopes: &mut Scopes, funcs: &Funcs) -> EvalResult {
     match self {
-      Self::One(e) => e.eval(scopes, global),
-      Self::More(l, _, r) => match l.eval(scopes, global)? {
+      Self::One(e) => e.eval(scopes, funcs),
+      Self::More(l, _, r) => match l.eval(scopes, funcs)? {
         EvalValue::Value(Value::Int(l)) if l != 0 => Ok(EvalValue::Value(Value::Int(1))),
-        EvalValue::Value(Value::Int(l)) if l == 0 => r.eval(scopes, global),
+        EvalValue::Value(Value::Int(l)) if l == 0 => r.eval(scopes, funcs),
         _ => eval_err!(l.span()),
       },
     }
@@ -864,11 +862,11 @@ impl Eval for Exp {
 }
 
 impl Eval for AndExp {
-  fn eval(&self, scopes: &mut Scopes, global: &mut GlobalEnv) -> EvalResult {
+  fn eval(&self, scopes: &mut Scopes, funcs: &Funcs) -> EvalResult {
     match self {
-      Self::One(e) => e.eval(scopes, global),
-      Self::More(l, _, r) => match l.eval(scopes, global)? {
-        EvalValue::Value(Value::Int(l)) if l != 0 => r.eval(scopes, global),
+      Self::One(e) => e.eval(scopes, funcs),
+      Self::More(l, _, r) => match l.eval(scopes, funcs)? {
+        EvalValue::Value(Value::Int(l)) if l != 0 => r.eval(scopes, funcs),
         EvalValue::Value(Value::Int(l)) if l == 0 => Ok(EvalValue::Value(Value::Int(0))),
         _ => eval_err!(l.span()),
       },
@@ -877,10 +875,10 @@ impl Eval for AndExp {
 }
 
 macro_rules! eval_exp {
-  (($self:expr, $scopes:expr, $global:expr, $l:ident, $r:ident) { $($p:pat => $v:expr,)* }) => {
+  (($self:expr, $scopes:expr, $funcs:expr, $l:ident, $r:ident) { $($p:pat => $v:expr,)* }) => {
     match $self {
-      Self::One(e) => e.eval($scopes, $global),
-      Self::More(l, op, r) => match (l.eval($scopes, $global)?, r.eval($scopes, $global)?) {
+      Self::One(e) => e.eval($scopes, $funcs),
+      Self::More(l, op, r) => match (l.eval($scopes, $funcs)?, r.eval($scopes, $funcs)?) {
         (EvalValue::Value(Value::Int($l)), EvalValue::Value(Value::Int($r))) => {
           Ok(EvalValue::Value(Value::Int(match op { $($p => $v,)* })))
         }
@@ -891,9 +889,9 @@ macro_rules! eval_exp {
 }
 
 impl Eval for EqExp {
-  fn eval(&self, scopes: &mut Scopes, global: &mut GlobalEnv) -> EvalResult {
+  fn eval(&self, scopes: &mut Scopes, funcs: &Funcs) -> EvalResult {
     eval_exp! {
-      (self, scopes, global, l, r) {
+      (self, scopes, funcs, l, r) {
         EqOps::Eq(_) => (l == r) as i32,
         EqOps::Ne(_) => (l != r) as i32,
       }
@@ -902,9 +900,9 @@ impl Eval for EqExp {
 }
 
 impl Eval for RelExp {
-  fn eval(&self, scopes: &mut Scopes, global: &mut GlobalEnv) -> EvalResult {
+  fn eval(&self, scopes: &mut Scopes, funcs: &Funcs) -> EvalResult {
     eval_exp! {
-      (self, scopes, global, l, r) {
+      (self, scopes, funcs, l, r) {
         RelOps::Lt(_) => (l < r) as i32,
         RelOps::Gt(_) => (l > r) as i32,
         RelOps::Le(_) => (l <= r) as i32,
@@ -915,9 +913,9 @@ impl Eval for RelExp {
 }
 
 impl Eval for AddExp {
-  fn eval(&self, scopes: &mut Scopes, global: &mut GlobalEnv) -> EvalResult {
+  fn eval(&self, scopes: &mut Scopes, funcs: &Funcs) -> EvalResult {
     eval_exp! {
-      (self, scopes, global, l, r) {
+      (self, scopes, funcs, l, r) {
         AddOps::Add(_) => l + r,
         AddOps::Sub(_) => l - r,
       }
@@ -926,9 +924,9 @@ impl Eval for AddExp {
 }
 
 impl Eval for MulExp {
-  fn eval(&self, scopes: &mut Scopes, global: &mut GlobalEnv) -> EvalResult {
+  fn eval(&self, scopes: &mut Scopes, funcs: &Funcs) -> EvalResult {
     eval_exp! {
-      (self, scopes, global, l, r) {
+      (self, scopes, funcs, l, r) {
         MulOps::Mul(_) => l * r,
         MulOps::Div(_) => l / r,
         MulOps::Mod(_) => l % r,
@@ -938,10 +936,10 @@ impl Eval for MulExp {
 }
 
 impl Eval for UnaryExp {
-  fn eval(&self, scopes: &mut Scopes, global: &mut GlobalEnv) -> EvalResult {
+  fn eval(&self, scopes: &mut Scopes, funcs: &Funcs) -> EvalResult {
     match self {
-      Self::Primary(p) => p.eval(scopes, global),
-      Self::Unary(op, e) => match e.eval(scopes, global)? {
+      Self::Primary(p) => p.eval(scopes, funcs),
+      Self::Unary(op, e) => match e.eval(scopes, funcs)? {
         EvalValue::Value(Value::Int(v)) => Ok(EvalValue::Value(Value::Int(match op {
           UnaryOps::Pos(_) => v,
           UnaryOps::Neg(_) => -v,
@@ -954,30 +952,30 @@ impl Eval for UnaryExp {
 }
 
 impl Eval for PrimaryExp {
-  fn eval(&self, scopes: &mut Scopes, global: &mut GlobalEnv) -> EvalResult {
+  fn eval(&self, scopes: &mut Scopes, funcs: &Funcs) -> EvalResult {
     match self {
-      Self::ParenExp(ParenExp { exp, .. }) => exp.eval(scopes, global),
-      Self::FuncCall(e) => e.eval(scopes, global),
-      Self::Access(e) => e.eval(scopes, global),
+      Self::ParenExp(ParenExp { exp, .. }) => exp.eval(scopes, funcs),
+      Self::FuncCall(e) => e.eval(scopes, funcs),
+      Self::Access(e) => e.eval(scopes, funcs),
       Self::LitInt(t) => Ok(EvalValue::Value(Value::Int(*unwrap_token!(t, Int) as i32))),
     }
   }
 }
 
 impl Eval for FuncCall {
-  fn eval(&self, scopes: &mut Scopes, global: &mut GlobalEnv) -> EvalResult {
+  fn eval(&self, scopes: &mut Scopes, funcs: &Funcs) -> EvalResult {
     // evaluate arguments
     let args = self.exps.0.iter();
     let args = args
-      .map(|e| match e.eval(scopes, global)? {
+      .map(|e| match e.eval(scopes, funcs)? {
         EvalValue::Value(Value::Int(i)) => Ok(i),
         _ => eval_err!(e.span()),
       })
       .collect::<std::result::Result<Vec<_>, _>>()?;
     // get function from global
-    let func = match global.funcs.get(unwrap_token!(self.ident, Ident)) {
+    let func = match funcs.get(unwrap_token!(self.ident, Ident)) {
       Some(func) => func,
-      None => return LibFunc(&self.ident, args).eval(scopes, global),
+      None => return LibFunc(&self.ident, args).eval(scopes, funcs),
     };
     // check argument list
     if args.len() != func.params.0.len() {
@@ -989,7 +987,7 @@ impl Eval for FuncCall {
       );
     }
     // push arguments to new scope
-    scopes.push(
+    scopes.local.push(
       func
         .params
         .0
@@ -998,22 +996,22 @@ impl Eval for FuncCall {
         .zip(args.into_iter().map(|i| Value::Int(i)))
         .collect(),
     );
-    func.eval(scopes, global)
+    func.eval(scopes, funcs)
   }
 }
 
 impl Eval for Access {
-  fn eval(&self, scopes: &mut Scopes, global: &mut GlobalEnv) -> EvalResult {
+  fn eval(&self, scopes: &mut Scopes, funcs: &Funcs) -> EvalResult {
     todo!()
   }
 }
 
 trait AssignTo {
-  fn assign(&self, scopes: &mut Scopes, global: &mut GlobalEnv, value: i32) -> EvalResult;
+  fn assign(&self, scopes: &mut Scopes, funcs: &Funcs, value: i32) -> EvalResult;
 }
 
 impl AssignTo for Exp {
-  fn assign(&self, scopes: &mut Scopes, global: &mut GlobalEnv, value: i32) -> EvalResult {
+  fn assign(&self, scopes: &mut Scopes, funcs: &Funcs, value: i32) -> EvalResult {
     todo!()
   }
 }
