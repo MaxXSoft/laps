@@ -1,11 +1,11 @@
-use laps::ast::{NonEmptySepSeq, SepSeq};
+use laps::ast::{NonEmptySepList, NonEmptySepSeq, SepSeq};
 use laps::input::InputStream;
 use laps::parse::Parse;
 use laps::reader::Reader;
-use laps::return_error;
-use laps::span::Result;
+use laps::span::{Error, Result, Spanned};
 use laps::token::{token_ast, token_kind, Ident, TokenBuilder, TokenStream, Tokenizer};
-use std::{collections::HashMap, fmt, io::Read};
+use laps::{log_error, return_error};
+use std::{collections::HashMap, fmt, io::stdin, io::Read};
 
 // ==============================
 // Token definitions.
@@ -330,14 +330,14 @@ struct Init {
   init_val: InitVal,
 }
 
-#[derive(Parse, Debug)]
+#[derive(Parse, Spanned, Debug)]
 #[token(Token)]
 enum InitVal {
   Aggregate(Aggregate),
   Exp(Exp),
 }
 
-#[derive(Parse, Debug)]
+#[derive(Parse, Spanned, Debug)]
 #[token(Token)]
 struct Aggregate {
   _lbk: Token![lbk],
@@ -345,7 +345,7 @@ struct Aggregate {
   _rbk: Token![rbk],
 }
 
-#[derive(Parse, Debug)]
+#[derive(Parse, Spanned, Debug)]
 #[token(Token)]
 struct Block {
   _lbk: Token![lbk],
@@ -464,11 +464,11 @@ struct Return {
   _semi: Token![;],
 }
 
-type Exp = NonEmptySepSeq<AndExp, Token![||]>;
+type Exp = NonEmptySepList<AndExp, Token![||]>;
 
-type AndExp = NonEmptySepSeq<EqExp, Token![&&]>;
+type AndExp = NonEmptySepList<EqExp, Token![&&]>;
 
-type EqExp = NonEmptySepSeq<RelExp, EqOps>;
+type EqExp = NonEmptySepList<RelExp, EqOps>;
 
 #[derive(Parse, Debug)]
 #[token(Token)]
@@ -477,7 +477,7 @@ enum EqOps {
   Ne(Token![!=]),
 }
 
-type RelExp = NonEmptySepSeq<AddExp, RelOps>;
+type RelExp = NonEmptySepList<AddExp, RelOps>;
 
 #[derive(Parse, Debug)]
 #[token(Token)]
@@ -488,7 +488,7 @@ enum RelOps {
   Ge(Token![>=]),
 }
 
-type AddExp = NonEmptySepSeq<MulExp, AddOps>;
+type AddExp = NonEmptySepList<MulExp, AddOps>;
 
 #[derive(Parse, Debug)]
 #[token(Token)]
@@ -497,7 +497,7 @@ enum AddOps {
   Sub(Token![-]),
 }
 
-type MulExp = NonEmptySepSeq<UnaryExp, MulOps>;
+type MulExp = NonEmptySepList<UnaryExp, MulOps>;
 
 #[derive(Parse, Debug)]
 #[token(Token)]
@@ -507,14 +507,14 @@ enum MulOps {
   Mod(Token![%]),
 }
 
-#[derive(Parse, Debug)]
+#[derive(Parse, Spanned, Debug)]
 #[token(Token)]
 enum UnaryExp {
   Unary(UnaryOps, Box<Self>),
-  Primary(PrimaryExp),
+  Primary(Box<PrimaryExp>),
 }
 
-#[derive(Parse, Debug)]
+#[derive(Parse, Spanned, Debug)]
 #[token(Token)]
 enum UnaryOps {
   Pos(Token![+]),
@@ -522,7 +522,7 @@ enum UnaryOps {
   Not(Token![!]),
 }
 
-#[derive(Parse, Debug)]
+#[derive(Parse, Spanned, Debug)]
 #[token(Token)]
 enum PrimaryExp {
   ParenExp(ParenExp),
@@ -531,7 +531,7 @@ enum PrimaryExp {
   LitInt(Token![litint]),
 }
 
-#[derive(Parse, Debug)]
+#[derive(Parse, Spanned, Debug)]
 #[token(Token)]
 struct ParenExp {
   _lpr: Token![lpr],
@@ -539,7 +539,7 @@ struct ParenExp {
   _rpr: Token![rpr],
 }
 
-#[derive(Parse, Debug)]
+#[derive(Parse, Spanned, Debug)]
 #[token(Token)]
 #[starts_with(Token![ident], Token![lpr])]
 struct FuncCall {
@@ -556,7 +556,16 @@ struct Access {
   dim: Option<DimDeref>,
 }
 
-#[derive(Parse, Debug)]
+impl Spanned for Access {
+  fn span(&self) -> laps::span::Span {
+    match &self.dim {
+      Some(dim) => self.ident.span().into_end_updated(dim.span()),
+      None => self.ident.span(),
+    }
+  }
+}
+
+#[derive(Parse, Spanned, Debug)]
 #[token(Token)]
 struct DimDeref {
   _lbc: Token![lbc],
@@ -568,7 +577,446 @@ struct DimDeref {
 // Interpreter.
 // ==============================
 
-// TODO
+macro_rules! unwrap_enum {
+  ($e:expr, $pat:path) => {
+    match $e {
+      $pat(v) => v,
+      _ => unreachable!(),
+    }
+  };
+}
+
+macro_rules! unwrap_token {
+  ($e:expr, $id:ident) => {
+    unwrap_enum!(&$e.0.kind, TokenKind::$id)
+  };
+}
+
+enum Value {
+  Int(i32),
+  Array(Box<[i32]>),
+}
+
+type SymTab<T> = HashMap<Ident, T>;
+type Scopes = Vec<SymTab<Value>>;
+
+struct GlobalEnv {
+  vars: SymTab<Value>,
+  funcs: SymTab<FuncDef>,
+}
+
+enum EvalValue {
+  Value(Value),
+  Unit,
+}
+
+enum EvalError {
+  Error(Error),
+  Break,
+  Continue,
+  Return(i32),
+}
+
+impl From<Error> for EvalError {
+  fn from(e: Error) -> Self {
+    Self::Error(e)
+  }
+}
+
+type EvalResult = std::result::Result<EvalValue, EvalError>;
+
+macro_rules! eval_err {
+  ($span:expr, $($arg:tt)+) => {
+    return Err(EvalError::Error(log_error!($span, $($arg)+)))
+  };
+  ($span:expr) => {
+    return Err(EvalError::Error(log_error!($span, "type mismatch, expected integer type")))
+  };
+}
+
+trait Eval {
+  fn eval(&self, scopes: &mut Scopes, global: &mut GlobalEnv) -> EvalResult;
+}
+
+impl Eval for FuncDef {
+  fn eval(&self, scopes: &mut Scopes, global: &mut GlobalEnv) -> EvalResult {
+    match self.block.eval(scopes, global) {
+      Err(EvalError::Return(v)) => Ok(EvalValue::Value(Value::Int(v))),
+      e @ Err(_) => e,
+      _ => eval_err!(self.block.span(), "function has no `return`"),
+    }
+  }
+}
+
+struct LibFunc<'id>(&'id Token![ident], Vec<i32>);
+
+impl<'id> Eval for LibFunc<'id> {
+  fn eval(&self, _: &mut Scopes, _: &mut GlobalEnv) -> EvalResult {
+    macro_rules! assert_args_len {
+      ($len:expr) => {
+        if self.1.len() != $len {
+          eval_err!(
+            self.0.span(),
+            "expected {} arguments, found {}",
+            $len,
+            self.1.len()
+          )
+        }
+      };
+    }
+    match unwrap_token!(self.0, Ident).as_ref() {
+      "getint" => {
+        assert_args_len!(0);
+        let mut line = String::new();
+        stdin()
+          .read_line(&mut line)
+          .map_err(|_| log_error!(self.0.span(), "failed to read line from stdin"))?;
+        let trimmed = line.trim();
+        trimmed
+          .parse()
+          .map(|i| EvalValue::Value(Value::Int(i)))
+          .map_err(|_| EvalError::Error(log_error!(self.0.span(), "invalid integer `{trimmed}`")))
+      }
+      "putint" => {
+        assert_args_len!(1);
+        println!("{}", self.1[0]);
+        Ok(EvalValue::Value(Value::Int(0)))
+      }
+      id @ _ => eval_err!(self.0.span(), "function `{id}` not found"),
+    }
+  }
+}
+
+impl Eval for Decl {
+  fn eval(&self, scopes: &mut Scopes, global: &mut GlobalEnv) -> EvalResult {
+    for defs in &self.var_defs {
+      defs.eval(scopes, global)?;
+    }
+    Ok(EvalValue::Unit)
+  }
+}
+
+impl Eval for VarDef {
+  fn eval(&self, scopes: &mut Scopes, global: &mut GlobalEnv) -> EvalResult {
+    // evaluate initial value
+    let dim = self.dim.as_ref().map(|d| *unwrap_token!(d.len, Int));
+    let init_val_span = match &self.init_val {
+      Some(init) => Some((init.init_val.eval(scopes, global)?, init.init_val.span())),
+      None => None,
+    };
+    // check and get initial value
+    let init_val = match (&dim, init_val_span) {
+      (Some(len), Some((EvalValue::Value(Value::Array(arr)), span)))
+        if arr.len() != *len as usize =>
+      {
+        eval_err!(
+          span,
+          "expected {len}-element aggregate, found {}-element aggregate",
+          arr.len()
+        );
+      }
+      (None, Some((EvalValue::Value(Value::Array(_)), span))) => {
+        eval_err!(span, "expected integer, found array");
+      }
+      (Some(_), Some((EvalValue::Value(Value::Int(_)), span))) => {
+        eval_err!(span, "expected array, found integer");
+      }
+      (_, Some((EvalValue::Value(v), _))) => v,
+      (Some(len), _) => Value::Array(vec![0; *len as usize].into_boxed_slice()),
+      _ => Value::Int(0),
+    };
+    // get the current scope
+    let scope = match scopes.last_mut() {
+      Some(scope) => scope,
+      None => &mut global.vars,
+    };
+    // add definition to scope
+    let ident = unwrap_token!(self.ident, Ident);
+    if scope.insert(ident.clone(), init_val).is_some() {
+      eval_err!(
+        self.ident.span(),
+        "variable `{ident}` has already been defined"
+      )
+    }
+    Ok(EvalValue::Unit)
+  }
+}
+
+impl Eval for InitVal {
+  fn eval(&self, scopes: &mut Scopes, global: &mut GlobalEnv) -> EvalResult {
+    match self {
+      Self::Aggregate(Aggregate { exps, .. }) => exps
+        .0
+        .iter()
+        .map(|e| {
+          e.eval(scopes, global)
+            .map(|v| unwrap_enum!(unwrap_enum!(v, EvalValue::Value), Value::Int))
+        })
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .map(|es| EvalValue::Value(Value::Array(es.into_boxed_slice()))),
+      Self::Exp(exp) => exp.eval(scopes, global),
+    }
+  }
+}
+
+impl Eval for Block {
+  fn eval(&self, scopes: &mut Scopes, global: &mut GlobalEnv) -> EvalResult {
+    scopes.push(SymTab::new());
+    for item in &self.items {
+      match item {
+        BlockItem::Decl(d) => d.eval(scopes, global)?,
+        BlockItem::Stmt(s) => s.eval(scopes, global)?,
+      };
+    }
+    scopes.pop();
+    Ok(EvalValue::Unit)
+  }
+}
+
+impl Eval for Stmt {
+  fn eval(&self, scopes: &mut Scopes, global: &mut GlobalEnv) -> EvalResult {
+    match self {
+      Self::ExpStmt(s) => s.eval(scopes, global),
+      Self::Block(s) => s.eval(scopes, global),
+      Self::If(s) => s.eval(scopes, global),
+      Self::While(s) => s.eval(scopes, global),
+      Self::Break(_) => Err(EvalError::Break),
+      Self::Continue(_) => Err(EvalError::Continue),
+      Self::Return(s) => s.eval(scopes, global),
+    }
+  }
+}
+
+impl Eval for ExpStmt {
+  fn eval(&self, scopes: &mut Scopes, global: &mut GlobalEnv) -> EvalResult {
+    Ok(match self {
+      Self::Empty(_) => EvalValue::Unit,
+      Self::Assign(Assign { lval, rval, .. }) => match rval.eval(scopes, global)? {
+        EvalValue::Value(Value::Int(v)) => lval.assign(scopes, global, v)?,
+        _ => eval_err!(rval.span(), "invalid assignment, expected integer type"),
+      },
+      Self::Exp(e, _) => {
+        e.eval(scopes, global)?;
+        EvalValue::Unit
+      }
+    })
+  }
+}
+
+impl Eval for If {
+  fn eval(&self, scopes: &mut Scopes, global: &mut GlobalEnv) -> EvalResult {
+    Ok(match self.cond.eval(scopes, global)? {
+      EvalValue::Value(Value::Int(v)) if v != 0 => self.then.eval(scopes, global)?,
+      EvalValue::Value(Value::Int(v)) if v == 0 => {
+        if let Some(Else { body, .. }) = &self.else_then {
+          body.eval(scopes, global)?;
+        }
+        EvalValue::Unit
+      }
+      _ => eval_err!(self.cond.span()),
+    })
+  }
+}
+
+impl Eval for While {
+  fn eval(&self, scopes: &mut Scopes, global: &mut GlobalEnv) -> EvalResult {
+    Ok(loop {
+      // check condition
+      match self.cond.eval(scopes, global)? {
+        EvalValue::Value(Value::Int(v)) if v != 0 => {}
+        EvalValue::Value(Value::Int(v)) if v == 0 => break EvalValue::Unit,
+        _ => eval_err!(self.cond.span()),
+      }
+      // evaluate body
+      let result = self.body.eval(scopes, global);
+      match result {
+        Err(EvalError::Break) => break EvalValue::Unit,
+        Err(EvalError::Continue) => continue,
+        e @ Err(_) => return e,
+        _ => {}
+      }
+    })
+  }
+}
+
+impl Eval for Return {
+  fn eval(&self, scopes: &mut Scopes, global: &mut GlobalEnv) -> EvalResult {
+    Err(EvalError::Return(
+      match self.value.eval(scopes, global)? {
+        EvalValue::Value(Value::Int(v)) => v,
+        _ => eval_err!(self.value.span()),
+      },
+    ))
+  }
+}
+
+impl Eval for Exp {
+  fn eval(&self, scopes: &mut Scopes, global: &mut GlobalEnv) -> EvalResult {
+    match self {
+      Self::One(e) => e.eval(scopes, global),
+      Self::More(l, _, r) => match l.eval(scopes, global)? {
+        EvalValue::Value(Value::Int(l)) if l != 0 => Ok(EvalValue::Value(Value::Int(1))),
+        EvalValue::Value(Value::Int(l)) if l == 0 => r.eval(scopes, global),
+        _ => eval_err!(l.span()),
+      },
+    }
+  }
+}
+
+impl Eval for AndExp {
+  fn eval(&self, scopes: &mut Scopes, global: &mut GlobalEnv) -> EvalResult {
+    match self {
+      Self::One(e) => e.eval(scopes, global),
+      Self::More(l, _, r) => match l.eval(scopes, global)? {
+        EvalValue::Value(Value::Int(l)) if l != 0 => r.eval(scopes, global),
+        EvalValue::Value(Value::Int(l)) if l == 0 => Ok(EvalValue::Value(Value::Int(0))),
+        _ => eval_err!(l.span()),
+      },
+    }
+  }
+}
+
+macro_rules! eval_exp {
+  (($self:expr, $scopes:expr, $global:expr, $l:ident, $r:ident) { $($p:pat => $v:expr,)* }) => {
+    match $self {
+      Self::One(e) => e.eval($scopes, $global),
+      Self::More(l, op, r) => match (l.eval($scopes, $global)?, r.eval($scopes, $global)?) {
+        (EvalValue::Value(Value::Int($l)), EvalValue::Value(Value::Int($r))) => {
+          Ok(EvalValue::Value(Value::Int(match op { $($p => $v,)* })))
+        }
+        _ => eval_err!($self.span()),
+      },
+    }
+  };
+}
+
+impl Eval for EqExp {
+  fn eval(&self, scopes: &mut Scopes, global: &mut GlobalEnv) -> EvalResult {
+    eval_exp! {
+      (self, scopes, global, l, r) {
+        EqOps::Eq(_) => (l == r) as i32,
+        EqOps::Ne(_) => (l != r) as i32,
+      }
+    }
+  }
+}
+
+impl Eval for RelExp {
+  fn eval(&self, scopes: &mut Scopes, global: &mut GlobalEnv) -> EvalResult {
+    eval_exp! {
+      (self, scopes, global, l, r) {
+        RelOps::Lt(_) => (l < r) as i32,
+        RelOps::Gt(_) => (l > r) as i32,
+        RelOps::Le(_) => (l <= r) as i32,
+        RelOps::Ge(_) => (l >= r) as i32,
+      }
+    }
+  }
+}
+
+impl Eval for AddExp {
+  fn eval(&self, scopes: &mut Scopes, global: &mut GlobalEnv) -> EvalResult {
+    eval_exp! {
+      (self, scopes, global, l, r) {
+        AddOps::Add(_) => l + r,
+        AddOps::Sub(_) => l - r,
+      }
+    }
+  }
+}
+
+impl Eval for MulExp {
+  fn eval(&self, scopes: &mut Scopes, global: &mut GlobalEnv) -> EvalResult {
+    eval_exp! {
+      (self, scopes, global, l, r) {
+        MulOps::Mul(_) => l * r,
+        MulOps::Div(_) => l / r,
+        MulOps::Mod(_) => l % r,
+      }
+    }
+  }
+}
+
+impl Eval for UnaryExp {
+  fn eval(&self, scopes: &mut Scopes, global: &mut GlobalEnv) -> EvalResult {
+    match self {
+      Self::Primary(p) => p.eval(scopes, global),
+      Self::Unary(op, e) => match e.eval(scopes, global)? {
+        EvalValue::Value(Value::Int(v)) => Ok(EvalValue::Value(Value::Int(match op {
+          UnaryOps::Pos(_) => v,
+          UnaryOps::Neg(_) => -v,
+          UnaryOps::Not(_) => (v == 0) as i32,
+        }))),
+        _ => eval_err!(e.span()),
+      },
+    }
+  }
+}
+
+impl Eval for PrimaryExp {
+  fn eval(&self, scopes: &mut Scopes, global: &mut GlobalEnv) -> EvalResult {
+    match self {
+      Self::ParenExp(ParenExp { exp, .. }) => exp.eval(scopes, global),
+      Self::FuncCall(e) => e.eval(scopes, global),
+      Self::Access(e) => e.eval(scopes, global),
+      Self::LitInt(t) => Ok(EvalValue::Value(Value::Int(*unwrap_token!(t, Int) as i32))),
+    }
+  }
+}
+
+impl Eval for FuncCall {
+  fn eval(&self, scopes: &mut Scopes, global: &mut GlobalEnv) -> EvalResult {
+    // evaluate arguments
+    let args = self.exps.0.iter();
+    let args = args
+      .map(|e| match e.eval(scopes, global)? {
+        EvalValue::Value(Value::Int(i)) => Ok(i),
+        _ => eval_err!(e.span()),
+      })
+      .collect::<std::result::Result<Vec<_>, _>>()?;
+    // get function from global
+    let func = match global.funcs.get(unwrap_token!(self.ident, Ident)) {
+      Some(func) => func,
+      None => return LibFunc(&self.ident, args).eval(scopes, global),
+    };
+    // check argument list
+    if args.len() != func.params.0.len() {
+      eval_err!(
+        self.ident.span(),
+        "expected {} arguments, found {}",
+        func.params.0.len(),
+        args.len()
+      );
+    }
+    // push arguments to new scope
+    scopes.push(
+      func
+        .params
+        .0
+        .iter()
+        .map(|FuncParam { ident, .. }| unwrap_token!(ident, Ident).clone())
+        .zip(args.into_iter().map(|i| Value::Int(i)))
+        .collect(),
+    );
+    func.eval(scopes, global)
+  }
+}
+
+impl Eval for Access {
+  fn eval(&self, scopes: &mut Scopes, global: &mut GlobalEnv) -> EvalResult {
+    todo!()
+  }
+}
+
+trait AssignTo {
+  fn assign(&self, scopes: &mut Scopes, global: &mut GlobalEnv, value: i32) -> EvalResult;
+}
+
+impl AssignTo for Exp {
+  fn assign(&self, scopes: &mut Scopes, global: &mut GlobalEnv, value: i32) -> EvalResult {
+    todo!()
+  }
+}
 
 // ==============================
 // Driver.
