@@ -279,6 +279,7 @@ pub trait TokenStream: Tokenizer {
     Lookahead {
       tokens: self,
       buf: Vec::new(),
+      #[cfg(feature = "macros")]
       last_result: true,
     }
   }
@@ -292,6 +293,7 @@ where
 {
   tokens: &'ts mut TS,
   buf: Vec<T>,
+  #[cfg(feature = "macros")]
   last_result: bool,
 }
 
@@ -309,6 +311,7 @@ where
     Ok(token)
   }
 
+  #[cfg(feature = "macros")]
   /// Checks if the next token maybe the given token.
   ///
   /// Accepts token AST types only, see [`token_ast`].
@@ -324,7 +327,8 @@ where
     Ok(self)
   }
 
-  /// Consumes and returns the final result of the [`maybe`] chain.
+  #[cfg(feature = "macros")]
+  /// Consumes and returns the final result of the `maybe` chain.
   pub fn result(self) -> Result<bool> {
     Ok(self.last_result)
   }
