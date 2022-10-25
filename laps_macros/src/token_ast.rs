@@ -119,7 +119,7 @@ fn gen_ast_defs(input: &TokenAst) -> Result<(TokenStream2, Vec<TokenStream2>)> {
   let kind = &input.mod_and_kind.token_kind;
   let field_vis = match &input.vis {
     Visibility::Inherited => quote!(pub(super)),
-    vis @ _ => quote!(#vis),
+    vis => quote!(#vis),
   };
   let token = quote!(laps::token::Token<#kind>);
   let defs = names
@@ -192,7 +192,7 @@ fn gen_macro_def(input: &TokenAst, ast_names: Vec<TokenStream2>) -> TokenStream2
   match &input.vis {
     Visibility::Inherited => quote!(#macro_def),
     Visibility::Public(_) => quote!(#[macro_export] #macro_def),
-    vis @ _ => quote! {
+    vis => quote! {
       #macro_def
       #vis use #name;
     },

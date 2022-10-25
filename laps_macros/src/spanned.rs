@@ -23,7 +23,7 @@ pub fn derive_spanned(item: TokenStream) -> Result<TokenStream> {
       fields: Fields::Unnamed(f),
       ..
     }) if !f.unnamed.is_empty() => gen_struct_body(&f.unnamed),
-    Data::Enum(DataEnum { variants, .. }) if !variants.is_empty() => gen_enum_body(&variants)?,
+    Data::Enum(DataEnum { variants, .. }) if !variants.is_empty() => gen_enum_body(variants)?,
     _ => {
       return_error!("`#[derive(Spanned)]` only supports non-unit and non-empty structs and enums");
     }

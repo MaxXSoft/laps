@@ -81,7 +81,7 @@ fn gen_display_impl(input: &ItemEnum) -> TokenStream2 {
 }
 
 /// Parses doc comments.
-fn parse_doc_comments(attrs: &Vec<Attribute>) -> Option<String> {
+fn parse_doc_comments(attrs: &[Attribute]) -> Option<String> {
   attrs
     .iter()
     .filter(|attr| attr.path.is_ident("doc"))
