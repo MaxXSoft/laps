@@ -282,7 +282,7 @@ token_ast! {
 #[derive(Parse, Debug)]
 #[token(Token)]
 enum DeclDef {
-  FuncDef(FuncDef),
+  FuncDef(Box<FuncDef>),
   Decl(Decl),
   End(Token![eof]),
 }
@@ -341,7 +341,7 @@ struct Init {
 #[token(Token)]
 enum InitVal {
   Aggregate(Aggregate),
-  Exp(Exp),
+  Exp(Box<Exp>),
 }
 
 #[derive(Parse, Spanned, Debug)]
@@ -370,20 +370,20 @@ enum BlockItem {
 #[derive(Parse, Debug)]
 #[token(Token)]
 enum Stmt {
-  ExpStmt(ExpStmt),
+  Exp(ExpStmt),
   Block(Block),
   If(Box<If>),
   While(Box<While>),
   Break(Break),
   Continue(Continue),
-  Return(Return),
+  Return(Box<Return>),
 }
 
 #[derive(Debug)]
 enum ExpStmt {
   Empty(Token![;]),
-  Exp(Exp, Token![;]),
-  Assign(Assign),
+  Exp(Box<Exp>, Token![;]),
+  Assign(Box<Assign>),
 }
 
 impl<TS> Parse<TS> for ExpStmt
@@ -396,14 +396,14 @@ where
     } else {
       let exp = tokens.parse()?;
       if <Token![=]>::maybe(tokens)? {
-        Self::Assign(Assign {
+        Self::Assign(Box::new(Assign {
           lval: exp,
           _assign: tokens.parse()?,
           rval: tokens.parse()?,
           _semi: tokens.parse()?,
-        })
+        }))
       } else {
-        Self::Exp(exp, tokens.parse()?)
+        Self::Exp(Box::new(exp), tokens.parse()?)
       }
     })
   }
@@ -708,7 +708,7 @@ impl<'id> Eval for LibFunc<'id> {
         println!("{}", self.1[0]);
         Ok(EvalValue::Value(Value::Int(0)))
       }
-      id @ _ => eval_err!(self.0.span(), "function `{id}` not found"),
+      id => eval_err!(self.0.span(), "function `{id}` not found"),
     }
   }
 }
@@ -802,7 +802,7 @@ impl Eval for Block {
 impl Eval for Stmt {
   fn eval(&self, scopes: &mut Scopes, funcs: &Funcs) -> EvalResult {
     match self {
-      Self::ExpStmt(s) => s.eval(scopes, funcs),
+      Self::Exp(s) => s.eval(scopes, funcs),
       Self::Block(s) => s.eval(scopes, funcs),
       Self::If(s) => s.eval(scopes, funcs),
       Self::While(s) => s.eval(scopes, funcs),
@@ -817,9 +817,9 @@ impl Eval for ExpStmt {
   fn eval(&self, scopes: &mut Scopes, funcs: &Funcs) -> EvalResult {
     Ok(match self {
       Self::Empty(_) => EvalValue::Unit,
-      Self::Assign(Assign { lval, rval, .. }) => match rval.eval(scopes, funcs)? {
-        EvalValue::Value(Value::Int(v)) => lval.assign(scopes, funcs, v)?,
-        _ => eval_err!(rval.span(), "invalid assignment, expected integer type"),
+      Self::Assign(a) => match a.rval.eval(scopes, funcs)? {
+        EvalValue::Value(Value::Int(v)) => a.lval.assign(scopes, funcs, v)?,
+        _ => eval_err!(a.rval.span(), "invalid assignment, expected integer type"),
       },
       Self::Exp(e, _) => {
         e.eval(scopes, funcs)?;
@@ -1020,7 +1020,7 @@ impl Eval for FuncCall {
         .0
         .iter()
         .map(|FuncParam { ident, .. }| unwrap_token!(ident, Ident).clone())
-        .zip(args.into_iter().map(|i| Value::Int(i)))
+        .zip(args.into_iter().map(Value::Int))
         .collect(),
     );
     mem::swap(&mut scopes.local, &mut scope);
@@ -1140,7 +1140,7 @@ where
       DeclDef::FuncDef(func) => {
         let ident = unwrap_token!(func.ident, Ident).clone();
         let span = func.ident.span();
-        if funcs.insert(ident.clone(), func).is_some() {
+        if funcs.insert(ident.clone(), *func).is_some() {
           return_error!(span, "function `{ident}` has already been defined");
         }
       }
