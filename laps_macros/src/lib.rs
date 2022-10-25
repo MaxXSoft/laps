@@ -1,3 +1,6 @@
+//! Macros for crate [`laps`](https://crates.io/crates/laps),
+//! including derive macros and other helper macros.
+
 mod parse;
 mod spanned;
 mod token_ast;
