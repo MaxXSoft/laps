@@ -358,6 +358,11 @@ impl<TN, T> TokenBuffer<TN, T> {
     }
   }
 
+  /// Converts the token buffer into the inner tokenizer.
+  pub fn into_inner(self) -> TN {
+    self.tokenizer
+  }
+
   /// Extends the token buffer by `n` new tokens.
   fn extend_by(&mut self, n: usize) -> Result<()>
   where
