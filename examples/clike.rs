@@ -2,10 +2,10 @@ use laps::ast::{NonEmptySepList, NonEmptySepSeq, SepSeq};
 use laps::input::InputStream;
 use laps::parse::Parse;
 use laps::reader::Reader;
-use laps::span::{Error, Result, Spanned};
+use laps::span::{Error, Result, Span, Spanned};
 use laps::token::{token_ast, token_kind, Ident, TokenBuilder, TokenStream, Tokenizer};
-use laps::{log_error, return_error};
-use std::{collections::HashMap, fmt, io::stdin, io::Read};
+use laps::{log_error, log_raw_error, return_error};
+use std::{collections::HashMap, fmt, io::stdin, io::Read, process};
 
 // ==============================
 // Token definitions.
@@ -174,6 +174,10 @@ impl<T: Read> Lexer<T> {
     };
   }
 
+  fn span(&self) -> &Span {
+    self.0.span()
+  }
+
   fn next_ident_or_keyword(&mut self) -> Result<Token> {
     let token: Token = self.0.next_ident()?;
     let ident = match &token.kind {
@@ -285,7 +289,7 @@ enum DeclDef {
 #[starts_with(Token![int], Token![ident], Token![lpr])]
 struct FuncDef {
   _int: Token![int],
-  _ident: Token![ident],
+  ident: Token![ident],
   _lpr: Token![lpr],
   params: SepSeq<FuncParam, Token![,]>,
   _rpr: Token![rpr],
@@ -577,18 +581,12 @@ struct Index {
 // Interpreter.
 // ==============================
 
-macro_rules! unwrap_enum {
-  ($e:expr, $pat:path) => {
-    match $e {
-      $pat(v) => v,
-      _ => unreachable!(),
-    }
-  };
-}
-
 macro_rules! unwrap_token {
   ($e:expr, $id:ident) => {
-    unwrap_enum!(&$e.0.kind, TokenKind::$id)
+    match &$e.0.kind {
+      TokenKind::$id(v) => v,
+      _ => unreachable!(),
+    }
   };
 }
 
@@ -600,6 +598,7 @@ enum Value {
 type SymTab<T> = HashMap<Ident, T>;
 type Funcs = SymTab<FuncDef>;
 
+#[derive(Default)]
 struct Scopes {
   global: SymTab<Value>,
   local: Vec<SymTab<Value>>,
@@ -748,9 +747,9 @@ impl Eval for InitVal {
       Self::Aggregate(Aggregate { exps, .. }) => exps
         .0
         .iter()
-        .map(|e| {
-          e.eval(scopes, funcs)
-            .map(|v| unwrap_enum!(unwrap_enum!(v, EvalValue::Value), Value::Int))
+        .map(|e| match e.eval(scopes, funcs)? {
+          EvalValue::Value(Value::Int(i)) => Ok(i),
+          _ => eval_err!(e.span()),
         })
         .collect::<std::result::Result<Vec<_>, _>>()
         .map(|es| EvalValue::Value(Value::Array(es.into_boxed_slice()))),
@@ -1045,9 +1044,112 @@ trait AssignTo {
   fn assign(&self, scopes: &mut Scopes, funcs: &Funcs, value: i32) -> EvalResult;
 }
 
-impl AssignTo for Exp {
+macro_rules! impl_assign_to {
+  ($($ty:ty),*) => {
+    $(impl AssignTo for $ty {
+      fn assign(&self, scopes: &mut Scopes, funcs: &Funcs, value: i32) -> EvalResult {
+        match self {
+          Self::One(e) => e.assign(scopes, funcs, value),
+          _ => eval_err!(self.span(), "invalid left-value expression"),
+        }
+      }
+    })*
+  };
+}
+
+impl_assign_to!(Exp, AndExp, EqExp, RelExp, AddExp, MulExp);
+
+impl AssignTo for UnaryExp {
   fn assign(&self, scopes: &mut Scopes, funcs: &Funcs, value: i32) -> EvalResult {
-    todo!()
+    match self {
+      Self::Primary(e) => e.assign(scopes, funcs, value),
+      _ => eval_err!(self.span(), "invalid left-value expression"),
+    }
+  }
+}
+
+impl AssignTo for PrimaryExp {
+  fn assign(&self, scopes: &mut Scopes, funcs: &Funcs, value: i32) -> EvalResult {
+    match self {
+      Self::Access(e) => e.assign(scopes, funcs, value),
+      _ => eval_err!(self.span(), "invalid left-value expression"),
+    }
+  }
+}
+
+impl AssignTo for Access {
+  fn assign(&self, scopes: &mut Scopes, funcs: &Funcs, value: i32) -> EvalResult {
+    // evaluate index
+    let index = self
+      .index
+      .as_ref()
+      .map(|Index { index, .. }| match index.eval(scopes, funcs)? {
+        EvalValue::Value(Value::Int(i)) => Ok((i, index.span())),
+        _ => eval_err!(index.span()),
+      })
+      .transpose()?;
+    // get the current scope
+    let scope = match scopes.local.last_mut() {
+      Some(scope) => scope,
+      None => &mut scopes.global,
+    };
+    // find the value
+    let ident = unwrap_token!(self.ident, Ident);
+    let val = match scope.get_mut(ident) {
+      Some(value) => value,
+      None => eval_err!(self.ident.span(), "variable `{ident}` not found"),
+    };
+    // handle array access
+    match (val, index) {
+      (Value::Int(i), None) => *i = value,
+      (Value::Array(a), Some((index, span))) => {
+        if index < 0 || index as usize >= a.len() {
+          eval_err!(
+            span,
+            "index {index} out of bounds, the length is {}",
+            a.len()
+          );
+        }
+        a[index as usize] = value;
+      }
+      (Value::Int(_), Some(_)) => eval_err!(self.span(), "integer type can not be indexed"),
+      (Value::Array(_), None) => eval_err!(self.span()),
+    };
+    Ok(EvalValue::Unit)
+  }
+}
+
+fn eval<T>(mut tokens: TokenBuffer<T>) -> Result<i32>
+where
+  T: Read,
+{
+  let mut scopes = Scopes::default();
+  let mut funcs = Funcs::default();
+  loop {
+    let decl_def: DeclDef = tokens.parse()?;
+    match decl_def {
+      DeclDef::FuncDef(func) => {
+        let ident = unwrap_token!(func.ident, Ident).clone();
+        let span = func.ident.span();
+        if funcs.insert(ident.clone(), func).is_some() {
+          return_error!(span, "function `{ident}` has already been defined");
+        }
+      }
+      DeclDef::Decl(decl) => match decl.eval(&mut scopes, &funcs) {
+        Ok(_) => {}
+        Err(EvalError::Error(e)) => return Err(e),
+        Err(_) => unreachable!(),
+      },
+      DeclDef::End(_) => break,
+    }
+  }
+  match funcs.get("main") {
+    Some(func) => match func.eval(&mut scopes, &funcs) {
+      Ok(EvalValue::Value(Value::Int(i))) => Ok(i),
+      Err(EvalError::Error(e)) => Err(e),
+      _ => unreachable!(),
+    },
+    None => log_raw_error!(tokens.into_inner().span(), "function `main` not found").into(),
   }
 }
 
@@ -1055,14 +1157,12 @@ impl AssignTo for Exp {
 // Driver.
 // ==============================
 
-fn main() -> Result<()> {
+fn main() {
   let lexer = Lexer(Reader::from_stdin());
-  let mut tokens = TokenBuffer::new(lexer);
-  loop {
-    let decl_def: DeclDef = tokens.parse()?;
-    match decl_def {
-      DeclDef::End(_) => break Ok(()),
-      _ => println!("{decl_def:#?}"),
-    }
+  let span = lexer.span().clone();
+  let tokens = TokenBuffer::new(lexer);
+  match eval(tokens) {
+    Ok(i) => process::exit(i),
+    Err(_) => span.log_summary(),
   }
 }
