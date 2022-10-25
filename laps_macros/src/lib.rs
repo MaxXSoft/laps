@@ -87,7 +87,7 @@ pub fn token_kind(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// for referencing AST types.
 ///
 /// The generated ASTs can be parsed from token stream that produces
-/// [`laps::tokens::Token`] with the given type as its kind.
+/// `laps::tokens::Token` with the given type as its kind.
 ///
 /// # Examples
 ///

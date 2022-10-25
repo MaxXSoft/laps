@@ -13,7 +13,7 @@ const BUFFER_SIZE: usize = 1024;
 ///
 /// [`Reader`] always tries to read UTF-8 characters from the stream.
 /// If there are no valid UTF-8 characters, [`Reader`] will return a
-/// fatal error ([`Error::Fatal`]).
+/// fatal error ([`Error::Fatal`](crate::span::Error::Fatal)).
 pub struct Reader<T> {
   reader: T,
   span: Span,
