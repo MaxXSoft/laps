@@ -5,7 +5,7 @@ use laps::reader::Reader;
 use laps::span::{Error, Result, Span, Spanned};
 use laps::token::{token_ast, token_kind, Ident, TokenBuilder, TokenStream, Tokenizer};
 use laps::{log_error, log_raw_error, return_error};
-use std::{collections::HashMap, fmt, io, io::Read, mem, process};
+use std::{collections::HashMap, env, fmt, io, io::Read, mem, process};
 
 // ==============================
 // Token definitions.
@@ -1167,7 +1167,19 @@ where
 // ==============================
 
 fn main() {
-  let lexer = Lexer(Reader::from_stdin());
+  let mut args = env::args();
+  args.next();
+  match args.next() {
+    Some(path) => parse_and_eval(Reader::from_path(path).expect("invalid path")),
+    None => parse_and_eval(Reader::from_stdin()),
+  }
+}
+
+fn parse_and_eval<T>(reader: Reader<T>)
+where
+  T: Read,
+{
+  let lexer = Lexer(reader);
   let span = lexer.span().clone();
   let tokens = TokenBuffer::new(lexer);
   match eval(tokens) {
