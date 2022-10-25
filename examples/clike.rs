@@ -5,7 +5,7 @@ use laps::reader::Reader;
 use laps::span::{Error, Result, Span, Spanned};
 use laps::token::{token_ast, token_kind, Ident, TokenBuilder, TokenStream, Tokenizer};
 use laps::{log_error, log_raw_error, return_error};
-use std::{collections::HashMap, fmt, io::stdin, io::Read, process};
+use std::{collections::HashMap, fmt, io, io::Read, mem, process};
 
 // ==============================
 // Token definitions.
@@ -73,6 +73,7 @@ enum Operator {
   And,
   Or,
   Not,
+  Assign,
 }
 
 impl fmt::Display for Operator {
@@ -92,6 +93,7 @@ impl fmt::Display for Operator {
       Self::And => write!(f, "&&"),
       Self::Or => write!(f, "||"),
       Self::Not => write!(f, "!"),
+      Self::Assign => write!(f, "="),
     }
   }
 }
@@ -171,6 +173,7 @@ impl<T: Read> Lexer<T> {
       "&&" => Operator::And,
       "||" => Operator::Or,
       "!" => Operator::Not,
+      "=" => Operator::Assign,
     };
   }
 
@@ -263,7 +266,7 @@ token_ast! {
     [&&] => (TokenKind::Operator(Operator::And), _),
     [||] => (TokenKind::Operator(Operator::Or), _),
     [!] => (TokenKind::Operator(Operator::Not), _),
-    [=] => (TokenKind::Other('='), _),
+    [=] => (TokenKind::Operator(Operator::Assign), _),
     [,] => (TokenKind::Other(','), _),
     [;] => (TokenKind::Other(';'), _),
     [lpr] => (TokenKind::Other('('), _),
@@ -595,15 +598,6 @@ enum Value {
   Array(Box<[i32]>),
 }
 
-type SymTab<T> = HashMap<Ident, T>;
-type Funcs = SymTab<FuncDef>;
-
-#[derive(Default)]
-struct Scopes {
-  global: SymTab<Value>,
-  local: Vec<SymTab<Value>>,
-}
-
 enum EvalValue {
   Value(Value),
   Unit,
@@ -631,6 +625,39 @@ macro_rules! eval_err {
   ($span:expr) => {
     return Err(EvalError::Error(log_error!($span, "type mismatch, expected integer type")))
   };
+}
+
+type SymTab<T> = HashMap<Ident, T>;
+type Funcs = SymTab<FuncDef>;
+
+#[derive(Default)]
+struct Scopes {
+  global: SymTab<Value>,
+  local: Vec<SymTab<Value>>,
+}
+
+impl Scopes {
+  fn get(&self, ident: &Token![ident]) -> std::result::Result<&Value, EvalError> {
+    let id = unwrap_token!(ident, Ident);
+    match self.local.iter().rev().find_map(|st| st.get(id)) {
+      Some(value) => Ok(value),
+      None => match self.global.get(id) {
+        Some(value) => Ok(value),
+        None => eval_err!(ident.span(), "variable `{id}` not found"),
+      },
+    }
+  }
+
+  fn get_mut(&mut self, ident: &Token![ident]) -> std::result::Result<&mut Value, EvalError> {
+    let id = unwrap_token!(ident, Ident);
+    match self.local.iter_mut().rev().find_map(|st| st.get_mut(id)) {
+      Some(value) => Ok(value),
+      None => match self.global.get_mut(id) {
+        Some(value) => Ok(value),
+        None => eval_err!(ident.span(), "variable `{id}` not found"),
+      },
+    }
+  }
 }
 
 trait Eval {
@@ -667,7 +694,7 @@ impl<'id> Eval for LibFunc<'id> {
       "getint" => {
         assert_args_len!(0);
         let mut line = String::new();
-        stdin()
+        io::stdin()
           .read_line(&mut line)
           .map_err(|_| log_error!(self.0.span(), "failed to read line from stdin"))?;
         let trimmed = line.trim();
@@ -986,7 +1013,8 @@ impl Eval for FuncCall {
       );
     }
     // push arguments to new scope
-    scopes.local.push(
+    let mut scope = Vec::new();
+    scope.push(
       func
         .params
         .0
@@ -995,7 +1023,10 @@ impl Eval for FuncCall {
         .zip(args.into_iter().map(|i| Value::Int(i)))
         .collect(),
     );
-    func.eval(scopes, funcs)
+    mem::swap(&mut scopes.local, &mut scope);
+    let result = func.eval(scopes, funcs);
+    mem::swap(&mut scopes.local, &mut scope);
+    result
   }
 }
 
@@ -1010,19 +1041,8 @@ impl Eval for Access {
         _ => eval_err!(index.span()),
       })
       .transpose()?;
-    // get the current scope
-    let scope = match scopes.local.last() {
-      Some(scope) => scope,
-      None => &scopes.global,
-    };
-    // find the value
-    let ident = unwrap_token!(self.ident, Ident);
-    let value = match scope.get(ident) {
-      Some(value) => value,
-      None => eval_err!(self.ident.span(), "variable `{ident}` not found"),
-    };
     // handle array access
-    match (value, index) {
+    match (scopes.get(&self.ident)?, index) {
       (Value::Int(i), None) => Ok(EvalValue::Value(Value::Int(*i))),
       (Value::Array(a), Some((index, span))) => {
         if index < 0 || index as usize >= a.len() {
@@ -1088,19 +1108,8 @@ impl AssignTo for Access {
         _ => eval_err!(index.span()),
       })
       .transpose()?;
-    // get the current scope
-    let scope = match scopes.local.last_mut() {
-      Some(scope) => scope,
-      None => &mut scopes.global,
-    };
-    // find the value
-    let ident = unwrap_token!(self.ident, Ident);
-    let val = match scope.get_mut(ident) {
-      Some(value) => value,
-      None => eval_err!(self.ident.span(), "variable `{ident}` not found"),
-    };
     // handle array access
-    match (val, index) {
+    match (scopes.get_mut(&self.ident)?, index) {
       (Value::Int(i), None) => *i = value,
       (Value::Array(a), Some((index, span))) => {
         if index < 0 || index as usize >= a.len() {
