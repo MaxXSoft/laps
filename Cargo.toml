@@ -22,10 +22,8 @@ no-logger = []
 # Enable additional macros, like derive macros.
 macros = ["dep:laps_macros"]
 
-[target.'cfg(not(feature = "no-logger"))'.dependencies]
-colored = "2.0.0"
-
 [dependencies]
+colored = "2.0.0"
 unicode-xid = "0.2.4"
 laps_macros = { path = "./laps_macros", version = "0.0.1", optional = true }
 
