@@ -9,6 +9,12 @@ version = "0.0.1"
 authors = ["MaxXing <x@MaxXSoft.net>"]
 edition = "2021"
 description = "Lexer and parser collections."
+repository = "https://github.com/MaxXSoft/laps"
+documentation = "https://docs.rs/laps"
+categories = ["parsing"]
+keywords = ["parser", "lexer", "ast"]
+readme = "README.md"
+license = "GPL-3.0"
 
 [features]
 # Disable the logger, returns error messages as strings.
@@ -21,7 +27,7 @@ colored = "2.0.0"
 
 [dependencies]
 unicode-xid = "0.2.4"
-laps_macros = { path = "./laps_macros", optional = true }
+laps_macros = { path = "./laps_macros", version = "0.0.1", optional = true }
 
 [[example]]
 name = "clike"
