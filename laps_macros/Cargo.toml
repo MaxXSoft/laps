@@ -4,8 +4,11 @@ version = "0.0.1"
 authors = ["MaxXing <x@MaxXSoft.net>"]
 edition = "2021"
 description = "Macros for crate `laps`."
+repository = "https://github.com/MaxXSoft/laps"
+documentation = "https://docs.rs/laps_macros"
 categories = ["parsing", "development-tools::procedural-macro-helpers"]
 keywords = ["laps", "parser", "lexer", "ast", "derive", "proc_macro"]
+readme = "README.md"
 license = "GPL-3.0"
 
 [lib]
