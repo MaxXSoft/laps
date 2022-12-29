@@ -30,3 +30,7 @@ laps_macros = { path = "./laps_macros", version = "0.0.1", optional = true }
 [[example]]
 name = "clike"
 required-features = ["macros"]
+
+[[example]]
+name = "json"
+required-features = ["macros"]
