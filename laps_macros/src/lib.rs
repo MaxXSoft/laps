@@ -154,7 +154,8 @@ pub fn token_kind(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// token_ast! {
 ///   // `mod` indicates the path to the module where the `token_ast` is invocated.
 ///   // `Kind` indicates the name of the token kind type.
-///   pub(crate) macro Token(mod = crate, Kind = crate::TokenKind) {
+///   // `derive`, which is optional, indicates traits derived for the AST.
+///   pub(crate) macro Token(mod = crate, Kind = crate::TokenKind, derive = (Debug, PartialEq)) {
 ///     [str] => (crate::TokenKind::Str(_), "string literal"),  // pattern, and prompt for error messages
 ///     [int] => (crate::TokenKind::Int(_), "integer literal"),
 ///     [+] => (crate::TokenKind::Other('+'), _),   // use default prompt of the token kind
