@@ -14,7 +14,7 @@ use std::{collections::HashMap, env, fmt, io, io::Read, mem, process};
 type Token = laps::token::Token<TokenKind>;
 
 #[token_kind]
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq)]
 enum TokenKind {
   /// Identifier.
   Ident(Ident),
@@ -30,7 +30,7 @@ enum TokenKind {
   Eof,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 enum Keyword {
   Int,
   Void,
@@ -57,7 +57,7 @@ impl fmt::Display for Keyword {
   }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 enum Operator {
   Add,
   Sub,
@@ -241,7 +241,7 @@ impl<T: Read> Lexer<T> {
 // ==============================
 
 token_ast! {
-  macro Token(mod = crate, Kind = TokenKind) {
+  macro Token(mod = crate, Kind = TokenKind, derive = (Debug, PartialEq)) {
     [ident] => (TokenKind::Ident(_), "identifier"),
     [int] => (TokenKind::Keyword(Keyword::Int), _),
     [void] => (TokenKind::Keyword(Keyword::Void), _),
@@ -1182,8 +1182,10 @@ where
   let lexer = Lexer(reader);
   let span = lexer.span().clone();
   let tokens = TokenBuffer::new(lexer);
-  match eval(tokens) {
-    Ok(i) => process::exit(i),
-    Err(_) => span.log_summary(),
+  if let Ok(i) = eval(tokens) {
+    process::exit(i);
+  } else {
+    span.log_summary();
+    process::exit(span.error_num() as i32);
   }
 }
