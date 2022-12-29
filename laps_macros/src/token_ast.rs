@@ -16,7 +16,7 @@ struct TokenAst {
   _macro_token: Token![macro],
   ident: Ident,
   _paren_token: Paren,
-  mod_and_kind: ModAndKind,
+  configs: Configs,
   _brace_token: Brace,
   arms: Punctuated<TokenAstArm, Token![,]>,
 }
@@ -31,23 +31,26 @@ impl Parse for TokenAst {
       _macro_token: input.parse()?,
       ident: input.parse()?,
       _paren_token: parenthesized!(paren_content in input),
-      mod_and_kind: paren_content.parse()?,
+      configs: paren_content.parse()?,
       _brace_token: braced!(brace_content in input),
       arms: Punctuated::parse_terminated(&brace_content)?,
     })
   }
 }
 
-struct ModAndKind {
+struct Configs {
   current_mod: Path,
   token_kind: Path,
+  derives: TokenStream2,
 }
 
-impl Parse for ModAndKind {
+impl Parse for Configs {
   fn parse(input: ParseStream) -> Result<Self> {
+    // parse current module
     input.parse::<Token![mod]>()?;
     input.parse::<Token![=]>()?;
     let current_mod = input.parse()?;
+    // parse token kind
     input.parse::<Token![,]>()?;
     let kind: Ident = input.parse()?;
     if kind != "Kind" {
@@ -55,9 +58,28 @@ impl Parse for ModAndKind {
     }
     input.parse::<Token![=]>()?;
     let token_kind = input.parse()?;
+    // parse derive (optional)
+    let derives = if input.peek(Token![,]) && input.peek2(syn::Ident) {
+      input.parse::<Token![,]>()?;
+      let derive: Ident = input.parse()?;
+      if derive != "derive" {
+        return_error!(kind.span(), "must be `derive`");
+      }
+      input.parse::<Token![=]>()?;
+      let derives_content;
+      parenthesized!(derives_content in input);
+      derives_content.parse()?
+    } else {
+      TokenStream2::new()
+    };
+    // parse the ending comma
+    if input.peek(Token![,]) {
+      input.parse::<Token![,]>()?;
+    }
     Ok(Self {
       current_mod,
       token_kind,
+      derives,
     })
   }
 }
@@ -116,12 +138,18 @@ fn gen_ast_defs(input: &TokenAst) -> Result<(TokenStream2, Vec<TokenStream2>)> {
   // generate AST names
   let names = (0..input.arms.len()).map(|i| ident(&format!("Token{i}")));
   // generate AST definitions
-  let kind = &input.mod_and_kind.token_kind;
+  let kind = &input.configs.token_kind;
   let field_vis = match &input.vis {
     Visibility::Inherited => quote!(pub(super)),
     vis => quote!(#vis),
   };
   let token = quote!(laps::token::Token<#kind>);
+  let derive = if input.configs.derives.is_empty() {
+    quote!(#[derive(PartialEq)])
+  } else {
+    let derives = &input.configs.derives;
+    quote!(#[derive(#derives)])
+  };
   let defs = names
     .clone()
     .zip(&input.arms)
@@ -130,6 +158,7 @@ fn gen_ast_defs(input: &TokenAst) -> Result<(TokenStream2, Vec<TokenStream2>)> {
         Some(prompt) => quote! {
           let token = tokens.next_token()?;
           match token.kind {
+            #[allow(unused_parens)]
             #pat => Ok(Self(token)),
             _ => laps::return_error!(token.span, concat!("expected ", #prompt, ", found {}"), token),
           }
@@ -137,7 +166,7 @@ fn gen_ast_defs(input: &TokenAst) -> Result<(TokenStream2, Vec<TokenStream2>)> {
         None => quote!(tokens.expect(#pat).map(Self))
       };
       quote! {
-        #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+        #derive
         pub struct #name(#field_vis #token);
         impl<TS> laps::parse::Parse<TS> for #name
         where
@@ -147,6 +176,7 @@ fn gen_ast_defs(input: &TokenAst) -> Result<(TokenStream2, Vec<TokenStream2>)> {
             #parse_body
           }
           fn maybe(tokens: &mut TS) -> laps::span::Result<bool> {
+            #[allow(unused_parens)]
             Ok(matches!(tokens.peek()?.kind, #pat))
           }
         }
@@ -167,7 +197,7 @@ fn gen_ast_defs(input: &TokenAst) -> Result<(TokenStream2, Vec<TokenStream2>)> {
     }
   };
   // generate full paths for all ASTs
-  let current_mod = &input.mod_and_kind.current_mod;
+  let current_mod = &input.configs.current_mod;
   let ast_names = names.map(|ident| quote!(#current_mod::#mod_name::#ident));
   Ok((ast_defs, ast_names.collect()))
 }
