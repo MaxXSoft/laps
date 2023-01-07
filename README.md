@@ -22,6 +22,7 @@ cargo add laps
 See the [`examples` directory](examples), which contains the following examples:
 
 * [`clike`](examples/clike): interpreter for a C-like programming language, with a front-end built with `laps`.
+* [`json`](examples/json): a simple JSON parser, with a front-end built with `laps`.
 
 ## Changelog
 
