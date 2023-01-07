@@ -9,6 +9,8 @@
 //!
 //! * [`clike`](https://github.com/MaxXSoft/laps/tree/master/examples/clike):
 //!   interpreter for a C-like programming language, with a front-end built with `laps`.
+//! * [`json`](https://github.com/MaxXSoft/laps/tree/master/examples/json):
+//!   a simple JSON parser, with a front-end built with `laps`.
 
 pub mod ast;
 pub mod input;
