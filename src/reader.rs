@@ -79,6 +79,8 @@ impl<T> Reader<T> {
     if let Some(end) = end {
       self.byte_buf.copy_within(end..count, 0);
       self.byte_buf_offset = count - end;
+    } else {
+      self.byte_buf_offset = 0;
     }
     // update the span
     self.span.update(c);
