@@ -1,4 +1,32 @@
 //! Span ([`Span`]) and error ([`Error`]) related implementations.
+//!
+//! In [`laps`](crate), [`Span`] represents a region of the input characters,
+//! which consists of a start location and an end location. [`Location`] is a
+//! line-column pair.
+//!
+//! For example, for the following input:
+//!
+//! ```text
+//! The quick brown fox
+//! jumps over the lazy dog.
+//! ```
+//!
+//! Span `1:5-1:9` corresponds to:
+//!
+//! ```text
+//! The quick brown fox
+//!     ^^^^^
+//! jumps over the lazy dog.
+//! ```
+//!
+//! Span `1:17-2:10` corresponds to:
+//!
+//! ```text
+//! The quick brown fox
+//!                 ^^^
+//! jumps over the lazy dog.
+//! ^^^^^^^^^^
+//! ```
 
 use std::cell::Cell;
 use std::fmt::{self, Arguments};
