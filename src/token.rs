@@ -1,3 +1,19 @@
+//! Token ([`Token`]) related implementations, including
+//! tokenizer ([`Tokenizer`]) and token stream ([`TokenStream`]).
+//!
+//! All of these implementations can be used in lexers and parsers,
+//! specifically:
+//!
+//! * [`Token`] and [`Ident`]: generic token representations, can be
+//!   produced by lexers.
+//! * [`TokenBuilder`]: trait for creating tokens, can be used in lexers.
+//! * [`Tokenizer`]: trait for tokenizers (structures that can produce
+//!   tokens), all lexers should implement this trait.
+//! * [`TokenStream`]: a tokenizer wrapper trait, provides several helper
+//!   methods for parsing, can be used in parsers.
+//! * [`TokenBuffer`]: a structure that implements the [`TokenStream`] trait,
+//!   can be used in parsers.
+
 use crate::log_error;
 use crate::parse::Parse;
 use crate::span::{Result, Span, Spanned};
