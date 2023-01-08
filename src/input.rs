@@ -1,3 +1,15 @@
+//! Utilities for constructing lexers.
+//!
+//! This module conntains the [`InputStream`] trait, which can be
+//! implemented for input streams, i.e. streams that return characters.
+//! This trait has already been implemented for
+//! [`Reader`](crate::reader::Reader) and
+//! [`ByteReader`](crate::reader::ByteReader).
+//!
+//! The [`InputStream`] trait provides many useful utility methods for
+//! reading characters, integers, floating-point numbers, identifiers,
+//! strings, etc. from the input stream.
+
 use crate::return_error;
 use crate::span::{Location, Result, Span};
 use crate::token::{Ident, TokenBuilder};
