@@ -1,3 +1,5 @@
+//! Some common predefined AST structures that can be used in parser.
+
 use crate::parse::Parse;
 use crate::span::{Result, Span, Spanned};
 use crate::token::TokenStream;
