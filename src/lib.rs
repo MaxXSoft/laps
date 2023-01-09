@@ -18,3 +18,19 @@ pub mod parse;
 pub mod reader;
 pub mod span;
 pub mod token;
+
+/// A prelude of some common traits and macros (if enabled feature `macros`)
+/// in [`laps`](crate).
+///
+/// ```
+/// use laps::prelude::*;
+/// ```
+pub mod prelude {
+  pub use crate::input::InputStream;
+  pub use crate::parse::Parse;
+  pub use crate::span::Spanned;
+  pub use crate::token::{TokenBuilder, TokenStream, Tokenizer};
+
+  #[cfg(feature = "macros")]
+  pub use crate::token::{token_ast, token_kind};
+}
