@@ -1,3 +1,8 @@
+//! Implementations for constructing parsers.
+//!
+//! This module contains the [`Parse`] trait, which can be implemented
+//! for all types that can be parsed from a token stream, such as ASTs.
+
 use crate::span::Result;
 use crate::token::TokenStream;
 
