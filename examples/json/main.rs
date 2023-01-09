@@ -1,10 +1,9 @@
 use laps::ast::SepSeq;
-use laps::input::InputStream;
-use laps::parse::Parse;
+use laps::prelude::*;
 use laps::reader::Reader;
 use laps::return_error;
 use laps::span::Result;
-use laps::token::{token_ast, token_kind, Ident, TokenBuilder, TokenStream, Tokenizer};
+use laps::token::{Ident, TokenBuffer};
 use std::{collections::HashMap, env, fmt, io::Read, process};
 
 // ==============================
@@ -50,8 +49,6 @@ impl fmt::Display for Keyword {
 // ==============================
 // Lexer.
 // ==============================
-
-type TokenBuffer<T> = laps::token::TokenBuffer<Lexer<T>, Token>;
 
 struct Lexer<T>(Reader<T>);
 

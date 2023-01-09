@@ -1,10 +1,4 @@
-use laps::ast::NonEmptySepList;
-use laps::input::InputStream;
-use laps::parse::Parse;
-use laps::reader::Reader;
-use laps::span::Result;
-use laps::token::{token_ast, token_kind, TokenBuilder, TokenStream, Tokenizer};
-use std::io::Read;
+use laps::{ast::NonEmptySepList, prelude::*, reader::Reader, span::Result, token::TokenBuffer};
 
 type Token = laps::token::Token<TokenKind>;
 
@@ -19,11 +13,9 @@ enum TokenKind {
   Eof,
 }
 
-type TokenBuffer<T> = laps::token::TokenBuffer<Lexer<T>, Token>;
-
 struct Lexer<T>(Reader<T>);
 
-impl<T: Read> Tokenizer for Lexer<T> {
+impl<T: std::io::Read> Tokenizer for Lexer<T> {
   type Token = Token;
 
   fn next_token(&mut self) -> Result<Self::Token> {

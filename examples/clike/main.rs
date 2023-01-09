@@ -1,9 +1,8 @@
 use laps::ast::{NonEmptySepList, NonEmptySepSeq, SepSeq};
-use laps::input::InputStream;
-use laps::parse::Parse;
+use laps::prelude::*;
 use laps::reader::Reader;
-use laps::span::{Error, Result, Span, Spanned};
-use laps::token::{token_ast, token_kind, Ident, TokenBuilder, TokenStream, Tokenizer};
+use laps::span::{Error, Result, Span};
+use laps::token::{Ident, TokenBuffer};
 use laps::{log_error, log_raw_error, return_error};
 use std::{collections::HashMap, env, fmt, io, io::Read, mem, process};
 
@@ -101,8 +100,6 @@ impl fmt::Display for Operator {
 // ==============================
 // Lexer.
 // ==============================
-
-type TokenBuffer<T> = laps::token::TokenBuffer<Lexer<T>, Token>;
 
 struct Lexer<T>(Reader<T>);
 
@@ -1128,7 +1125,7 @@ impl AssignTo for Access {
   }
 }
 
-fn eval<T>(mut tokens: TokenBuffer<T>) -> Result<i32>
+fn eval<T>(mut tokens: TokenBuffer<Lexer<T>, Token>) -> Result<i32>
 where
   T: Read,
 {
