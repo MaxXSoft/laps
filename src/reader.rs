@@ -1,3 +1,13 @@
+//! Reader related implementations for lexers.
+//!
+//! Reader implements [`InputStream`] trait, and it can read and buffer
+//! characters and their corresponding spans from any types that implement
+//! the [`Read`] trait.
+//!
+//! This module contains two kinds of readers: [`Reader`] will try to read
+//! UTF-8 characters from the stream, and will report fatal error if there are
+//! no valid UTF-8 characters. [`ByteReader`] will read bytes from the stream.
+
 use crate::input::InputStream;
 use crate::log_raw_fatal_error;
 use crate::span::{FileType, Location, Result, Span};
