@@ -6,6 +6,7 @@ use syn::{
   braced, bracketed, parenthesized,
   parse::{Parse, ParseStream},
   punctuated::Punctuated,
+  spanned::Spanned,
   token::{Brace, Bracket, Paren},
   Attribute, LitStr, Pat, Path, Result, Token, Visibility,
 };
@@ -141,6 +142,21 @@ fn gen_ast_defs(input: &TokenAst) -> Result<(TokenStream2, Vec<TokenStream2>)> {
   let kind = &input.configs.token_kind;
   let field_vis = match &input.vis {
     Visibility::Inherited => quote!(pub(super)),
+    Visibility::Restricted(res) => {
+      let path = res.path.as_ref();
+      match path.segments.first() {
+        Some(p) if p.arguments.is_none() && path.leading_colon.is_none() => {
+          if p.ident == "self" {
+            quote!(pub(super))
+          } else if p.ident == "crate" {
+            quote!(pub(in #path))
+          } else {
+            quote!(pub(in super::#path))
+          }
+        }
+        _ => return_error!(path.span(), "invalid path in visibility"),
+      }
+    }
     vis => quote!(#vis),
   };
   let token = quote!(laps::token::Token<#kind>);
@@ -168,6 +184,20 @@ fn gen_ast_defs(input: &TokenAst) -> Result<(TokenStream2, Vec<TokenStream2>)> {
       quote! {
         #derive
         pub struct #name(#field_vis #token);
+        impl #name {
+          /// Unwraps the inner token kind and returns its value.
+          /// 
+          /// # Panics
+          /// 
+          /// Panics if the inner token kind does not contain a value of
+          /// the type `T`.
+          #field_vis fn unwrap<T>(&self) -> T
+          where
+            T: std::convert::TryFrom<#kind, Error = ()>,
+          {
+            self.0.kind.clone().try_into().unwrap()
+          }
+        }
         impl<TS> laps::parse::Parse<TS> for #name
         where
           TS: laps::token::TokenStream<Token = #token>
