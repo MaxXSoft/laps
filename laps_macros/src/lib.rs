@@ -29,9 +29,9 @@ pub fn derive_spanned(item: TokenStream) -> TokenStream {
   result_to_tokens!(spanned::derive_spanned(item))
 }
 
-/// Implements `From` and `Display` trait for token kind enums.
+/// Implements `From`, `TryFrom` and `Display` trait for token kind enums.
 ///
-/// The `From` trait will only be implemented for variants with
+/// The `From` and `TryFrom` trait will only be implemented for variants with
 /// single unnamed field.
 ///
 /// # Examples
@@ -65,9 +65,29 @@ pub fn derive_spanned(item: TokenStream) -> TokenStream {
 ///   }
 /// }
 ///
+/// impl TryFrom<TokenKind> for String {
+///   type Error = ();
+///   fn try_from(kind: TokenKind) -> Result<Self, Self::Error> {
+///     match kind {
+///       TokenKind::Str(s) => Ok(s),
+///       _ => Err(()),
+///     }
+///   }
+/// }
+///
 /// impl From<i32> for TokenKind {
 ///   fn from(i: i32) -> Self {
 ///     Self::Int(i)
+///   }
+/// }
+///
+/// impl TryFrom<TokenKind> for i32 {
+///   type Error = ();
+///   fn try_from(kind: TokenKind) -> Result<Self, Self::Error> {
+///     match kind {
+///       TokenKind::Int(i) => Ok(i),
+///       _ => Err(()),
+///     }
 ///   }
 /// }
 ///
