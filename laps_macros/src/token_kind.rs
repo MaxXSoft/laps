@@ -17,7 +17,7 @@ pub fn token_kind(attr: TokenStream, item: TokenStream) -> Result<TokenStream> {
   Ok(TokenStream::from(quote!(#input #froms #display)))
 }
 
-/// Generates `From` trait implementations.
+/// Generates `From` and `TryFrom` trait implementations.
 fn gen_from_impls(input: &ItemEnum) -> TokenStream2 {
   let mut impls = TokenStream2::new();
   let ident = &input.ident;
@@ -32,6 +32,15 @@ fn gen_from_impls(input: &ItemEnum) -> TokenStream2 {
           impl std::convert::From<#ty> for #ident {
             fn from(v: #ty) -> Self {
               Self::#variant_name(v)
+            }
+          }
+          impl std::convert::TryFrom<#ident> for #ty {
+            type Error = ();
+            fn try_from(v: #ident) -> std::result::Result<Self, Self::Error> {
+              match v {
+                #ident::#variant_name(v) => std::result::Result::Ok(v),
+                _ => std::result::Result::Err(()),
+              }
             }
           }
         });
