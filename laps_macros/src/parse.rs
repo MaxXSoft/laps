@@ -168,7 +168,7 @@ fn gen_struct_methods(
   let constructor = gen_constructor(&data.fields);
   let parse = quote! {
     fn parse(tokens: &mut #ts_type) -> laps::span::Result<Self> {
-      Ok(Self #constructor)
+      std::result::Result::Ok(Self #constructor)
     }
   };
   // generate `maybe` method
@@ -177,7 +177,7 @@ fn gen_struct_methods(
   } else if let Some(Field { ty, .. }) = first_field(&data.fields) {
     quote!(<#ty>::maybe(tokens))
   } else {
-    quote!(Ok(true))
+    quote!(std::result::Result::Ok(true))
   };
   let maybe = quote! {
     fn maybe(tokens: &mut #ts_type) -> laps::span::Result<bool> {
@@ -212,14 +212,14 @@ fn gen_enum_methods(
   }
   let parse = quote! {
     fn parse(tokens: &mut #ts_type) -> laps::span::Result<Self> {
-      Ok(#branches)
+      std::result::Result::Ok(#branches)
     }
   };
   // generate `maybe` method
   let result = if !starts_with.is_empty() {
     gen_maybe(starts_with)
   } else if data.variants.is_empty() {
-    quote!(Ok(true))
+    quote!(std::result::Result::Ok(true))
   } else {
     let mut tokens = TokenStream2::new();
     for (i, variant) in data.variants.iter().enumerate() {
@@ -231,7 +231,7 @@ fn gen_enum_methods(
         None => quote!(true),
       });
     }
-    quote!(Ok(#tokens))
+    quote!(std::result::Result::Ok(#tokens))
   };
   let maybe = quote! {
     fn maybe(tokens: &mut #ts_type) -> laps::span::Result<bool> {

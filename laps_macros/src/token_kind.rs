@@ -29,7 +29,7 @@ fn gen_from_impls(input: &ItemEnum) -> TokenStream2 {
       Fields::Unnamed(f) if f.unnamed.len() == 1 => {
         let ty = unsafe { &f.unnamed.first().unwrap_unchecked().ty };
         impls.extend(quote! {
-          impl From<#ty> for #ident {
+          impl std::convert::From<#ty> for #ident {
             fn from(v: #ty) -> Self {
               Self::#variant_name(v)
             }
@@ -62,11 +62,11 @@ fn gen_display_impl(input: &ItemEnum) -> TokenStream2 {
     arms.extend(match &variant.fields {
       Fields::Unnamed(f) if f.unnamed.len() == 1 => {
         let prompt = prompt + " `{}`";
-        quote!(Self::#ident(v) => write!(f, #prompt, v),)
+        quote!(Self::#ident(v) => std::write!(f, #prompt, v),)
       }
-      Fields::Named(_) => quote!(Self::#ident { .. } => write!(f, #prompt),),
-      Fields::Unnamed(_) => quote!(Self::#ident(..) => write!(f, #prompt),),
-      Fields::Unit => quote!(Self::#ident => write!(f, #prompt),),
+      Fields::Named(_) => quote!(Self::#ident { .. } => std::write!(f, #prompt),),
+      Fields::Unnamed(_) => quote!(Self::#ident(..) => std::write!(f, #prompt),),
+      Fields::Unit => quote!(Self::#ident => std::write!(f, #prompt),),
     });
   }
   quote! {
