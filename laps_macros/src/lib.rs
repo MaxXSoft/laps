@@ -75,21 +75,18 @@ pub fn derive_spanned(item: TokenStream) -> TokenStream {
 ///   }
 /// }
 ///
-/// impl From<i32> for TokenKind {
-///   fn from(i: i32) -> Self {
-///     Self::Int(i)
-///   }
-/// }
-///
-/// impl TryFrom<TokenKind> for i32 {
+/// impl<'a> TryFrom<&'a TokenKind> for &'a String {
 ///   type Error = ();
-///   fn try_from(kind: TokenKind) -> Result<Self, Self::Error> {
+///   fn try_from(kind: &'a TokenKind) -> Result<Self, Self::Error> {
 ///     match kind {
-///       TokenKind::Int(i) => Ok(i),
+///       TokenKind::Str(s) => Ok(s),
 ///       _ => Err(()),
 ///     }
 ///   }
 /// }
+///
+/// // Same for `TokenKind::Int`.
+/// // ...
 ///
 /// impl std::fmt::Display for TokenKind {
 ///   fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
