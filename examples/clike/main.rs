@@ -581,15 +581,6 @@ struct Index {
 // Interpreter.
 // ==============================
 
-macro_rules! unwrap_token {
-  ($e:expr, $id:ident) => {
-    match &$e.0.kind {
-      TokenKind::$id(v) => v,
-      _ => unreachable!(),
-    }
-  };
-}
-
 enum Value {
   Int(i32),
   Array(Box<[i32]>),
@@ -635,7 +626,7 @@ struct Scopes {
 
 impl Scopes {
   fn get(&self, ident: &Token![ident]) -> std::result::Result<&Value, EvalError> {
-    let id = unwrap_token!(ident, Ident);
+    let id: &Ident = ident.unwrap_ref();
     match self.local.iter().rev().find_map(|st| st.get(id)) {
       Some(value) => Ok(value),
       None => match self.global.get(id) {
@@ -646,7 +637,7 @@ impl Scopes {
   }
 
   fn get_mut(&mut self, ident: &Token![ident]) -> std::result::Result<&mut Value, EvalError> {
-    let id = unwrap_token!(ident, Ident);
+    let id: &Ident = ident.unwrap_ref();
     match self.local.iter_mut().rev().find_map(|st| st.get_mut(id)) {
       Some(value) => Ok(value),
       None => match self.global.get_mut(id) {
@@ -687,7 +678,7 @@ impl<'id> Eval for LibFunc<'id> {
         }
       };
     }
-    match unwrap_token!(self.0, Ident).as_ref() {
+    match self.0.unwrap_ref::<&Ident, _>().as_ref() {
       "getint" => {
         assert_args_len!(0);
         let mut line = String::new();
@@ -722,7 +713,7 @@ impl Eval for Decl {
 impl Eval for VarDef {
   fn eval(&self, scopes: &mut Scopes, funcs: &Funcs) -> EvalResult {
     // evaluate initial value
-    let dim = self.dim.as_ref().map(|d| *unwrap_token!(d.len, Int));
+    let dim = self.dim.as_ref().map(|d| *d.len.unwrap_ref::<&u64, _>());
     let init_val_span = match &self.init_val {
       Some(init) => Some((init.init_val.eval(scopes, funcs)?, init.init_val.span())),
       None => None,
@@ -754,7 +745,7 @@ impl Eval for VarDef {
       None => &mut scopes.global,
     };
     // add definition to scope
-    let ident = unwrap_token!(self.ident, Ident);
+    let ident: &Ident = self.ident.unwrap_ref();
     if scope.insert(ident.clone(), init_val).is_some() {
       eval_err!(
         self.ident.span(),
@@ -980,7 +971,9 @@ impl Eval for PrimaryExp {
       Self::ParenExp(ParenExp { exp, .. }) => exp.eval(scopes, funcs),
       Self::FuncCall(e) => e.eval(scopes, funcs),
       Self::Access(e) => e.eval(scopes, funcs),
-      Self::LitInt(t) => Ok(EvalValue::Value(Value::Int(*unwrap_token!(t, Int) as i32))),
+      Self::LitInt(t) => Ok(EvalValue::Value(Value::Int(
+        *t.unwrap_ref::<&u64, _>() as i32
+      ))),
     }
   }
 }
@@ -996,7 +989,7 @@ impl Eval for FuncCall {
       })
       .collect::<std::result::Result<Vec<_>, _>>()?;
     // get function from global
-    let func = match funcs.get(unwrap_token!(self.ident, Ident)) {
+    let func = match funcs.get(self.ident.unwrap_ref::<&Ident, _>()) {
       Some(func) => func,
       None => return LibFunc(&self.ident, args).eval(scopes, funcs),
     };
@@ -1016,7 +1009,7 @@ impl Eval for FuncCall {
         .params
         .0
         .iter()
-        .map(|FuncParam { ident, .. }| unwrap_token!(ident, Ident).clone())
+        .map(|FuncParam { ident, .. }| ident.unwrap_ref::<&Ident, _>().clone())
         .zip(args.into_iter().map(Value::Int))
         .collect(),
     );
@@ -1135,7 +1128,7 @@ where
     let decl_def: DeclDef = tokens.parse()?;
     match decl_def {
       DeclDef::FuncDef(func) => {
-        let ident = unwrap_token!(func.ident, Ident).clone();
+        let ident = func.ident.unwrap_ref::<&Ident, _>().clone();
         let span = func.ident.span();
         if funcs.insert(ident.clone(), *func).is_some() {
           return_error!(span, "function `{ident}` has already been defined");

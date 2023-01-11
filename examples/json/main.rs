@@ -168,15 +168,6 @@ struct ArrayDef {
 // Converter.
 // ==============================
 
-macro_rules! unwrap_token {
-  ($e:expr, $id:ident) => {
-    match $e.0.kind {
-      TokenKind::$id(v) => v,
-      _ => unreachable!(),
-    }
-  };
-}
-
 #[derive(Debug)]
 enum Value {
   Object(HashMap<String, Value>),
@@ -199,9 +190,9 @@ impl From<ValueDef> for Value {
     match value {
       ValueDef::ObjectDef(obj) => obj.into(),
       ValueDef::ArrayDef(arr) => arr.into(),
-      ValueDef::String(s) => Self::String(unwrap_token!(s, String)),
-      ValueDef::Integer(i) => Self::Integer(unwrap_token!(i, Integer)),
-      ValueDef::Float(f) => Self::Float(unwrap_token!(f, Float)),
+      ValueDef::String(s) => Self::String(s.unwrap()),
+      ValueDef::Integer(i) => Self::Integer(i.unwrap()),
+      ValueDef::Float(f) => Self::Float(f.unwrap()),
       ValueDef::True(_) => Self::Bool(true),
       ValueDef::False(_) => Self::Bool(false),
       ValueDef::Null(_) => Self::Null,
@@ -215,7 +206,7 @@ impl From<ObjectDef> for Value {
       obj
         .members
         .into_iter()
-        .map(|Member { name, value, .. }| (unwrap_token!(name, String), value.into()))
+        .map(|Member { name, value, .. }| (name.unwrap(), value.into()))
         .collect(),
     )
   }

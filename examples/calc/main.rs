@@ -1,7 +1,5 @@
 use laps::{ast::NonEmptySepList, prelude::*, reader::Reader, span::Result, token::TokenBuffer};
 
-type Token = laps::token::Token<TokenKind>;
-
 #[token_kind]
 #[derive(Clone, PartialEq)]
 enum TokenKind {
@@ -12,6 +10,8 @@ enum TokenKind {
   /// End-of-file.
   Eof,
 }
+
+type Token = laps::token::Token<TokenKind>;
 
 struct Lexer<T>(Reader<T>);
 
@@ -127,10 +127,7 @@ impl Calculate for MulExpr {
 impl Calculate for Value {
   fn calc(&self) -> Result<f64> {
     match self {
-      Self::Num(num) => match num.0.kind {
-        TokenKind::Float(f) => Ok(f),
-        _ => unreachable!(),
-      },
+      Self::Num(num) => Ok(*num.unwrap_ref::<&f64, _>()),
       Self::Neg(_, value) => Ok(-value.calc()?),
       Self::Paren(_, add, _) => add.calc(),
     }
