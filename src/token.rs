@@ -281,7 +281,7 @@ pub trait TokenStream: Tokenizer {
     if next == token {
       Ok(next)
     } else {
-      let err = log_error!(next.span(), "expected {next}, found {token}");
+      let err = log_error!(next.span(), "expected {token}, found {next}");
       self.unread(next);
       Err(err)
     }
