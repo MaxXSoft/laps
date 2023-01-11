@@ -43,6 +43,15 @@ fn gen_from_impls(input: &ItemEnum) -> TokenStream2 {
               }
             }
           }
+          impl<'a> std::convert::TryFrom<&'a #ident> for &'a #ty {
+            type Error = ();
+            fn try_from(v: &'a #ident) -> std::result::Result<Self, Self::Error> {
+              match v {
+                #ident::#variant_name(v) => std::result::Result::Ok(v),
+                _ => std::result::Result::Err(()),
+              }
+            }
+          }
         });
       }
       _ => {}
