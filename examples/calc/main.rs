@@ -1,7 +1,6 @@
 use laps::{ast::NonEmptySepList, prelude::*, reader::Reader, span::Result, token::TokenBuffer};
 
 #[token_kind]
-#[derive(Clone, PartialEq)]
 enum TokenKind {
   /// Floating-point number.
   Float(f64),

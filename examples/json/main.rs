@@ -13,7 +13,6 @@ use std::{collections::HashMap, env, fmt, io::Read, process};
 type Token = laps::token::Token<TokenKind>;
 
 #[token_kind]
-#[derive(Clone, PartialEq)]
 enum TokenKind {
   /// Keyword.
   Keyword(Keyword),

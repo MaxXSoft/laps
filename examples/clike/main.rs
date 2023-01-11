@@ -13,7 +13,7 @@ use std::{collections::HashMap, env, fmt, io, io::Read, mem, process};
 type Token = laps::token::Token<TokenKind>;
 
 #[token_kind]
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Debug)]
 enum TokenKind {
   /// Identifier.
   Ident(Ident),
