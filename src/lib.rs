@@ -7,7 +7,7 @@
 //!
 #![cfg_attr(not(feature = "macros"), doc = " ```ignore")]
 #![cfg_attr(feature = "macros", doc = " ```no_run")]
-#![doc = include_str!("../examples/calc/main.rs")]
+#![doc = include_str!("../examples/sexp/main.rs")]
 //! ```
 //!
 //! # More Examples
@@ -16,6 +16,8 @@
 //! [`examples` directory](https://github.com/MaxXSoft/laps/tree/master/examples),
 //! which contains the following examples:
 //!
+//! * [`sexp`](https://github.com/MaxXSoft/laps/tree/master/examples/sexp):
+//!   a [S-expression](https://en.wikipedia.org/wiki/S-expression) parser.
 //! * [`calc`](https://github.com/MaxXSoft/laps/tree/master/examples/calc):
 //!   a simple expression calculator.
 //! * [`json`](https://github.com/MaxXSoft/laps/tree/master/examples/json):
