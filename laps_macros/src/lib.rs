@@ -52,6 +52,7 @@ pub fn derive_spanned(item: TokenStream) -> TokenStream {
 /// will be expanded to:
 ///
 /// ```
+/// #[derive(Clone, PartialEq)]
 /// enum TokenKind {
 ///   // ...
 /// # Str(String),
