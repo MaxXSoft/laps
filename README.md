@@ -21,6 +21,7 @@ cargo add laps
 
 See the [`examples` directory](examples), which contains the following examples:
 
+* [`sexp`](examples/sexp): a [S-expression](https://en.wikipedia.org/wiki/S-expression) parser.
 * [`calc`](examples/calc): a simple expression calculator.
 * [`json`](examples/json): a simple JSON parser.
 * [`clike`](examples/clike): interpreter for a C-like programming language.
