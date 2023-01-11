@@ -186,16 +186,31 @@ fn gen_ast_defs(input: &TokenAst) -> Result<(TokenStream2, Vec<TokenStream2>)> {
         pub struct #name(#field_vis #token);
         impl #name {
           /// Unwraps the inner token kind and returns its value.
-          /// 
+          ///
           /// # Panics
-          /// 
+          ///
           /// Panics if the inner token kind does not contain a value of
           /// the type `T`.
-          #field_vis fn unwrap<T>(&self) -> T
+          #field_vis fn unwrap<T, E>(self) -> T
           where
-            T: std::convert::TryFrom<#kind, Error = ()>,
+            T: std::convert::TryFrom<#kind, Error = E>,
+            E: std::fmt::Debug,
           {
-            self.0.kind.clone().try_into().unwrap()
+            self.0.kind.try_into().unwrap()
+          }
+
+          /// Unwraps the inner token kind and returns its value.
+          ///
+          /// # Panics
+          ///
+          /// Panics if the inner token kind does not contain a value of
+          /// the type `T`.
+          #field_vis fn unwrap_ref<'a, T, E>(&'a self) -> T
+          where
+            T: std::convert::TryFrom<&'a #kind, Error = E>,
+            E: std::fmt::Debug,
+          {
+            self.0.as_ref().try_into().unwrap()
           }
         }
         impl<TS> laps::parse::Parse<TS> for #name
