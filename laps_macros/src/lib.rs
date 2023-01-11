@@ -130,6 +130,11 @@ pub fn token_kind(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// #     impl<Kind> super::span::Spanned for Token<Kind> {
 /// #       fn span(&self) -> super::span::Span { super::span::Span }
 /// #     }
+/// #     impl<Kind> AsRef<Kind> for Token<Kind> {
+/// #       fn as_ref(&self) -> &Kind {
+/// #         &self.kind
+/// #       }
+/// #     }
 /// #     pub trait TokenStream {
 /// #       type Token;
 /// #       fn next_token(&mut self) -> super::span::Result<Self::Token>;
