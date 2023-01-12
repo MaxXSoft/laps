@@ -50,8 +50,7 @@ token_ast! {
 #[derive(Parse, Debug)]
 #[token(Token)]
 enum Statement {
-  Atom(Token![atom]),
-  SExp(SExp),
+  Elem(Elem),
   End(Token![eof]),
 }
 
