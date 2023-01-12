@@ -5,9 +5,130 @@
 //!
 //! # Example
 //!
+//! Implement a lexer for
+//! [S-expression](https://en.wikipedia.org/wiki/S-expression):
+//!
 #![cfg_attr(not(feature = "macros"), doc = " ```ignore")]
 #![cfg_attr(feature = "macros", doc = " ```no_run")]
-#![doc = include_str!("../examples/sexp/main.rs")]
+//! # fn main() {}
+//! use laps::prelude::*;
+//!
+//! #[token_kind]
+//! enum TokenKind {
+//!   /// Atom.
+//!   Atom(String),
+//!   /// Parentheses.
+//!   Paren(char),
+//!   /// End-of-file.
+//!   Eof,
+//! }
+//!
+//! type Token = laps::token::Token<TokenKind>;
+//!
+//! struct Lexer<T>(laps::reader::Reader<T>);
+//!
+//! impl<T: std::io::Read> Tokenizer for Lexer<T> {
+//!   type Token = Token;
+//!
+//!   fn next_token(&mut self) -> laps::span::Result<Self::Token> {
+//!     // skip spaces
+//!     self.0.skip_until(|c| !c.is_whitespace())?;
+//!     // check the current character
+//!     Ok(match self.0.peek()? {
+//!       // parentheses
+//!       Some(c) if c == '(' || c == ')' => Token::new(c, self.0.next_span()?.clone()),
+//!       // atom
+//!       Some(_) => {
+//!         let (atom, span) = self
+//!           .0
+//!           .collect_with_span_until(|c| c.is_whitespace() || c == '(' || c == ')')?;
+//!         Token::new(atom, span)
+//!       }
+//!       // end-of-file
+//!       None => Token::new(TokenKind::Eof, self.0.next_span()?.clone()),
+//!     })
+//!   }
+//! }
+//! ```
+//!
+//! And the parser and [ASTs](https://en.wikipedia.org/wiki/Abstract_syntax_tree)
+//! (or actually [CSTs](https://en.wikipedia.org/wiki/Parse_tree)):
+//!
+#![cfg_attr(not(feature = "macros"), doc = " ```ignore")]
+#![cfg_attr(feature = "macros", doc = " ```no_run")]
+//! # fn main() {}
+//! # use laps::prelude::*;
+//! # #[token_kind]
+//! # enum TokenKind {
+//! #   /// Atom.
+//! #   Atom(String),
+//! #   /// Parentheses.
+//! #   Paren(char),
+//! #   /// End-of-file.
+//! #   Eof,
+//! # }
+//! # type Token = laps::token::Token<TokenKind>;
+//! # struct Lexer<T>(laps::reader::Reader<T>);
+//! # impl<T: std::io::Read> Tokenizer for Lexer<T> {
+//! #   type Token = Token;
+//! #   fn next_token(&mut self) -> laps::span::Result<Self::Token> {
+//! #     // skip spaces
+//! #     self.0.skip_until(|c| !c.is_whitespace())?;
+//! #     // check the current character
+//! #     Ok(match self.0.peek()? {
+//! #       // parentheses
+//! #       Some(c) if c == '(' || c == ')' => Token::new(c, self.0.next_span()?.clone()),
+//! #       // atom
+//! #       Some(_) => {
+//! #         let (atom, span) = self
+//! #           .0
+//! #           .collect_with_span_until(|c| c.is_whitespace() || c == '(' || c == ')')?;
+//! #         Token::new(atom, span)
+//! #       }
+//! #       // end-of-file
+//! #       None => Token::new(TokenKind::Eof, self.0.next_span()?.clone()),
+//! #     })
+//! #   }
+//! # }
+//! token_ast! {
+//!   macro Token(mod = crate, Kind = TokenKind) {
+//!     [atom] => (TokenKind::Atom(_), "atom"),
+//!     [lpr] => (TokenKind::Paren('('), _),
+//!     [rpr] => (TokenKind::Paren(')'), _),
+//!     [eof] => (TokenKind::Eof, _),
+//!   }
+//! }
+//!
+//! #[derive(Parse)]
+//! #[token(Token)]
+//! enum Statement {
+//!   Elem(Elem),
+//!   End(Token![eof]),
+//! }
+//!
+//! #[derive(Parse)]
+//! #[token(Token)]
+//! struct SExp {
+//!   _lpr: Token![lpr],
+//!   _elems: Vec<Elem>,
+//!   _rpr: Token![rpr],
+//! }
+//!
+//! #[derive(Parse)]
+//! #[token(Token)]
+//! enum Elem {
+//!   Atom(Token![atom]),
+//!   SExp(SExp),
+//! }
+//! ```
+//!
+//! The above implementation is very close in form to the corresponding
+//! EBNF representation of the S-expression:
+//!
+//! ```text
+//! Statement ::= Elem | EOF;
+//! SExp      ::= "(" {Elem} ")";
+//! Elem      ::= ATOM | SExp;
 //! ```
 //!
 //! # More Examples
