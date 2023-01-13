@@ -1,5 +1,12 @@
 use laps::{ast::NonEmptySepList, prelude::*, reader::Reader, span::Result, token::TokenBuffer};
 
+/// Kinds of the token.
+///
+/// The tokenizer (lexer) will read user input and turn it into a stream of
+/// tokens.
+///
+/// In the subsequent implementation of the [`Tokenizer`] trait of [`Lexer`],
+/// the corresponding code to generate tokens based on the input is included.
 #[token_kind]
 enum TokenKind {
   /// Floating-point number.
@@ -10,31 +17,44 @@ enum TokenKind {
   Eof,
 }
 
+/// Type of token.
+///
+/// [`laps::token::Token`] has two fields, one is the token kind and
+/// the other is the span of this token, representing the location of
+/// the token in the input.
 type Token = laps::token::Token<TokenKind>;
 
+/// The lexer.
+///
+/// There is a [`Reader`] in the lexer in order to read characters from
+/// the input.
 struct Lexer<T>(Reader<T>);
 
 impl<T: std::io::Read> Tokenizer for Lexer<T> {
   type Token = Token;
 
   fn next_token(&mut self) -> Result<Self::Token> {
-    // skip spaces
+    // Skip spaces.
     self.0.skip_until(|c| !c.is_ascii_whitespace())?;
-    // check the current character
+    // Check the current character.
     if self.0.maybe_float()? {
-      // floating-point number
+      // Floating-point number.
       self.0.next_float()
     } else if let Some(c) = self.0.peek()? {
-      // other character
+      // Other character.
       Ok(Token::new(c, self.0.next_span()?.clone()))
     } else {
-      // end-of-file
+      // End-of-file.
       Ok(Token::new(TokenKind::Eof, self.0.next_span()?.clone()))
     }
   }
 }
 
 token_ast! {
+  /// Macro for referencing ASTs corresponding to tokens.
+  ///
+  /// The [`token_ast`] macro defines ASTs for tokens, and automatically
+  /// implements methods for parsing them.
   macro Token(mod = crate, Kind = TokenKind) {
     [float] => (TokenKind::Float(_), "floating-point"),
     [+] => (TokenKind::Other('+'), _),
@@ -47,6 +67,18 @@ token_ast! {
     [eof] => (TokenKind::Eof, _),
   }
 }
+
+// EBNF of arithmetic expression:
+//
+// Expr    ::= AddExpr EOF;
+// AddExpr ::= MulExpr {AddOps MulExpr};
+// AddOps  ::= "+" | "-";
+// MulExpr ::= Value {MulOps Value};
+// MulOps  ::= "*" | "/" | "%";
+// Value   ::= FLOAT | "-" Value | "(" AddExpr ")";
+//
+// So we define the following ASTs, and implement there parsers by deriving
+// the `Parse` trait.
 
 #[derive(Parse)]
 #[token(Token)]
@@ -81,6 +113,8 @@ enum Value {
   Neg(Token![-], Box<Self>),
   Paren(Token![lpr], Box<AddExpr>, Token![rpr]),
 }
+
+// Some implementations for calculating the parsed expression.
 
 trait Calculate {
   fn calc(&self) -> Result<f64>;
@@ -134,9 +168,14 @@ impl Calculate for Value {
 }
 
 fn main() -> Result<()> {
+  // Create a reader and a lexer.
   let reader = Reader::from_stdin();
   let lexer = Lexer(reader);
+  // Create a token buffer for parsing.
+  // Token buffer can temporarily hold tokens to help the parser perform
+  // some look-ahead operations.
   let mut tokens = TokenBuffer::new(lexer);
+  // Parse and calculate expression, and print the result.
   println!("{}", tokens.parse::<Expr>()?.calc()?);
   Ok(())
 }
