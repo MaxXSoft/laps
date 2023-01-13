@@ -32,7 +32,7 @@ jobs:
     timeout-minutes: 30
     strategy:
       matrix:
-        example-name: ['clike']
+        example-name: ['sexp', 'calc', 'json', 'clike']
 
     steps:
     - name: Checkout laps
