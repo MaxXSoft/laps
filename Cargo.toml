@@ -16,6 +16,9 @@ keywords = ["parser", "lexer", "ast"]
 readme = "README.md"
 license = "MIT OR Apache-2.0"
 
+[package.metadata.docs.rs]
+features = ["macros"]
+
 [features]
 default = ["logger"]
 # Enable the front-end logger instead of returning error messages as strings.
