@@ -83,11 +83,7 @@ enum Statement {
 
 #[derive(Parse)]
 #[token(Token)]
-struct SExp {
-  _lpr: Token![lpr],
-  _elems: Vec<Elem>,
-  _rpr: Token![rpr],
-}
+struct SExp(Token![lpr], Vec<Elem>, Token![rpr]);
 
 #[derive(Parse)]
 #[token(Token)]
