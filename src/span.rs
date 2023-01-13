@@ -37,6 +37,8 @@ use std::rc::Rc;
 use colored::{Color, Colorize};
 #[cfg(feature = "logger")]
 use std::{fmt::Write, fs::File, io::BufRead, io::BufReader, io::Result as IoResult};
+#[cfg(feature = "logger")]
+use unicode_width::UnicodeWidthChar;
 
 #[cfg(feature = "macros")]
 pub use laps_macros::Spanned;
@@ -106,23 +108,39 @@ macro_rules! get_line_str {
   };
   ($line:expr, $col:expr) => {{
     let line = $line.map_or_else(|| Ok("".into()), |r| r.map_err(|_| fmt::Error))?;
-    let col = $col as usize;
-    let tabs = (&line[..col]).matches('\t').count();
+    let count = line
+      .chars()
+      .take($col as usize)
+      .map(|c| match c {
+        '\t' => Span::TAB_WIDTH,
+        _ => c.width().unwrap_or(0),
+      })
+      .fold(0, |x, y| x + y);
     (
       line.replace('\t', &format!("{:w$}", "", w = Span::TAB_WIDTH)),
-      col + tabs * (Span::TAB_WIDTH - 1),
+      count,
     )
   }};
   ($line:expr, $col1:expr, $col2:expr) => {{
     let line = $line.map_or_else(|| Ok("".into()), |r| r.map_err(|_| fmt::Error))?;
     let col1 = $col1 as usize;
     let col2 = $col2 as usize;
-    let tabs1 = (&line[..col1]).matches('\t').count();
-    let tabs2 = tabs1 + (&line[col1..col2]).matches('\t').count();
+    let mut iter = line.chars().map(|c| match c {
+      '\t' => Span::TAB_WIDTH,
+      _ => c.width().unwrap_or(0),
+    });
+    let mut count1 = 0;
+    for _ in 0..col1 {
+      count1 += iter.next().unwrap();
+    }
+    let mut count2 = count1;
+    for _ in col1..col2 {
+      count2 += iter.next().unwrap();
+    }
     (
       line.replace('\t', &format!("{:w$}", "", w = Span::TAB_WIDTH)),
-      col1 + tabs1 * (Span::TAB_WIDTH - 1),
-      col2 + tabs2 * (Span::TAB_WIDTH - 1),
+      count1,
+      count2,
     )
   }};
 }
