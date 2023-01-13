@@ -9,7 +9,7 @@ documentation = "https://docs.rs/laps_macros"
 categories = ["parsing", "development-tools::procedural-macro-helpers"]
 keywords = ["laps", "parser", "lexer", "derive", "proc_macro"]
 readme = "README.md"
-license = "GPL-3.0"
+license = "MIT OR Apache-2.0"
 
 [lib]
 proc-macro = true
