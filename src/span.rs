@@ -33,16 +33,16 @@ use std::fmt::{self, Arguments};
 use std::path::Path;
 use std::rc::Rc;
 
-#[cfg(not(feature = "no-logger"))]
+#[cfg(feature = "logger")]
 use colored::{Color, Colorize};
-#[cfg(not(feature = "no-logger"))]
+#[cfg(feature = "logger")]
 use std::{fmt::Write, fs::File, io::BufRead, io::BufReader, io::Result as IoResult};
 
 #[cfg(feature = "macros")]
 pub use laps_macros::Spanned;
 
 /// The type of error returned by logger methods of [`Span`].
-#[cfg(feature = "no-logger")]
+#[cfg(not(feature = "logger"))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Error {
   /// Normal error.
@@ -52,7 +52,7 @@ pub enum Error {
 }
 
 /// The type of error returned by logger methods of [`Span`].
-#[cfg(not(feature = "no-logger"))]
+#[cfg(feature = "logger")]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Error {
   /// Normal error.
@@ -63,13 +63,13 @@ pub enum Error {
 
 impl Error {
   /// Returns `true` if the current error is fatal.
-  #[cfg(feature = "no-logger")]
+  #[cfg(not(feature = "logger"))]
   pub fn is_fatal(&self) -> bool {
     matches!(self, Self::Fatal(..))
   }
 
   /// Returns `true` if the current error is fatal.
-  #[cfg(not(feature = "no-logger"))]
+  #[cfg(feature = "logger")]
   pub fn is_fatal(&self) -> bool {
     matches!(self, Self::Fatal)
   }
@@ -97,7 +97,7 @@ pub struct Span {
 }
 
 /// Gets the string of the given line.
-#[cfg(not(feature = "no-logger"))]
+#[cfg(feature = "logger")]
 macro_rules! get_line_str {
   ($line:expr) => {
     $line
@@ -129,7 +129,7 @@ macro_rules! get_line_str {
 
 impl Span {
   /// The column width occupied by the tab character.
-  #[cfg(not(feature = "no-logger"))]
+  #[cfg(feature = "logger")]
   const TAB_WIDTH: usize = 2;
 
   /// Creates a new span.
@@ -146,7 +146,7 @@ impl Span {
   }
 
   /// Logs normal error with no span provided.
-  #[cfg(feature = "no-logger")]
+  #[cfg(not(feature = "logger"))]
   pub fn log_raw_error(&self, args: Arguments) -> Error {
     // update error number
     self.status.errors.set(self.status.errors.get() + 1);
@@ -154,7 +154,7 @@ impl Span {
   }
 
   /// Logs normal error with no span provided.
-  #[cfg(not(feature = "no-logger"))]
+  #[cfg(feature = "logger")]
   pub fn log_raw_error(&self, args: Arguments) -> Error {
     // update error number
     self.status.errors.set(self.status.errors.get() + 1);
@@ -164,7 +164,7 @@ impl Span {
   }
 
   /// Logs fatal error with no span provided.
-  #[cfg(feature = "no-logger")]
+  #[cfg(not(feature = "logger"))]
   pub fn log_raw_fatal_error(&self, args: Arguments) -> Error {
     // update error number
     self.status.errors.set(self.status.errors.get() + 1);
@@ -172,7 +172,7 @@ impl Span {
   }
 
   /// Logs fatal error with no span provided.
-  #[cfg(not(feature = "no-logger"))]
+  #[cfg(feature = "logger")]
   pub fn log_raw_fatal_error(&self, args: Arguments) -> Error {
     // update error number
     self.status.errors.set(self.status.errors.get() + 1);
@@ -182,14 +182,14 @@ impl Span {
   }
 
   /// Logs warning with no span provided.
-  #[cfg(feature = "no-logger")]
+  #[cfg(not(feature = "logger"))]
   pub fn log_raw_warning(&self, _: Arguments) {
     // update warning number
     self.status.warnings.set(self.status.warnings.get() + 1);
   }
 
   /// Logs warning with no span provided.
-  #[cfg(not(feature = "no-logger"))]
+  #[cfg(feature = "logger")]
   pub fn log_raw_warning(&self, args: Arguments) {
     // update warning number
     self.status.warnings.set(self.status.warnings.get() + 1);
@@ -198,11 +198,11 @@ impl Span {
   }
 
   /// Logs summary information (total error/warning number).
-  #[cfg(feature = "no-logger")]
+  #[cfg(not(feature = "logger"))]
   pub fn log_summary(&self) {}
 
   /// Logs summary information (total error/warning number).
-  #[cfg(not(feature = "no-logger"))]
+  #[cfg(feature = "logger")]
   pub fn log_summary(&self) {
     let mut msg = String::new();
     let errors = self.status.errors.get();
@@ -241,14 +241,14 @@ impl Span {
   }
 
   /// Logs normal error message.
-  #[cfg(feature = "no-logger")]
+  #[cfg(not(feature = "logger"))]
   pub fn log_error(&self, args: Arguments) -> Error {
     self.log_raw_error(args);
     Error::Normal(self.error_message(args))
   }
 
   /// Logs normal error message.
-  #[cfg(not(feature = "no-logger"))]
+  #[cfg(feature = "logger")]
   pub fn log_error(&self, args: Arguments) -> Error {
     self.log_raw_error(args);
     self.print_file_info(Color::BrightRed);
@@ -256,14 +256,14 @@ impl Span {
   }
 
   /// Logs fatal error message.
-  #[cfg(feature = "no-logger")]
+  #[cfg(not(feature = "logger"))]
   pub fn log_fatal_error(&self, args: Arguments) -> Error {
     self.log_raw_error(args);
     Error::Fatal(self.error_message(args))
   }
 
   /// Logs fatal error message.
-  #[cfg(not(feature = "no-logger"))]
+  #[cfg(feature = "logger")]
   pub fn log_fatal_error(&self, args: Arguments) -> Error {
     self.log_raw_error(args);
     self.print_file_info(Color::BrightRed);
@@ -271,13 +271,13 @@ impl Span {
   }
 
   /// Logs warning message.
-  #[cfg(feature = "no-logger")]
+  #[cfg(not(feature = "logger"))]
   pub fn log_warning(&self, args: Arguments) {
     self.log_raw_warning(args);
   }
 
   /// Logs warning message.
-  #[cfg(not(feature = "no-logger"))]
+  #[cfg(feature = "logger")]
   pub fn log_warning(&self, args: Arguments) {
     self.log_raw_warning(args);
     self.print_file_info(Color::Yellow);
@@ -383,13 +383,13 @@ impl Span {
   }
 
   /// Returns the error message.
-  #[cfg(feature = "no-logger")]
+  #[cfg(not(feature = "logger"))]
   fn error_message(&self, args: Arguments) -> String {
     format!("{}:{}: {args}", self.status.file_type, self.start)
   }
 
   /// Prints the file information.
-  #[cfg(not(feature = "no-logger"))]
+  #[cfg(feature = "logger")]
   fn print_file_info(&self, color: Color) {
     let file_type = &self.status.file_type;
     eprintln!("  {} {file_type}:{}", "at".blue(), self.start);
@@ -412,7 +412,7 @@ impl Span {
   /// Prints the single line information.
   ///
   /// Used by method `print_file_info`.
-  #[cfg(not(feature = "no-logger"))]
+  #[cfg(feature = "logger")]
   fn print_single_line_info<T>(&self, lines: &mut T, color: Color) -> fmt::Result
   where
     T: Iterator<Item = IoResult<String>>,
@@ -435,7 +435,7 @@ impl Span {
   /// Prints the multi-line information.
   ///
   /// Used by method `print_file_info`.
-  #[cfg(not(feature = "no-logger"))]
+  #[cfg(feature = "logger")]
   fn print_multi_line_info<T>(&self, lines: &mut T, color: Color) -> fmt::Result
   where
     T: Iterator<Item = IoResult<String>>,
