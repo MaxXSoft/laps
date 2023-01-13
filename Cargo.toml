@@ -14,7 +14,7 @@ documentation = "https://docs.rs/laps"
 categories = ["parsing"]
 keywords = ["parser", "lexer", "ast"]
 readme = "README.md"
-license = "GPL-3.0"
+license = "MIT OR Apache-2.0"
 
 [features]
 default = ["logger"]
