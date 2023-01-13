@@ -9,7 +9,7 @@
 //! [S-expression](https://en.wikipedia.org/wiki/S-expression):
 //!
 #![cfg_attr(not(feature = "macros"), doc = " ```ignore")]
-#![cfg_attr(feature = "macros", doc = " ```no_run")]
+#![cfg_attr(feature = "macros", doc = " ```")]
 //! # fn main() {}
 //! use laps::prelude::*;
 //!
@@ -55,7 +55,7 @@
 //! (or actually [CSTs](https://en.wikipedia.org/wiki/Parse_tree)):
 //!
 #![cfg_attr(not(feature = "macros"), doc = " ```ignore")]
-#![cfg_attr(feature = "macros", doc = " ```no_run")]
+#![cfg_attr(feature = "macros", doc = " ```")]
 //! # fn main() {}
 //! # use laps::prelude::*;
 //! # #[token_kind]
@@ -108,11 +108,7 @@
 //!
 //! #[derive(Parse)]
 //! #[token(Token)]
-//! struct SExp {
-//!   _lpr: Token![lpr],
-//!   _elems: Vec<Elem>,
-//!   _rpr: Token![rpr],
-//! }
+//! struct SExp(Token![lpr], Vec<Elem>, Token![rpr]);
 //!
 //! #[derive(Parse)]
 //! #[token(Token)]
