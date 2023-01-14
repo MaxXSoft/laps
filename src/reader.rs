@@ -17,14 +17,17 @@ use std::path::Path;
 use std::str::{from_utf8, from_utf8_unchecked};
 
 /// Size of the byte buffer.
-const BUFFER_SIZE: usize = 1024;
+const BYTE_BUFFER_SIZE: usize = 1024;
 
 /// A generic UTF-8 character reader for lexers.
+///
+/// The generic parameter `BUFFER_SIZE` specifies the size of the internal
+/// buffer of [`Reader`].
 ///
 /// [`Reader`] always tries to read UTF-8 characters from the stream.
 /// If there are no valid UTF-8 characters, [`Reader`] will return a
 /// fatal error ([`Error::Fatal`](crate::span::Error::Fatal)).
-pub struct Reader<T> {
+pub struct Reader<T, const BUFFER_SIZE: usize = BYTE_BUFFER_SIZE> {
   reader: T,
   span: Span,
 
@@ -38,7 +41,7 @@ pub struct Reader<T> {
   byte_buf_offset: usize,
 }
 
-impl<T> Reader<T> {
+impl<T, const BUFFER_SIZE: usize> Reader<T, BUFFER_SIZE> {
   /// Creates a new reader.
   fn new(reader: T, file_type: FileType) -> Self {
     Self {
@@ -99,13 +102,16 @@ impl<T> Reader<T> {
 }
 
 /// A generic byte reader for lexers.
-pub struct ByteReader<T> {
+///
+/// The generic parameter `BUFFER_SIZE` specifies the size of the internal
+/// buffer of [`ByteReader`].
+pub struct ByteReader<T, const BUFFER_SIZE: usize = BYTE_BUFFER_SIZE> {
   reader: T,
   span: Span,
   char_buf: Vec<char>,
 }
 
-impl<T> ByteReader<T> {
+impl<T, const BUFFER_SIZE: usize> ByteReader<T, BUFFER_SIZE> {
   /// Creates a new reader.
   fn new(reader: T, file_type: FileType) -> Self {
     Self {
