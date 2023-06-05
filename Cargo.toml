@@ -32,6 +32,9 @@ unicode-xid = "0.2.4"
 laps_macros = { path = "./laps_macros", version = "0.0.2", optional = true }
 unicode-width = "0.1.10"
 
+[dev-dependencies]
+regex-syntax = "0.7.2"
+
 [[example]]
 name = "sexp"
 required-features = ["macros"]
