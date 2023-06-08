@@ -2,6 +2,7 @@ use regex_syntax::hir::{Class, Hir, HirKind, Literal, Repetition};
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::iter::{once, repeat};
+use std::str::from_utf8;
 use std::sync::{Mutex, MutexGuard, OnceLock};
 
 /// The next state ID.
@@ -175,6 +176,7 @@ impl FiniteAutomaton {
 /// Possible errors during the creation of the finite automaton.
 #[derive(Clone, Copy, Debug)]
 pub enum Error {
+  InvalidUtf8,
   UnsupportedRegex(&'static str),
   MatchesNothing,
 }
@@ -182,6 +184,7 @@ pub enum Error {
 impl fmt::Display for Error {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
     match self {
+      Self::InvalidUtf8 => write!(f, "invalid UTF-8 string in regex"),
       Self::UnsupportedRegex(e) => write!(f, "{e}"),
       Self::MatchesNothing => write!(f, "the regex matches nothing"),
     }
@@ -197,24 +200,46 @@ pub struct NFA {
 impl NFA {
   /// Creates a new NFA from [`Hir`].
   pub fn new(hir: Hir) -> Result<Self, Error> {
-    Self::new_from_hir_kind(hir.into_kind())
+    let is_utf8 = hir.properties().is_utf8();
+    Self::new_from_hir_kind(hir.into_kind(), is_utf8)
   }
 
   /// Creates a new NFA from [`HirKind`].
-  fn new_from_hir_kind(kind: HirKind) -> Result<Self, Error> {
+  fn new_from_hir_kind(kind: HirKind, is_utf8: bool) -> Result<Self, Error> {
     match kind {
       HirKind::Empty => Ok(Self::new_empty_nfa()),
+      HirKind::Literal(Literal(bs)) if is_utf8 => from_utf8(&bs)
+        .map(Self::new_str_nfa)
+        .map_err(|_| Error::InvalidUtf8),
       HirKind::Literal(Literal(bs)) => Ok(Self::new_bytes_nfa(&bs)),
+      HirKind::Class(Class::Bytes(b)) if is_utf8 => b
+        .ranges()
+        .iter()
+        .flat_map(|r| (r.start()..=r.end()).map(|b| Self::new_char_nfa(b as char)))
+        .reduce(|l, r| Self::union(l, r))
+        .ok_or(Error::MatchesNothing),
       HirKind::Class(Class::Bytes(b)) => b
         .ranges()
         .iter()
-        .flat_map(|r| (r.start()..=r.end()).map(|b| Self::new_byte_nfa(b)))
+        .flat_map(|r| (r.start()..=r.end()).map(Self::new_byte_nfa))
+        .reduce(|l, r| Self::union(l, r))
+        .ok_or(Error::MatchesNothing),
+      HirKind::Class(Class::Unicode(u)) if is_utf8 => u
+        .ranges()
+        .iter()
+        .flat_map(|r| (r.start()..=r.end()).map(Self::new_char_nfa))
         .reduce(|l, r| Self::union(l, r))
         .ok_or(Error::MatchesNothing),
       HirKind::Class(Class::Unicode(u)) => u
         .ranges()
         .iter()
-        .flat_map(|r| (r.start()..=r.end()).map(|c| Self::new_char_nfa(c)))
+        .flat_map(|r| {
+          (r.start()..=r.end()).map(|c| {
+            let mut bs = [0; 4];
+            let len = c.encode_utf8(&mut bs).len();
+            Self::new_bytes_nfa(&bs[..len])
+          })
+        })
         .reduce(|l, r| Self::union(l, r))
         .ok_or(Error::MatchesNothing),
       HirKind::Look(_) => Err(Error::UnsupportedRegex(
@@ -225,12 +250,15 @@ impl NFA {
       )),
       HirKind::Repetition(Repetition { min, max, sub, .. }) if min != 0 => {
         let rep1 = Self::new_n_repeats(*sub.clone(), min as usize)?;
-        let rep2 = Self::new_from_hir_kind(HirKind::Repetition(Repetition {
-          min: 0,
-          max: max.map(|m| m - min),
-          greedy: false,
-          sub,
-        }))?;
+        let rep2 = Self::new_from_hir_kind(
+          HirKind::Repetition(Repetition {
+            min: 0,
+            max: max.map(|m| m - min),
+            greedy: false,
+            sub,
+          }),
+          is_utf8,
+        )?;
         Ok(Self::concat(rep1, rep2))
       }
       HirKind::Repetition(Repetition {
@@ -276,39 +304,51 @@ impl NFA {
       .ok_or(Error::MatchesNothing)?
   }
 
-  /// Creates a new NFA which matches a empty string.
-  fn new_empty_nfa() -> Self {
+  /// Creates a new NFAA which matches the given edge.
+  fn new_nfa_with_edge(edge: Edge) -> Self {
     let mut fa = FiniteAutomaton::new();
     let fs = fa.add_final_state();
-    fa.init_mut().add(Edge::Empty, fs);
+    fa.init_mut().add(edge, fs);
     Self { fa }
+  }
+
+  /// Creates a new NFA which matches a empty string.
+  fn new_empty_nfa() -> Self {
+    Self::new_nfa_with_edge(Edge::Empty)
   }
 
   /// Creates a new NFA which matches the given byte.
   fn new_byte_nfa(b: u8) -> Self {
-    let mut fa = FiniteAutomaton::new();
-    let fs = fa.add_final_state();
-    fa.init_mut().add(Edge::Byte(b), fs);
-    Self { fa }
+    Self::new_nfa_with_edge(Edge::Byte(b))
   }
 
   /// Creates a new NFA which matches the given bytes.
   fn new_bytes_nfa(bs: &[u8]) -> Self {
     let mut fa = FiniteAutomaton::new();
-    let s = bs.iter().fold(fa.init_id(), |s, b| {
+    let id = bs.iter().fold(fa.init_id(), |id, b| {
       let cur = fa.add_state();
-      fa.state_mut(s).unwrap().add(Edge::Byte(*b), cur);
+      fa.state_mut(id).unwrap().add(Edge::Byte(*b), cur);
       cur
     });
-    fa.set_final_state(s);
+    fa.set_final_state(id);
     Self { fa }
   }
 
   /// Creates a new NFA which matches the given char.
   fn new_char_nfa(c: char) -> Self {
-    let mut buf = [0; 4];
-    let len = c.encode_utf8(&mut buf).len();
-    Self::new_bytes_nfa(&buf[..len])
+    Self::new_nfa_with_edge(Edge::Char(c))
+  }
+
+  /// Creates a new NFA which matches the given string.
+  fn new_str_nfa(s: &str) -> Self {
+    let mut fa = FiniteAutomaton::new();
+    let id = s.chars().fold(fa.init_id(), |id, c| {
+      let cur = fa.add_state();
+      fa.state_mut(id).unwrap().add(Edge::Char(c), cur);
+      cur
+    });
+    fa.set_final_state(id);
+    Self { fa }
   }
 
   /// Unions the given two NFAs into a new NFA.
