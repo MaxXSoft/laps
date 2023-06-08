@@ -224,7 +224,7 @@ impl<S> NFA<S> {
         ..
       }) => once(Ok(Self::new_empty_nfa()))
         .chain((1..=max as usize).map(|n| Self::new_n_repeats(*sub.clone(), n)))
-        .reduce(|l, r| Ok(Self::union(l?, r?)))
+        .reduce(|l, r| Ok(Self::alter(l?, r?)))
         .ok_or(Error::MatchesNothing)?,
       HirKind::Repetition(Repetition { max: None, sub, .. }) => {
         let mut nfa = Self::new(*sub)?;
@@ -247,7 +247,7 @@ impl<S> NFA<S> {
       HirKind::Alternation(a) => a
         .into_iter()
         .map(Self::new)
-        .reduce(|l, r| Ok(Self::union(l?, r?)))
+        .reduce(|l, r| Ok(Self::alter(l?, r?)))
         .ok_or(Error::MatchesNothing)?,
     }
   }
@@ -277,16 +277,29 @@ impl<S> NFA<S> {
     Self::new_nfa_with_edge(None)
   }
 
-  /// Unions the given two NFAs into a new NFA.
+  /// Creates an alternation of the given two NFAs.
   ///
-  /// The new NFA has only one final state.
-  pub fn union(mut nfa1: Self, mut nfa2: Self) -> Self {
+  /// The returned NFA has only one final state.
+  pub fn alter(mut nfa1: Self, mut nfa2: Self) -> Self {
     let fs1 = nfa1.normalize();
     nfa1.fa.init_mut().add(None, nfa2.fa.init_id());
     for id in nfa2.fa.finals().clone() {
       nfa2.fa.state_mut(id).unwrap().add(None, fs1);
     }
     nfa1.fa.union(nfa2.fa);
+    nfa1
+  }
+
+  /// Unions the given two NFAs into a new NFA.
+  ///
+  /// The returned NFA has multiple final states.
+  pub fn union(mut nfa1: Self, nfa2: Self) -> Self {
+    nfa1.fa.init_mut().add(None, nfa2.fa.init_id());
+    let finals = nfa2.fa.finals().clone();
+    nfa1.fa.union(nfa2.fa);
+    for id in finals {
+      nfa1.fa.set_final_state(id);
+    }
     nfa1
   }
 
@@ -427,13 +440,13 @@ impl NFAHelper for NFA<char> {
         .ranges()
         .iter()
         .flat_map(|r| (r.start()..=r.end()).map(|b| Self::new_char_nfa(b as char)))
-        .reduce(|l, r| Self::union(l, r))
+        .reduce(|l, r| Self::alter(l, r))
         .ok_or(Error::MatchesNothing),
       Class::Unicode(u) => u
         .ranges()
         .iter()
         .flat_map(|r| (r.start()..=r.end()).map(Self::new_char_nfa))
-        .reduce(|l, r| Self::union(l, r))
+        .reduce(|l, r| Self::alter(l, r))
         .ok_or(Error::MatchesNothing),
     }
   }
@@ -458,7 +471,7 @@ impl NFAHelper for NFA<u8> {
         .ranges()
         .iter()
         .flat_map(|r| (r.start()..=r.end()).map(Self::new_byte_nfa))
-        .reduce(|l, r| Self::union(l, r))
+        .reduce(|l, r| Self::alter(l, r))
         .ok_or(Error::MatchesNothing),
       Class::Unicode(u) => u
         .ranges()
@@ -470,7 +483,7 @@ impl NFAHelper for NFA<u8> {
             Self::new_bytes_nfa(&bs[..len])
           })
         })
-        .reduce(|l, r| Self::union(l, r))
+        .reduce(|l, r| Self::alter(l, r))
         .ok_or(Error::MatchesNothing),
     }
   }
@@ -484,12 +497,18 @@ pub struct DFA<S> {
 
 impl<S> DFA<S> {
   /// Creates a new DFA from the given NFA.
-  pub fn new(nfa: NFA<S>) -> Self {
+  pub fn new(nfa: NFA<S>) -> Self
+  where
+    S: Clone,
+  {
     todo!()
   }
 }
 
-impl<S> From<NFA<S>> for DFA<S> {
+impl<S> From<NFA<S>> for DFA<S>
+where
+  S: Clone,
+{
   fn from(nfa: NFA<S>) -> Self {
     Self::new(nfa)
   }
