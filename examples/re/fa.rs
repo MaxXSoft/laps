@@ -1,6 +1,7 @@
 use regex_syntax::hir::{Class, Hir, HirKind, Literal, Repetition};
 use std::collections::{HashMap, HashSet};
 use std::fmt;
+use std::hash::Hash;
 use std::iter::{once, repeat};
 use std::str::from_utf8;
 use std::sync::{Mutex, MutexGuard, OnceLock};
@@ -24,7 +25,7 @@ fn get_and_update_state_id() -> usize {
   cur
 }
 
-/// An edge of the finite automaton with symbol type [`S`].
+/// An edge of the finite automaton with symbol type `S`.
 #[derive(Debug)]
 pub enum Edge<S> {
   /// Empty edge (epsillon).
@@ -168,6 +169,23 @@ impl<S> FiniteAutomaton<S> {
     } else {
       self.finals().iter().next().copied()
     }
+  }
+
+  /// Returns the symbol set of the current finite automaton.
+  fn symbol_set(&self) -> HashSet<S>
+  where
+    S: Clone + Hash + Eq,
+  {
+    self
+      .states
+      .values()
+      .flat_map(|s| {
+        s.outs().iter().filter_map(|(e, _)| match e {
+          Edge::Empty => None,
+          Edge::Symbol(s) => Some(s.clone()),
+        })
+      })
+      .collect()
   }
 }
 
