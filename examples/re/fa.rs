@@ -34,15 +34,15 @@ pub enum Edge<S> {
   Symbol(S),
 }
 
-/// A state of the finite automaton.
+/// A state of the finite automaton with edge type `E`.
 #[derive(Debug)]
-pub struct State<S> {
-  outs: Vec<(Edge<S>, usize)>,
+pub struct State<E> {
+  outs: Vec<(E, usize)>,
 }
 
-impl<S> State<S> {
+impl<E> State<E> {
   /// Returns the output edges.
-  pub fn outs(&self) -> &[(Edge<S>, usize)] {
+  pub fn outs(&self) -> &[(E, usize)] {
     &self.outs
   }
 
@@ -52,20 +52,20 @@ impl<S> State<S> {
   }
 
   /// Adds a new edge to the current state.
-  fn add(&mut self, edge: Edge<S>, state: usize) {
+  fn add(&mut self, edge: E, state: usize) {
     self.outs.push((edge, state));
   }
 }
 
 /// A finite automaton.
 #[derive(Debug)]
-struct FiniteAutomaton<S> {
-  states: HashMap<usize, State<S>>,
+struct FiniteAutomaton<E> {
+  states: HashMap<usize, State<E>>,
   init: usize,
   finals: HashSet<usize>,
 }
 
-impl<S> FiniteAutomaton<S> {
+impl<E> FiniteAutomaton<E> {
   /// Creates an empty finite automaton.
   fn new() -> Self {
     let init = get_and_update_state_id();
@@ -126,27 +126,32 @@ impl<S> FiniteAutomaton<S> {
     self.states.extend(fa.states);
   }
 
+  /// Returns a reference to the state map.
+  fn states(&self) -> &HashMap<usize, State<E>> {
+    &self.states
+  }
+
   /// Returns a reference to the given state.
   ///
   /// Returns `None` if the given state does not exist.
-  fn state(&self, id: usize) -> Option<&State<S>> {
+  fn state(&self, id: usize) -> Option<&State<E>> {
     self.states.get(&id)
   }
 
   /// Returns a mutable reference to the given state.
   ///
   /// Returns `None` if the given state does not exist.
-  fn state_mut(&mut self, id: usize) -> Option<&mut State<S>> {
+  fn state_mut(&mut self, id: usize) -> Option<&mut State<E>> {
     self.states.get_mut(&id)
   }
 
   /// Returns a reference to the initial state.
-  fn init(&self) -> &State<S> {
+  fn init(&self) -> &State<E> {
     self.states.get(&self.init).unwrap()
   }
 
   /// Returns a mutable reference to the given initial state.
-  fn init_mut(&mut self) -> &mut State<S> {
+  fn init_mut(&mut self) -> &mut State<E> {
     self.states.get_mut(&self.init).unwrap()
   }
 
@@ -169,23 +174,6 @@ impl<S> FiniteAutomaton<S> {
     } else {
       self.finals().iter().next().copied()
     }
-  }
-
-  /// Returns the symbol set of the current finite automaton.
-  fn symbol_set(&self) -> HashSet<S>
-  where
-    S: Clone + Hash + Eq,
-  {
-    self
-      .states
-      .values()
-      .flat_map(|s| {
-        s.outs().iter().filter_map(|(e, _)| match e {
-          Edge::Empty => None,
-          Edge::Symbol(s) => Some(s.clone()),
-        })
-      })
-      .collect()
   }
 }
 
@@ -210,7 +198,7 @@ impl fmt::Display for Error {
 /// A nondeterministic finite automaton (NFA).
 #[derive(Debug)]
 pub struct NFA<S> {
-  fa: FiniteAutomaton<S>,
+  fa: FiniteAutomaton<Edge<S>>,
 }
 
 impl<S> NFA<S> {
@@ -339,6 +327,24 @@ impl<S> NFA<S> {
       self.fa.set_normal_state(id);
     }
     fs
+  }
+
+  /// Returns the symbol set of the current NFA.
+  fn symbol_set(&self) -> HashSet<S>
+  where
+    S: Clone + Hash + Eq,
+  {
+    self
+      .fa
+      .states()
+      .values()
+      .flat_map(|s| {
+        s.outs().iter().filter_map(|(e, _)| match e {
+          Edge::Empty => None,
+          Edge::Symbol(s) => Some(s.clone()),
+        })
+      })
+      .collect()
   }
 }
 
