@@ -25,15 +25,6 @@ fn get_and_update_state_id() -> usize {
   cur
 }
 
-/// An edge of the finite automaton with symbol type `S`.
-#[derive(Debug)]
-pub enum Edge<S> {
-  /// Empty edge (epsillon).
-  Empty,
-  /// A symbol.
-  Symbol(S),
-}
-
 /// A state of the finite automaton with edge type `E`.
 #[derive(Debug)]
 pub struct State<E> {
@@ -195,10 +186,10 @@ impl fmt::Display for Error {
   }
 }
 
-/// A nondeterministic finite automaton (NFA).
+/// A nondeterministic finite automaton (NFA) with symbol type `S`.
 #[derive(Debug)]
 pub struct NFA<S> {
-  fa: FiniteAutomaton<Edge<S>>,
+  fa: FiniteAutomaton<Option<S>>,
 }
 
 impl<S> NFA<S> {
@@ -242,7 +233,7 @@ impl<S> NFA<S> {
         nfa.fa.set_normal_state(fs);
         // create a edge to the initial state
         let init = nfa.fa.init_id();
-        nfa.fa.state_mut(fs).unwrap().add(Edge::Empty, init);
+        nfa.fa.state_mut(fs).unwrap().add(None, init);
         // set the initial state as a final state
         nfa.fa.set_final_state(init);
         Ok(nfa)
@@ -274,7 +265,7 @@ impl<S> NFA<S> {
   }
 
   /// Creates a new NFA which matches the given edge.
-  fn new_nfa_with_edge(edge: Edge<S>) -> Self {
+  fn new_nfa_with_edge(edge: Option<S>) -> Self {
     let mut fa = FiniteAutomaton::new();
     let fs = fa.add_final_state();
     fa.init_mut().add(edge, fs);
@@ -283,7 +274,7 @@ impl<S> NFA<S> {
 
   /// Creates a new NFA which matches a empty string.
   fn new_empty_nfa() -> Self {
-    Self::new_nfa_with_edge(Edge::Empty)
+    Self::new_nfa_with_edge(None)
   }
 
   /// Unions the given two NFAs into a new NFA.
@@ -291,9 +282,9 @@ impl<S> NFA<S> {
   /// The new NFA has only one final state.
   pub fn union(mut nfa1: Self, mut nfa2: Self) -> Self {
     let fs1 = nfa1.normalize();
-    nfa1.fa.init_mut().add(Edge::Empty, nfa2.fa.init_id());
+    nfa1.fa.init_mut().add(None, nfa2.fa.init_id());
     for id in nfa2.fa.finals().clone() {
-      nfa2.fa.state_mut(id).unwrap().add(Edge::Empty, fs1);
+      nfa2.fa.state_mut(id).unwrap().add(None, fs1);
     }
     nfa1.fa.union(nfa2.fa);
     nfa1
@@ -302,11 +293,7 @@ impl<S> NFA<S> {
   /// Concatinates the given two NFAs into a new NFA.
   pub fn concat(mut nfa1: Self, nfa2: Self) -> Self {
     let fs1 = nfa1.normalize();
-    nfa1
-      .fa
-      .state_mut(fs1)
-      .unwrap()
-      .add(Edge::Empty, nfa2.fa.init_id());
+    nfa1.fa.state_mut(fs1).unwrap().add(None, nfa2.fa.init_id());
     let finals = nfa2.fa.finals().clone();
     nfa1.fa.union(nfa2.fa);
     for id in finals {
@@ -323,7 +310,7 @@ impl<S> NFA<S> {
     let mut finals = finals.iter().copied();
     let fs = finals.next().unwrap();
     for id in finals {
-      self.fa.state_mut(id).unwrap().add(Edge::Empty, fs);
+      self.fa.state_mut(id).unwrap().add(None, fs);
       self.fa.set_normal_state(id);
     }
     fs
@@ -338,12 +325,7 @@ impl<S> NFA<S> {
       .fa
       .states()
       .values()
-      .flat_map(|s| {
-        s.outs().iter().filter_map(|(e, _)| match e {
-          Edge::Empty => None,
-          Edge::Symbol(s) => Some(s.clone()),
-        })
-      })
+      .flat_map(|s| s.outs().iter().filter_map(|(e, _)| e.clone()))
       .collect()
   }
 }
@@ -356,7 +338,7 @@ impl NFA<char> {
 
   /// Creates a new NFA which matches the given char.
   fn new_char_nfa(c: char) -> Self {
-    Self::new_nfa_with_edge(Edge::Symbol(c))
+    Self::new_nfa_with_edge(Some(c))
   }
 
   /// Creates a new NFA which matches the given string.
@@ -364,7 +346,7 @@ impl NFA<char> {
     let mut fa = FiniteAutomaton::new();
     let id = s.chars().fold(fa.init_id(), |id, c| {
       let cur = fa.add_state();
-      fa.state_mut(id).unwrap().add(Edge::Symbol(c), cur);
+      fa.state_mut(id).unwrap().add(Some(c), cur);
       cur
     });
     fa.set_final_state(id);
@@ -388,7 +370,7 @@ impl NFA<u8> {
 
   /// Creates a new NFA which matches the given byte.
   fn new_byte_nfa(b: u8) -> Self {
-    Self::new_nfa_with_edge(Edge::Symbol(b))
+    Self::new_nfa_with_edge(Some(b))
   }
 
   /// Creates a new NFA which matches the given bytes.
@@ -396,7 +378,7 @@ impl NFA<u8> {
     let mut fa = FiniteAutomaton::new();
     let id = bs.iter().fold(fa.init_id(), |id, b| {
       let cur = fa.add_state();
-      fa.state_mut(id).unwrap().add(Edge::Symbol(*b), cur);
+      fa.state_mut(id).unwrap().add(Some(*b), cur);
       cur
     });
     fa.set_final_state(id);
@@ -494,7 +476,7 @@ impl NFAHelper for NFA<u8> {
   }
 }
 
-/// A deterministic finite automaton (DFA).
+/// A deterministic finite automaton (DFA) with symbol type `S`.
 #[derive(Debug)]
 pub struct DFA<S> {
   fa: FiniteAutomaton<S>,
