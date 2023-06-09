@@ -1,5 +1,5 @@
 use regex_syntax::hir::{Class, Hir, HirKind, Literal, Repetition};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fmt;
 use std::hash::Hash;
 use std::iter::{once, repeat};
@@ -213,7 +213,7 @@ impl<S> NFA<S> {
         let rep2 = Self::new_from_hir_kind(HirKind::Repetition(Repetition {
           min: 0,
           max: max.map(|m| m - min),
-          greedy: false,
+          greedy: true,
           sub,
         }))?;
         Ok(Self::concat(rep1, rep2))
@@ -302,6 +302,7 @@ impl<S> NFA<S> {
   pub fn concat(mut nfa1: Self, nfa2: Self) -> Self {
     let fs1 = nfa1.normalize();
     nfa1.fa.state_mut(fs1).unwrap().add(None, nfa2.fa.init_id());
+    nfa1.fa.set_normal_state(fs1);
     let finals = nfa2.fa.finals().clone();
     nfa1.fa.union(nfa2.fa);
     for id in finals {
@@ -482,8 +483,8 @@ impl<S> FiniteAutomaton<Option<S>> {
   }
 
   /// Returns the epsilon closure of the given state.
-  pub fn epsilon_closure(&self, id: usize) -> HashSet<usize> {
-    let mut closure = HashSet::from([id]);
+  pub fn epsilon_closure(&self, id: usize) -> BTreeSet<usize> {
+    let mut closure = BTreeSet::from([id]);
     let mut ids = vec![id];
     while let Some(id) = ids.pop() {
       for (e, id) in self.states[&id].outs() {
@@ -497,7 +498,7 @@ impl<S> FiniteAutomaton<Option<S>> {
 
   /// Returns a set of all possible states that can be reached
   /// after accepting symbol `s` on the given states.
-  pub fn state_closure(&self, states: &HashSet<usize>, s: &S) -> HashSet<usize>
+  pub fn state_closure(&self, states: &BTreeSet<usize>, s: &S) -> BTreeSet<usize>
   where
     S: PartialEq,
   {
@@ -515,6 +516,11 @@ impl<S> FiniteAutomaton<Option<S>> {
       .flat_map(|id| self.epsilon_closure(id))
       .collect()
   }
+
+  /// Returns `true` if the given state set contains any final state.
+  pub fn contains_final(&self, states: &BTreeSet<usize>) -> bool {
+    self.finals.iter().any(|id| states.contains(id))
+  }
 }
 
 /// A deterministic finite automaton (DFA) with symbol type `S`.
@@ -527,16 +533,52 @@ impl<S> DFA<S> {
   /// Creates a new DFA from the given NFA.
   pub fn new(nfa: NFA<S>) -> Self
   where
-    S: Clone,
+    S: Clone + Hash + Eq,
   {
-    let fa = FiniteAutomaton::from(nfa);
-    todo!()
+    let nfa = FiniteAutomaton::from(nfa);
+    let syms = nfa.symbol_set();
+    // create DFA, update the initial state
+    let mut fa = FiniteAutomaton::new();
+    let init = nfa.epsilon_closure(nfa.init_id());
+    if nfa.contains_final(&init) {
+      fa.set_final_state(fa.init_id());
+    }
+    // create other states
+    let mut states = vec![init.clone()];
+    let mut ids = HashMap::from([(init, fa.init_id())]);
+    while let Some(cur) = states.pop() {
+      for s in &syms {
+        // get the next state of the current state
+        let next = nfa.state_closure(&cur, s);
+        if next.is_empty() {
+          continue;
+        }
+        // get the ID of the next state
+        let id = if let Some(id) = ids.get(&next) {
+          *id
+        } else {
+          // add a new state
+          let id = if nfa.contains_final(&next) {
+            fa.add_final_state()
+          } else {
+            fa.add_state()
+          };
+          // update states and ID map
+          states.push(next.clone());
+          ids.insert(next, id);
+          id
+        };
+        // add an edge to the next state
+        fa.state_mut(ids[&cur]).unwrap().add(s.clone(), id);
+      }
+    }
+    Self { fa }
   }
 }
 
 impl<S> From<NFA<S>> for DFA<S>
 where
-  S: Clone,
+  S: Clone + Hash + Eq,
 {
   fn from(nfa: NFA<S>) -> Self {
     Self::new(nfa)
