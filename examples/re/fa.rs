@@ -1,5 +1,5 @@
 use regex_syntax::hir::{Class, Hir, HirKind, Literal, Repetition};
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 use std::fmt;
 use std::hash::Hash;
 use std::iter::{once, repeat};
@@ -530,8 +530,20 @@ pub struct DFA<S> {
 }
 
 impl<S> DFA<S> {
-  /// Creates a new DFA from the given NFA.
+  /// Creates a new DFA from the given [`NFA`].
   pub fn new(nfa: NFA<S>) -> Self
+  where
+    S: Clone + Hash + Eq,
+  {
+    let (fa, syms) = Self::new_from_nfa(nfa);
+    let partition = Self::minimize(fa, &syms);
+    Self::rebuild(partition, syms)
+  }
+
+  /// Creates a new DFA from the given [`NFA`].
+  ///
+  /// The created DFA is not minimal.
+  fn new_from_nfa(nfa: NFA<S>) -> (FiniteAutomaton<S>, HashSet<S>)
   where
     S: Clone + Hash + Eq,
   {
@@ -572,7 +584,76 @@ impl<S> DFA<S> {
         fa.state_mut(ids[&cur]).unwrap().add(s.clone(), id);
       }
     }
-    Self { fa }
+    (fa, syms)
+  }
+
+  /// Creates a minimal DFA by the given DFA and symbol set.
+  fn minimize(fa: FiniteAutomaton<S>, syms: &HashSet<S>) -> VecDeque<HashSet<usize>>
+  where
+    S: PartialEq,
+  {
+    // get the initial partition
+    let finals = fa.finals().clone();
+    let others: HashSet<_> = fa
+      .states()
+      .keys()
+      .filter_map(|id| finals.contains(id).then_some(*id))
+      .collect();
+    let mut partition = VecDeque::from([finals, others]);
+    // get new partition until there are no changes
+    let mut num_states = partition.len();
+    loop {
+      for _ in 0..num_states {
+        let states = partition.pop_front().unwrap();
+        // check if can be divided
+        if states.len() <= 1 {
+          partition.push_back(states);
+          continue;
+        }
+        // get a new division
+        let mut division: HashMap<_, HashSet<usize>> = HashMap::new();
+        for id in states {
+          let mut div_id = BTreeSet::new();
+          for s in syms {
+            // get the next state after accepting symbol `s`
+            let next = fa
+              .state(id)
+              .unwrap()
+              .outs()
+              .iter()
+              .find_map(|(e, id)| (e == s).then_some(*id));
+            if let Some(next) = next {
+              // get partition index corresponding to the next state
+              let index = partition
+                .iter()
+                .take(num_states)
+                .find_map(|ids| ids.get(&next).copied());
+              // add the index to division ID set
+              if let Some(index) = index {
+                div_id.insert(index);
+              }
+            }
+          }
+          // update division
+          division.entry(div_id).or_default().insert(id);
+        }
+        // add to the partition
+        for (_, states) in division {
+          partition.push_back(states);
+        }
+      }
+      // check and update the number of states
+      if partition.len() == num_states {
+        break;
+      }
+      num_states = partition.len();
+    }
+    partition
+  }
+
+  /// Rebuilds a DFA by the given partition and symbol set.
+  fn rebuild(partition: VecDeque<HashSet<usize>>, syms: HashSet<S>) -> Self {
+    todo!()
   }
 }
 
