@@ -50,7 +50,7 @@ impl<E> State<E> {
 
 /// A finite automaton.
 #[derive(Debug)]
-struct FiniteAutomaton<E> {
+pub struct FiniteAutomaton<E> {
   states: HashMap<usize, State<E>>,
   init: usize,
   finals: HashSet<usize>,
@@ -58,7 +58,7 @@ struct FiniteAutomaton<E> {
 
 impl<E> FiniteAutomaton<E> {
   /// Creates an empty finite automaton.
-  fn new() -> Self {
+  pub fn new() -> Self {
     let init = get_and_update_state_id();
     Self {
       states: [(init, State::new())].into(),
@@ -70,7 +70,7 @@ impl<E> FiniteAutomaton<E> {
   /// Creates a new state in the current finite automaton.
   ///
   /// Returns the state ID.
-  fn add_state(&mut self) -> usize {
+  pub fn add_state(&mut self) -> usize {
     let id = get_and_update_state_id();
     self.states.insert(id, State::new());
     id
@@ -79,7 +79,7 @@ impl<E> FiniteAutomaton<E> {
   /// Creates a new final state in the current finite automaton.
   ///
   /// Returns the state ID.
-  fn add_final_state(&mut self) -> usize {
+  pub fn add_final_state(&mut self) -> usize {
     let id = self.add_state();
     self.finals.insert(id);
     id
@@ -88,7 +88,7 @@ impl<E> FiniteAutomaton<E> {
   /// Sets the given state as a final state.
   ///
   /// Returns `false` if the given state does not exist.
-  fn set_final_state(&mut self, id: usize) -> bool {
+  pub fn set_final_state(&mut self, id: usize) -> bool {
     if self.states.contains_key(&id) {
       self.finals.insert(id);
       true
@@ -100,7 +100,7 @@ impl<E> FiniteAutomaton<E> {
   /// Sets the given state as a normal state.
   ///
   /// Returns `false` if the given state does not exist.
-  fn set_normal_state(&mut self, id: usize) -> bool {
+  pub fn set_normal_state(&mut self, id: usize) -> bool {
     if self.states.contains_key(&id) {
       self.finals.remove(&id);
       true
@@ -113,53 +113,53 @@ impl<E> FiniteAutomaton<E> {
   ///
   /// The initial state and all final states of the given finite automaton
   /// will be added to the current finite automaton as normal states.
-  fn union(&mut self, fa: Self) {
+  pub fn union(&mut self, fa: Self) {
     self.states.extend(fa.states);
   }
 
   /// Returns a reference to the state map.
-  fn states(&self) -> &HashMap<usize, State<E>> {
+  pub fn states(&self) -> &HashMap<usize, State<E>> {
     &self.states
   }
 
   /// Returns a reference to the given state.
   ///
   /// Returns `None` if the given state does not exist.
-  fn state(&self, id: usize) -> Option<&State<E>> {
+  pub fn state(&self, id: usize) -> Option<&State<E>> {
     self.states.get(&id)
   }
 
   /// Returns a mutable reference to the given state.
   ///
   /// Returns `None` if the given state does not exist.
-  fn state_mut(&mut self, id: usize) -> Option<&mut State<E>> {
+  pub fn state_mut(&mut self, id: usize) -> Option<&mut State<E>> {
     self.states.get_mut(&id)
   }
 
   /// Returns a reference to the initial state.
-  fn init(&self) -> &State<E> {
+  pub fn init(&self) -> &State<E> {
     self.states.get(&self.init).unwrap()
   }
 
   /// Returns a mutable reference to the given initial state.
-  fn init_mut(&mut self) -> &mut State<E> {
+  pub fn init_mut(&mut self) -> &mut State<E> {
     self.states.get_mut(&self.init).unwrap()
   }
 
   /// Returns the ID of the initial state.
-  fn init_id(&self) -> usize {
+  pub fn init_id(&self) -> usize {
     self.init
   }
 
   /// Returns a reference to the ID set of the final states.
-  fn finals(&self) -> &HashSet<usize> {
+  pub fn finals(&self) -> &HashSet<usize> {
     &self.finals
   }
 
   /// Returns the ID of the final state.
   ///
   /// Returns [`None`] if there is no final state or more than one final state.
-  fn final_state_id(&self) -> Option<usize> {
+  pub fn final_state_id(&self) -> Option<usize> {
     if self.finals().len() > 1 {
       None
     } else {
@@ -199,7 +199,7 @@ impl<S> NFA<S> {
     Self: NFAHelper,
   {
     match kind {
-      HirKind::Empty => Ok(Self::new_empty_nfa()),
+      HirKind::Empty => Ok(Self::new_nfa_with_edge(None)),
       HirKind::Literal(l) => Self::new_from_literal(l),
       HirKind::Class(c) => Self::new_from_class(c),
       HirKind::Look(_) => Err(Error::UnsupportedRegex(
@@ -222,7 +222,7 @@ impl<S> NFA<S> {
         max: Some(max),
         sub,
         ..
-      }) => once(Ok(Self::new_empty_nfa()))
+      }) => once(Ok(Self::new_nfa_with_edge(None)))
         .chain((1..=max as usize).map(|n| Self::new_n_repeats(*sub.clone(), n)))
         .reduce(|l, r| Ok(Self::alter(l?, r?)))
         .ok_or(Error::MatchesNothing)?,
@@ -270,11 +270,6 @@ impl<S> NFA<S> {
     let fs = fa.add_final_state();
     fa.init_mut().add(edge, fs);
     Self { fa }
-  }
-
-  /// Creates a new NFA which matches a empty string.
-  fn new_empty_nfa() -> Self {
-    Self::new_nfa_with_edge(None)
   }
 
   /// Creates an alternation of the given two NFAs.
@@ -328,30 +323,12 @@ impl<S> NFA<S> {
     }
     fs
   }
-
-  /// Returns the symbol set of the current NFA.
-  fn symbol_set(&self) -> HashSet<S>
-  where
-    S: Clone + Hash + Eq,
-  {
-    self
-      .fa
-      .states()
-      .values()
-      .flat_map(|s| s.outs().iter().filter_map(|(e, _)| e.clone()))
-      .collect()
-  }
 }
 
 impl NFA<char> {
   /// Creates a new NFA from [`Hir`].
   pub fn new(hir: Hir) -> Result<Self, Error> {
     NFAHelper::new(hir)
-  }
-
-  /// Creates a new NFA which matches the given char.
-  fn new_char_nfa(c: char) -> Self {
-    Self::new_nfa_with_edge(Some(c))
   }
 
   /// Creates a new NFA which matches the given string.
@@ -379,11 +356,6 @@ impl NFA<u8> {
   /// Creates a new NFA from [`Hir`].
   pub fn new(hir: Hir) -> Result<Self, Error> {
     NFAHelper::new(hir)
-  }
-
-  /// Creates a new NFA which matches the given byte.
-  fn new_byte_nfa(b: u8) -> Self {
-    Self::new_nfa_with_edge(Some(b))
   }
 
   /// Creates a new NFA which matches the given bytes.
@@ -439,13 +411,13 @@ impl NFAHelper for NFA<char> {
       Class::Bytes(b) => b
         .ranges()
         .iter()
-        .flat_map(|r| (r.start()..=r.end()).map(|b| Self::new_char_nfa(b as char)))
+        .flat_map(|r| (r.start()..=r.end()).map(|b| Self::new_nfa_with_edge(Some(b as char))))
         .reduce(|l, r| Self::alter(l, r))
         .ok_or(Error::MatchesNothing),
       Class::Unicode(u) => u
         .ranges()
         .iter()
-        .flat_map(|r| (r.start()..=r.end()).map(Self::new_char_nfa))
+        .flat_map(|r| (r.start()..=r.end()).map(|c| Self::new_nfa_with_edge(Some(c))))
         .reduce(|l, r| Self::alter(l, r))
         .ok_or(Error::MatchesNothing),
     }
@@ -470,7 +442,7 @@ impl NFAHelper for NFA<u8> {
       Class::Bytes(b) => b
         .ranges()
         .iter()
-        .flat_map(|r| (r.start()..=r.end()).map(Self::new_byte_nfa))
+        .flat_map(|r| (r.start()..=r.end()).map(|b| Self::new_nfa_with_edge(Some(b))))
         .reduce(|l, r| Self::alter(l, r))
         .ok_or(Error::MatchesNothing),
       Class::Unicode(u) => u
@@ -489,6 +461,62 @@ impl NFAHelper for NFA<u8> {
   }
 }
 
+impl<S> From<NFA<S>> for FiniteAutomaton<Option<S>> {
+  /// Creates a finite automaton from the given [`NFA`].
+  fn from(nfa: NFA<S>) -> Self {
+    nfa.fa
+  }
+}
+
+impl<S> FiniteAutomaton<Option<S>> {
+  /// Returns the symbol set of the current finite automaton.
+  pub fn symbol_set(&self) -> HashSet<S>
+  where
+    S: Clone + Hash + Eq,
+  {
+    self
+      .states()
+      .values()
+      .flat_map(|s| s.outs().iter().filter_map(|(e, _)| e.clone()))
+      .collect()
+  }
+
+  /// Returns the epsilon closure of the given state.
+  pub fn epsilon_closure(&self, id: usize) -> HashSet<usize> {
+    let mut closure = HashSet::from([id]);
+    let mut ids = vec![id];
+    while let Some(id) = ids.pop() {
+      for (e, id) in self.states[&id].outs() {
+        if e.is_none() && closure.insert(*id) {
+          ids.push(*id);
+        }
+      }
+    }
+    closure
+  }
+
+  /// Returns a set of all possible states that can be reached
+  /// after accepting symbol `s` on the given states.
+  pub fn state_closure(&self, states: &HashSet<usize>, s: &S) -> HashSet<usize>
+  where
+    S: PartialEq,
+  {
+    let next_states: HashSet<_> = states
+      .iter()
+      .flat_map(|id| {
+        self.states[id]
+          .outs()
+          .iter()
+          .filter_map(|(e, id)| (e.as_ref() == Some(s)).then_some(*id))
+      })
+      .collect();
+    next_states
+      .into_iter()
+      .flat_map(|id| self.epsilon_closure(id))
+      .collect()
+  }
+}
+
 /// A deterministic finite automaton (DFA) with symbol type `S`.
 #[derive(Debug)]
 pub struct DFA<S> {
@@ -501,6 +529,7 @@ impl<S> DFA<S> {
   where
     S: Clone,
   {
+    let fa = FiniteAutomaton::from(nfa);
     todo!()
   }
 }
