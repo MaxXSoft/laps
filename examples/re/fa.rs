@@ -166,6 +166,14 @@ impl<E> FiniteAutomaton<E> {
       self.finals().iter().next().copied()
     }
   }
+
+  /// Returns `true` if the given state set contains any final state.
+  pub fn contains_final<'a, I>(&self, states: I) -> bool
+  where
+    I: IntoIterator<Item = &'a usize>,
+  {
+    states.into_iter().any(|id| self.finals.contains(id))
+  }
 }
 
 /// Possible errors during the creation of the finite automaton.
@@ -516,11 +524,6 @@ impl<S> FiniteAutomaton<Option<S>> {
       .flat_map(|id| self.epsilon_closure(id))
       .collect()
   }
-
-  /// Returns `true` if the given state set contains any final state.
-  pub fn contains_final(&self, states: &BTreeSet<usize>) -> bool {
-    self.finals.iter().any(|id| states.contains(id))
-  }
 }
 
 /// A deterministic finite automaton (DFA) with symbol type `S`.
@@ -536,8 +539,8 @@ impl<S> DFA<S> {
     S: Clone + Hash + Eq,
   {
     let (fa, syms) = Self::new_from_nfa(nfa);
-    let partition = Self::minimize(fa, &syms);
-    Self::rebuild(partition, syms)
+    let partition = Self::minimize(&fa, &syms);
+    Self::rebuild(fa, syms, partition)
   }
 
   /// Creates a new DFA from the given [`NFA`].
@@ -588,12 +591,12 @@ impl<S> DFA<S> {
   }
 
   /// Creates a minimal DFA by the given DFA and symbol set.
-  fn minimize(fa: FiniteAutomaton<S>, syms: &HashSet<S>) -> VecDeque<HashSet<usize>>
+  fn minimize(fa: &FiniteAutomaton<S>, syms: &HashSet<S>) -> VecDeque<HashSet<usize>>
   where
     S: PartialEq,
   {
     // get the initial partition
-    let finals = fa.finals().clone();
+    let finals: HashSet<_> = fa.finals().clone();
     let others: HashSet<_> = fa
       .states()
       .keys()
@@ -651,9 +654,48 @@ impl<S> DFA<S> {
     partition
   }
 
-  /// Rebuilds a DFA by the given partition and symbol set.
-  fn rebuild(partition: VecDeque<HashSet<usize>>, syms: HashSet<S>) -> Self {
-    todo!()
+  /// Rebuilds a DFA by the given partition.
+  fn rebuild(dfa: FiniteAutomaton<S>, syms: HashSet<S>, partition: VecDeque<HashSet<usize>>) -> Self
+  where
+    S: PartialEq + Clone,
+  {
+    let mut fa = FiniteAutomaton::new();
+    // rebuild mapping of states
+    let partition: Vec<_> = partition
+      .into_iter()
+      .map(|ids| {
+        let id = if dfa.contains_final(&ids) {
+          fa.add_final_state()
+        } else {
+          fa.add_state()
+        };
+        (ids, id)
+      })
+      .collect();
+    let states: HashMap<_, _> = partition
+      .iter()
+      .flat_map(|(ids, cur_id)| ids.iter().map(|id| (*id, *cur_id)))
+      .collect();
+    // rebuild edges
+    for (ids, cur_id) in &partition {
+      let state = fa.state_mut(*cur_id).unwrap();
+      for id in ids {
+        for s in &syms {
+          // get the next state after accepting symbol `s`
+          let next = dfa
+            .state(*id)
+            .unwrap()
+            .outs()
+            .iter()
+            .find_map(|(e, id)| (e == s).then_some(*id));
+          if let Some(next) = next {
+            // add a new edge
+            state.add(s.clone(), states[&next]);
+          }
+        }
+      }
+    }
+    Self { fa }
   }
 }
 
