@@ -37,6 +37,20 @@ impl<E> State<E> {
     &self.outs
   }
 
+  /// Returns ID of the next state after accepting the given edge value `e`.
+  ///
+  /// This method will return only the first matching state.
+  /// Returns [`None`] if no matching state.
+  pub fn next_state(&self, e: &E) -> Option<usize>
+  where
+    E: PartialEq,
+  {
+    self
+      .outs
+      .iter()
+      .find_map(|(edge, id)| (edge == e).then_some(*id))
+  }
+
   /// Creates a new normal state.
   fn new() -> Self {
     Self { outs: Vec::new() }
@@ -124,14 +138,14 @@ impl<E> FiniteAutomaton<E> {
 
   /// Returns a reference to the given state.
   ///
-  /// Returns `None` if the given state does not exist.
+  /// Returns [`None`] if the given state does not exist.
   pub fn state(&self, id: usize) -> Option<&State<E>> {
     self.states.get(&id)
   }
 
   /// Returns a mutable reference to the given state.
   ///
-  /// Returns `None` if the given state does not exist.
+  /// Returns [`None`] if the given state does not exist.
   pub fn state_mut(&mut self, id: usize) -> Option<&mut State<E>> {
     self.states.get_mut(&id)
   }
@@ -620,12 +634,7 @@ impl<S> DFA<S> {
           let mut div_id = BTreeSet::new();
           for s in syms {
             // get the next state after accepting symbol `s`
-            let next = fa
-              .state(*id)
-              .unwrap()
-              .outs()
-              .iter()
-              .find_map(|(e, id)| (e == s).then_some(*id));
+            let next = fa.state(*id).unwrap().next_state(s);
             if let Some(next) = next {
               // get partition index corresponding to the next state
               let index = partition
@@ -691,12 +700,7 @@ impl<S> DFA<S> {
             continue;
           }
           // get the next state after accepting symbol `s`
-          let next = dfa
-            .state(*id)
-            .unwrap()
-            .outs()
-            .iter()
-            .find_map(|(e, id)| (e == s).then_some(*id));
+          let next = dfa.state(*id).unwrap().next_state(s);
           if let Some(next) = next {
             // add a new edge
             state.add(s.clone(), states[&next]);
@@ -706,6 +710,32 @@ impl<S> DFA<S> {
       }
     }
     Self { fa }
+  }
+
+  /// Returns the ID of the initial state.
+  pub fn init_id(&self) -> usize {
+    self.fa.init_id()
+  }
+
+  /// Returns the ID of the next state after
+  /// accepting symbol `s` on the given state.
+  ///
+  /// Returns [`None`] if the given state ID is invalid,
+  /// or the given state can not accept symbol `s`.
+  pub fn next_state(&self, id: usize, s: &S) -> Option<usize>
+  where
+    S: PartialEq,
+  {
+    self
+      .fa
+      .states()
+      .get(&id)
+      .and_then(|state| state.next_state(s))
+  }
+
+  /// Returns `true` if the given state ID corresponds to a final state.
+  pub fn is_final(&self, id: usize) -> bool {
+    self.fa.finals().contains(&id)
   }
 }
 
