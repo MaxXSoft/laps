@@ -600,16 +600,17 @@ impl<S> DFA<S> {
     let others: HashSet<_> = fa
       .states()
       .keys()
-      .filter_map(|id| finals.contains(id).then_some(*id))
+      .filter_map(|id| (!finals.contains(id)).then_some(*id))
       .collect();
     let mut partition = VecDeque::from([finals, others]);
     // get new partition until there are no changes
     let mut num_states = partition.len();
     loop {
       for _ in 0..num_states {
-        let states = partition.pop_front().unwrap();
+        let states = partition.front().unwrap();
         // check if can be divided
         if states.len() <= 1 {
+          let states = partition.pop_front().unwrap();
           partition.push_back(states);
           continue;
         }
@@ -620,7 +621,7 @@ impl<S> DFA<S> {
           for s in syms {
             // get the next state after accepting symbol `s`
             let next = fa
-              .state(id)
+              .state(*id)
               .unwrap()
               .outs()
               .iter()
@@ -638,12 +639,13 @@ impl<S> DFA<S> {
             }
           }
           // update division
-          division.entry(div_id).or_default().insert(id);
+          division.entry(div_id).or_default().insert(*id);
         }
         // add to the partition
         for (_, states) in division {
           partition.push_back(states);
         }
+        partition.pop_front();
       }
       // check and update the number of states
       if partition.len() == num_states {
@@ -664,11 +666,14 @@ impl<S> DFA<S> {
     let partition: Vec<_> = partition
       .into_iter()
       .map(|ids| {
-        let id = if dfa.contains_final(&ids) {
-          fa.add_final_state()
+        let id = if ids.contains(&dfa.init_id()) {
+          fa.init_id()
         } else {
           fa.add_state()
         };
+        if dfa.contains_final(&ids) {
+          fa.set_final_state(id);
+        }
         (ids, id)
       })
       .collect();
