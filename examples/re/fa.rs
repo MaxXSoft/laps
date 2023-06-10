@@ -659,7 +659,7 @@ impl<S> DFA<S> {
   /// Rebuilds a DFA by the given partition.
   fn rebuild(dfa: FiniteAutomaton<S>, syms: HashSet<S>, partition: VecDeque<HashSet<usize>>) -> Self
   where
-    S: PartialEq + Clone,
+    S: Clone + Eq + Hash,
   {
     let mut fa = FiniteAutomaton::new();
     // rebuild mapping of states
@@ -684,8 +684,12 @@ impl<S> DFA<S> {
     // rebuild edges
     for (ids, cur_id) in &partition {
       let state = fa.state_mut(*cur_id).unwrap();
+      let mut added_edges = HashSet::new();
       for id in ids {
         for s in &syms {
+          if added_edges.contains(s) {
+            continue;
+          }
           // get the next state after accepting symbol `s`
           let next = dfa
             .state(*id)
@@ -696,6 +700,7 @@ impl<S> DFA<S> {
           if let Some(next) = next {
             // add a new edge
             state.add(s.clone(), states[&next]);
+            added_edges.insert(s.clone());
           }
         }
       }
