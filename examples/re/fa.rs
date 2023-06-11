@@ -1,10 +1,10 @@
 use regex_syntax::hir::{Class, Hir, HirKind, Literal, Repetition};
 use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
-use std::fmt;
 use std::hash::Hash;
 use std::iter::{once, repeat};
 use std::str::from_utf8;
 use std::sync::{Mutex, MutexGuard, OnceLock};
+use std::{fmt, io};
 
 /// The next state ID.
 static NEXT_STATE_ID: OnceLock<Mutex<usize>> = OnceLock::new();
@@ -180,6 +180,30 @@ impl<S> FiniteAutomaton<S> {
       self.finals().iter().next().copied()
     }
   }
+
+  /// Dumps the current finite automaton to the given writer as Graphviz.
+  pub fn dump<W>(&self, writer: &mut W) -> io::Result<()>
+  where
+    S: fmt::Debug,
+    W: io::Write,
+  {
+    writeln!(writer, "digraph finite_automaton {{")?;
+    writeln!(writer, "  rankdir = LR")?;
+    writeln!(writer, "  node [shape = doublecircle];")?;
+    write!(writer, " ")?;
+    for id in &self.finals {
+      write!(writer, " {id}")?;
+    }
+    writeln!(writer, ";")?;
+    writeln!(writer, "  node [shape = circle];")?;
+    for (id, state) in &self.states {
+      for (s, to) in state.outs() {
+        writeln!(writer, "  {id} -> {to} [label = \"{s:?}\"]")?;
+      }
+    }
+    writeln!(writer, "}}")?;
+    Ok(())
+  }
 }
 
 /// Possible errors during the creation of the finite automaton.
@@ -344,6 +368,15 @@ impl<S> NFA<S> {
   /// Returns [`None`] if there is no final state or more than one final state.
   pub fn final_id(&self) -> Option<usize> {
     self.fa.final_id()
+  }
+
+  /// Dumps the current finite automaton to the given writer as Graphviz.
+  pub fn dump<W>(&self, writer: &mut W) -> io::Result<()>
+  where
+    S: fmt::Debug,
+    W: io::Write,
+  {
+    self.fa.dump(writer)
   }
 }
 
@@ -760,6 +793,15 @@ impl<S> DFA<S> {
   /// final state, otherwise returns [`None`].
   pub fn is_final(&self, id: usize) -> Option<usize> {
     self.final_ids.get(&id).copied()
+  }
+
+  /// Dumps the current finite automaton to the given writer as Graphviz.
+  pub fn dump<W>(&self, writer: &mut W) -> io::Result<()>
+  where
+    S: fmt::Debug,
+    W: io::Write,
+  {
+    self.fa.dump(writer)
   }
 }
 
