@@ -532,7 +532,7 @@ impl<S> FiniteAutomaton<Option<S>> {
     self
       .states()
       .values()
-      .flat_map(|s| s.outs().iter().filter_map(|(e, _)| e.clone()))
+      .flat_map(|s| s.outs().iter().filter_map(|(s, _)| s.clone()))
       .collect()
   }
 
@@ -541,8 +541,8 @@ impl<S> FiniteAutomaton<Option<S>> {
     let mut closure = BTreeSet::from([id]);
     let mut ids = vec![id];
     while let Some(id) = ids.pop() {
-      for (e, id) in self.states[&id].outs() {
-        if e.is_none() && closure.insert(*id) {
+      for (s, id) in self.states[&id].outs() {
+        if s.is_none() && closure.insert(*id) {
           ids.push(*id);
         }
       }
@@ -583,11 +583,11 @@ impl<S> DFA<S> {
   /// Creates a new DFA from the given [`NFA`].
   pub fn new(nfa: NFA<S>) -> Self
   where
-    S: Clone + Hash + Eq,
+    S: Clone + Hash + Eq + Ord,
   {
-    let (fa, syms) = Self::new_from_nfa(nfa);
-    let partition = Self::minimize(&fa, &syms);
-    Self::rebuild(fa, syms, partition)
+    let (dfa, syms) = Self::new_from_nfa(nfa);
+    let partition = Self::minimize(&dfa, &syms);
+    Self::rebuild(dfa, syms, partition)
   }
 
   /// Creates a new DFA from the given [`NFA`].
@@ -649,18 +649,29 @@ impl<S> DFA<S> {
   }
 
   /// Creates a minimal DFA by the given DFA and symbol set.
-  fn minimize(Self { fa, .. }: &Self, syms: &HashSet<S>) -> VecDeque<HashSet<usize>>
+  fn minimize(dfa: &Self, syms: &HashSet<S>) -> VecDeque<HashSet<usize>>
   where
-    S: PartialEq,
+    S: Ord + Hash,
   {
+    let Self { fa, final_ids } = dfa;
     // get the initial partition
-    let finals: HashSet<_> = fa.finals().clone();
+    let mut partition = final_ids
+      .iter()
+      .fold(
+        HashMap::new(),
+        |mut m: HashMap<_, HashSet<_>>, (id, nfa_id)| {
+          m.entry(*nfa_id).or_default().insert(*id);
+          m
+        },
+      )
+      .into_values()
+      .collect::<VecDeque<_>>();
     let others: HashSet<_> = fa
       .states()
       .keys()
-      .filter_map(|id| (!finals.contains(id)).then_some(*id))
+      .filter_map(|id| (!fa.finals().contains(id)).then_some(*id))
       .collect();
-    let mut partition = VecDeque::from([finals, others]);
+    partition.push_back(others);
     // get new partition until there are no changes
     let mut num_states = partition.len();
     loop {
@@ -688,7 +699,7 @@ impl<S> DFA<S> {
                 .find_map(|(i, ids)| ids.contains(&next).then_some(i));
               // add the index to division ID set
               if let Some(index) = index {
-                div_id.insert(index);
+                div_id.insert((s, index));
               }
             }
           }
@@ -732,7 +743,7 @@ impl<S> DFA<S> {
           fa.add_state()
         };
         // check if is a final state
-        if let Some(final_id) = ids.iter().filter_map(|id| dfa_finals.get(id)).min() {
+        if let Some(final_id) = ids.iter().find_map(|id| dfa_finals.get(id)) {
           fa.set_final_state(id);
           final_ids.insert(id, *final_id);
         }
@@ -807,7 +818,7 @@ impl<S> DFA<S> {
 
 impl<S> From<NFA<S>> for DFA<S>
 where
-  S: Clone + Hash + Eq,
+  S: Clone + Hash + Eq + Ord,
 {
   fn from(nfa: NFA<S>) -> Self {
     Self::new(nfa)
