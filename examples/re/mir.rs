@@ -5,26 +5,17 @@ use std::hash::Hash;
 use std::iter::{once, repeat};
 use std::str::from_utf8;
 
-/// A symbol representation with character type `C`.
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
-pub enum Symbol<C> {
-  /// A single character.
-  Single(C),
-  /// A range of characters.
-  ///
-  /// The range is closed.
-  /// That is, the start and end of the range are included in the range.
-  Range(C, C),
-}
-
-/// Mid-level intermediate representation of regular expressions,
-/// with character type `C`.
+/// Mid-level intermediate representation of regular expressions
+/// with symbol type `S`.
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
-pub enum Mir<C> {
+pub enum Mir<S> {
   /// The empty regular expression.
   Empty,
-  /// A regular expression that matches a symbol.
-  Symbol(Symbol<C>),
+  /// A range of symbols.
+  ///
+  /// The range is closed. That is, the start and end of the range
+  /// are included in the range.
+  Range(S, S),
   /// A concatenation of expressions.
   Concat(Vec<Self>),
   /// An alternation of expressions.
@@ -36,7 +27,7 @@ pub enum Mir<C> {
   Kleene(Box<Self>),
 }
 
-impl<C> Mir<C> {
+impl<S> Mir<S> {
   /// Creates a new MIR from the given [`HirKind`].
   fn new_from_hir_kind(kind: HirKind) -> Result<Self, Error>
   where
@@ -96,9 +87,9 @@ impl<C> Mir<C> {
   }
 }
 
-impl<C> Mir<C>
+impl<S> Mir<S>
 where
-  C: Hash + Eq + Clone,
+  S: Hash + Eq + Clone,
 {
   /// Optimizes the given MIR.
   fn optimize(self) -> Result<Self, Error> {
@@ -117,6 +108,7 @@ where
       Err(Error::MatchesNothing)
     } else {
       // optimize all sub-expressions and remove empty expressions
+      // TODO: flatten
       let mut c = c
         .into_iter()
         .map(Self::optimize)
@@ -137,6 +129,7 @@ where
       Err(Error::MatchesNothing)
     } else {
       // optimize all sub-expressions and remove duplicate expressions
+      // TODO: flatten
       let mut new_c = Vec::new();
       let mut set = HashSet::new();
       for e in c {
@@ -208,7 +201,7 @@ impl MirHelper for Mir<char> {
 
   fn new_from_literal(Literal(bs): Literal) -> Result<Self, Error> {
     from_utf8(&bs)
-      .map(|s| Self::Concat(s.chars().map(|c| Self::Symbol(Symbol::Single(c))).collect()))
+      .map(|s| Self::Concat(s.chars().map(|c| Self::Range(c, c)).collect()))
       .map_err(|_| Error::InvalidUtf8)
   }
 
@@ -217,13 +210,13 @@ impl MirHelper for Mir<char> {
       Class::Bytes(b) => Ok(Self::Alter(
         b.ranges()
           .iter()
-          .map(|r| Self::Symbol(Symbol::Range(r.start() as char, r.end() as char)))
+          .map(|r| Self::Range(r.start() as char, r.end() as char))
           .collect(),
       )),
       Class::Unicode(u) => Ok(Self::Alter(
         u.ranges()
           .iter()
-          .map(|r| Self::Symbol(Symbol::Range(r.start(), r.end())))
+          .map(|r| Self::Range(r.start(), r.end()))
           .collect(),
       )),
     }
@@ -241,9 +234,7 @@ impl MirHelper for Mir<u8> {
 
   fn new_from_literal(Literal(bs): Literal) -> Result<Self, Error> {
     Ok(Self::Concat(
-      bs.into_iter()
-        .map(|b| Self::Symbol(Symbol::Single(*b)))
-        .collect(),
+      bs.into_iter().map(|b| Self::Range(*b, *b)).collect(),
     ))
   }
 
@@ -252,7 +243,7 @@ impl MirHelper for Mir<u8> {
       Class::Bytes(b) => Ok(Self::Alter(
         b.ranges()
           .iter()
-          .map(|r| Self::Symbol(Symbol::Range(r.start(), r.end())))
+          .map(|r| Self::Range(r.start(), r.end()))
           .collect(),
       )),
       Class::Unicode(_) => Err(Error::UnsupportedOp("Unicode in byte mode")),
