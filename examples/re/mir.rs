@@ -1,10 +1,12 @@
 use regex_syntax::hir::{Class, Hir, HirKind, Literal, Repetition};
+use std::collections::HashSet;
 use std::fmt;
+use std::hash::Hash;
 use std::iter::{once, repeat};
 use std::str::from_utf8;
 
 /// A symbol representation with character type `C`.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 pub enum Symbol<C> {
   /// A single character.
   Single(C),
@@ -17,7 +19,7 @@ pub enum Symbol<C> {
 
 /// Mid-level intermediate representation of regular expressions,
 /// with character type `C`.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum Mir<C> {
   /// The empty regular expression.
   Empty,
@@ -65,7 +67,7 @@ impl<C> Mir<C> {
         .collect::<Result<_, _>>()
         .map(Self::Alter),
       HirKind::Repetition(Repetition { max: None, sub, .. }) => {
-        Self::new(*sub).map(|m| Self::Kleene(Box::new(m)))
+        Self::new(*sub).map(|e| Self::Kleene(Box::new(e)))
       }
       HirKind::Capture(c) => Self::new(*c.sub),
       HirKind::Concat(c) => c
@@ -92,10 +94,73 @@ impl<C> Mir<C> {
       .collect::<Result<_, _>>()
       .map(Self::Concat)
   }
+}
 
-  /// Creates a new optimized MIR from the given MIR.
-  fn new_optimized(mir: Self) -> Self {
-    todo!()
+impl<C> Mir<C>
+where
+  C: Hash + Eq + Clone,
+{
+  /// Optimizes the given MIR.
+  fn optimize(self) -> Result<Self, Error> {
+    // TODO: split symbol ranges
+    match self {
+      Self::Concat(c) => Self::optimize_concat(c),
+      Self::Alter(c) => Self::optimize_alter(c),
+      Self::Kleene(k) => Self::optimize_kleene(k),
+      mir => Ok(mir),
+    }
+  }
+
+  /// Optimized the given concatenation.
+  fn optimize_concat(c: Vec<Self>) -> Result<Self, Error> {
+    if c.is_empty() {
+      Err(Error::MatchesNothing)
+    } else {
+      // optimize all sub-expressions and remove empty expressions
+      let mut c = c
+        .into_iter()
+        .map(Self::optimize)
+        .filter(|e| !matches!(e, Ok(Self::Empty)))
+        .collect::<Result<Vec<_>, _>>()?;
+      // check length
+      Ok(match c.len() {
+        0 => Self::Empty,
+        1 => c.swap_remove(0),
+        _ => Self::Concat(c),
+      })
+    }
+  }
+
+  /// Optimized the given alternation.
+  fn optimize_alter(c: Vec<Self>) -> Result<Self, Error> {
+    if c.is_empty() {
+      Err(Error::MatchesNothing)
+    } else {
+      // optimize all sub-expressions and remove duplicate expressions
+      let mut new_c = Vec::new();
+      let mut set = HashSet::new();
+      for e in c {
+        let e = Self::optimize(e)?;
+        if set.insert(e.clone()) {
+          new_c.push(e);
+        }
+      }
+      // check length
+      Ok(match new_c.len() {
+        1 => new_c.swap_remove(0),
+        _ => Self::Alter(new_c),
+      })
+    }
+  }
+
+  /// Optimized the given kleene closure.
+  fn optimize_kleene(k: Box<Self>) -> Result<Self, Error> {
+    let k = Self::optimize(*k)?;
+    Ok(match k {
+      // empty kleene closure is just an empty expression
+      Self::Empty => Self::Empty,
+      k => Self::Kleene(Box::new(k)),
+    })
   }
 }
 
@@ -138,7 +203,7 @@ impl MirHelper for Mir<char> {
       hir.properties().is_utf8(),
       "expected regex that matching UTF-8 characters"
     );
-    Self::new_from_hir_kind(hir.into_kind()).map(Self::new_optimized)
+    Self::new_from_hir_kind(hir.into_kind()).and_then(Self::optimize)
   }
 
   fn new_from_literal(Literal(bs): Literal) -> Result<Self, Error> {
@@ -171,7 +236,7 @@ impl MirHelper for Mir<u8> {
       !hir.properties().is_utf8(),
       "expected regex that matching bytes"
     );
-    Self::new_from_hir_kind(hir.into_kind()).map(Self::new_optimized)
+    Self::new_from_hir_kind(hir.into_kind()).and_then(Self::optimize)
   }
 
   fn new_from_literal(Literal(bs): Literal) -> Result<Self, Error> {
@@ -200,6 +265,7 @@ impl MirHelper for Mir<u8> {
 pub enum Error {
   InvalidUtf8,
   UnsupportedOp(&'static str),
+  MatchesNothing,
 }
 
 impl fmt::Display for Error {
@@ -207,6 +273,7 @@ impl fmt::Display for Error {
     match self {
       Self::InvalidUtf8 => write!(f, "invalid UTF-8 string in regex"),
       Self::UnsupportedOp(e) => write!(f, "{e} is not supported"),
+      Self::MatchesNothing => write!(f, "the regex matches nothing"),
     }
   }
 }
