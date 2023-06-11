@@ -173,20 +173,12 @@ impl<S> FiniteAutomaton<S> {
   /// Returns the ID of the final state.
   ///
   /// Returns [`None`] if there is no final state or more than one final state.
-  pub fn final_state_id(&self) -> Option<usize> {
+  pub fn final_id(&self) -> Option<usize> {
     if self.finals().len() > 1 {
       None
     } else {
       self.finals().iter().next().copied()
     }
-  }
-
-  /// Returns `true` if the given state set contains any final state.
-  pub fn contains_final<'a, I>(&self, states: I) -> bool
-  where
-    I: IntoIterator<Item = &'a usize>,
-  {
-    states.into_iter().any(|id| self.finals.contains(id))
   }
 }
 
@@ -251,7 +243,7 @@ impl<S> NFA<S> {
       HirKind::Repetition(Repetition { max: None, sub, .. }) => {
         let mut nfa = Self::new(*sub)?;
         // get and update the final state
-        let fs = nfa.fa.final_state_id().unwrap();
+        let fs = nfa.fa.final_id().unwrap();
         nfa.fa.set_normal_state(fs);
         // create a edge to the initial state
         let init = nfa.fa.init_id();
@@ -345,6 +337,13 @@ impl<S> NFA<S> {
       self.fa.set_normal_state(id);
     }
     fs
+  }
+
+  /// Returns the final state ID of the current NFA.
+  ///
+  /// Returns [`None`] if there is no final state or more than one final state.
+  pub fn final_id(&self) -> Option<usize> {
+    self.fa.final_id()
   }
 }
 
@@ -544,6 +543,7 @@ impl<S> FiniteAutomaton<Option<S>> {
 #[derive(Debug)]
 pub struct DFA<S> {
   fa: FiniteAutomaton<S>,
+  final_ids: HashMap<usize, usize>,
 }
 
 impl<S> DFA<S> {
@@ -560,17 +560,26 @@ impl<S> DFA<S> {
   /// Creates a new DFA from the given [`NFA`].
   ///
   /// The created DFA is not minimal.
-  fn new_from_nfa(nfa: NFA<S>) -> (FiniteAutomaton<S>, HashSet<S>)
+  fn new_from_nfa(nfa: NFA<S>) -> (Self, HashSet<S>)
   where
     S: Clone + Hash + Eq,
   {
     let nfa = FiniteAutomaton::from(nfa);
     let syms = nfa.symbol_set();
+    // stuffs for maintaining final ID mappings between NFA and DFA
+    let nfa_finals: BTreeSet<_> = nfa.finals().iter().copied().collect();
+    let mut final_ids = HashMap::new();
+    macro_rules! first_final {
+      ($states:expr) => {
+        nfa_finals.iter().find(|id| $states.contains(id)).copied()
+      };
+    }
     // create DFA, update the initial state
     let mut fa = FiniteAutomaton::new();
     let init = nfa.epsilon_closure(nfa.init_id());
-    if nfa.contains_final(&init) {
+    if let Some(id) = first_final!(init) {
       fa.set_final_state(fa.init_id());
+      final_ids.insert(fa.init_id(), id);
     }
     // create other states
     let mut states = vec![init.clone()];
@@ -587,8 +596,10 @@ impl<S> DFA<S> {
           *id
         } else {
           // add a new state
-          let id = if nfa.contains_final(&next) {
-            fa.add_final_state()
+          let id = if let Some(final_id) = first_final!(next) {
+            let id = fa.add_final_state();
+            final_ids.insert(id, final_id);
+            id
           } else {
             fa.add_state()
           };
@@ -601,11 +612,11 @@ impl<S> DFA<S> {
         fa.state_mut(ids[&cur]).unwrap().add(s.clone(), id);
       }
     }
-    (fa, syms)
+    (Self { fa, final_ids }, syms)
   }
 
   /// Creates a minimal DFA by the given DFA and symbol set.
-  fn minimize(fa: &FiniteAutomaton<S>, syms: &HashSet<S>) -> VecDeque<HashSet<usize>>
+  fn minimize(Self { fa, .. }: &Self, syms: &HashSet<S>) -> VecDeque<HashSet<usize>>
   where
     S: PartialEq,
   {
@@ -666,22 +677,30 @@ impl<S> DFA<S> {
   }
 
   /// Rebuilds a DFA by the given partition.
-  fn rebuild(dfa: FiniteAutomaton<S>, syms: HashSet<S>, partition: VecDeque<HashSet<usize>>) -> Self
+  fn rebuild(dfa: Self, syms: HashSet<S>, partition: VecDeque<HashSet<usize>>) -> Self
   where
     S: Clone + Eq + Hash,
   {
+    let Self {
+      fa: dfa,
+      final_ids: dfa_finals,
+    } = dfa;
     let mut fa = FiniteAutomaton::new();
     // rebuild mapping of states
+    let mut final_ids = HashMap::new();
     let partition: Vec<_> = partition
       .into_iter()
       .map(|ids| {
+        // add new state
         let id = if ids.contains(&dfa.init_id()) {
           fa.init_id()
         } else {
           fa.add_state()
         };
-        if dfa.contains_final(&ids) {
+        // check if is a final state
+        if let Some(final_id) = ids.iter().filter_map(|id| dfa_finals.get(id)).min() {
           fa.set_final_state(id);
+          final_ids.insert(id, *final_id);
         }
         (ids, id)
       })
@@ -709,7 +728,7 @@ impl<S> DFA<S> {
         }
       }
     }
-    Self { fa }
+    Self { fa, final_ids }
   }
 
   /// Returns the ID of the initial state.
@@ -733,9 +752,13 @@ impl<S> DFA<S> {
       .and_then(|state| state.next_state(s))
   }
 
-  /// Returns `true` if the given state ID corresponds to a final state.
-  pub fn is_final(&self, id: usize) -> bool {
-    self.fa.finals().contains(&id)
+  /// Checks if the given state ID corresponds to a final state.
+  ///
+  /// Returns [`Some(id)`] which `id` is a final state ID of the NFA
+  /// for building the current DFA if the given ID corresponds to a
+  /// final state, otherwise returns [`None`].
+  pub fn is_final(&self, id: usize) -> Option<usize> {
+    self.final_ids.get(&id).copied()
   }
 }
 
