@@ -25,30 +25,30 @@ fn get_and_update_state_id() -> usize {
   cur
 }
 
-/// A state of the finite automaton with edge type `E`.
+/// A state of the finite automaton with symbol type `S`.
 #[derive(Debug)]
-pub struct State<E> {
-  outs: Vec<(E, usize)>,
+pub struct State<S> {
+  outs: Vec<(S, usize)>,
 }
 
-impl<E> State<E> {
+impl<S> State<S> {
   /// Returns the output edges.
-  pub fn outs(&self) -> &[(E, usize)] {
+  pub fn outs(&self) -> &[(S, usize)] {
     &self.outs
   }
 
-  /// Returns ID of the next state after accepting the given edge value `e`.
+  /// Returns ID of the next state after accepting the given symbol `sym`.
   ///
   /// This method will return only the first matching state.
   /// Returns [`None`] if no matching state.
-  pub fn next_state(&self, e: &E) -> Option<usize>
+  pub fn next_state(&self, sym: &S) -> Option<usize>
   where
-    E: PartialEq,
+    S: PartialEq,
   {
     self
       .outs
       .iter()
-      .find_map(|(edge, id)| (edge == e).then_some(*id))
+      .find_map(|(s, id)| (s == sym).then_some(*id))
   }
 
   /// Creates a new normal state.
@@ -57,20 +57,20 @@ impl<E> State<E> {
   }
 
   /// Adds a new edge to the current state.
-  fn add(&mut self, edge: E, state: usize) {
-    self.outs.push((edge, state));
+  fn add(&mut self, sym: S, state: usize) {
+    self.outs.push((sym, state));
   }
 }
 
-/// A finite automaton.
+/// A finite automaton with symbol type `S`.
 #[derive(Debug)]
-pub struct FiniteAutomaton<E> {
-  states: HashMap<usize, State<E>>,
+pub struct FiniteAutomaton<S> {
+  states: HashMap<usize, State<S>>,
   init: usize,
   finals: HashSet<usize>,
 }
 
-impl<E> FiniteAutomaton<E> {
+impl<S> FiniteAutomaton<S> {
   /// Creates an empty finite automaton.
   pub fn new() -> Self {
     let init = get_and_update_state_id();
@@ -132,31 +132,31 @@ impl<E> FiniteAutomaton<E> {
   }
 
   /// Returns a reference to the state map.
-  pub fn states(&self) -> &HashMap<usize, State<E>> {
+  pub fn states(&self) -> &HashMap<usize, State<S>> {
     &self.states
   }
 
   /// Returns a reference to the given state.
   ///
   /// Returns [`None`] if the given state does not exist.
-  pub fn state(&self, id: usize) -> Option<&State<E>> {
+  pub fn state(&self, id: usize) -> Option<&State<S>> {
     self.states.get(&id)
   }
 
   /// Returns a mutable reference to the given state.
   ///
   /// Returns [`None`] if the given state does not exist.
-  pub fn state_mut(&mut self, id: usize) -> Option<&mut State<E>> {
+  pub fn state_mut(&mut self, id: usize) -> Option<&mut State<S>> {
     self.states.get_mut(&id)
   }
 
   /// Returns a reference to the initial state.
-  pub fn init(&self) -> &State<E> {
+  pub fn init(&self) -> &State<S> {
     self.states.get(&self.init).unwrap()
   }
 
   /// Returns a mutable reference to the given initial state.
-  pub fn init_mut(&mut self) -> &mut State<E> {
+  pub fn init_mut(&mut self) -> &mut State<S> {
     self.states.get_mut(&self.init).unwrap()
   }
 
