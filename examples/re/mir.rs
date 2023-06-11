@@ -107,41 +107,51 @@ where
     if c.is_empty() {
       Err(Error::MatchesNothing)
     } else {
-      // optimize all sub-expressions and remove empty expressions
-      // TODO: flatten
-      let mut c = c
-        .into_iter()
-        .map(Self::optimize)
-        .filter(|e| !matches!(e, Ok(Self::Empty)))
-        .collect::<Result<Vec<_>, _>>()?;
+      // optimize all sub-expressions, flatten nested concatenations
+      // and remove empty expressions
+      let mut new_c = Vec::new();
+      for e in c {
+        match Self::optimize(e)? {
+          Self::Empty => {}
+          Self::Concat(c) => new_c.extend(c),
+          e => new_c.push(e),
+        }
+      }
       // check length
-      Ok(match c.len() {
+      Ok(match new_c.len() {
         0 => Self::Empty,
-        1 => c.swap_remove(0),
-        _ => Self::Concat(c),
+        1 => new_c.swap_remove(0),
+        _ => Self::Concat(new_c),
       })
     }
   }
 
   /// Optimized the given alternation.
-  fn optimize_alter(c: Vec<Self>) -> Result<Self, Error> {
-    if c.is_empty() {
+  fn optimize_alter(a: Vec<Self>) -> Result<Self, Error> {
+    if a.is_empty() {
       Err(Error::MatchesNothing)
     } else {
-      // optimize all sub-expressions and remove duplicate expressions
-      // TODO: flatten
-      let mut new_c = Vec::new();
+      // optimize all sub-expressions, flatten nested alternations
+      // and remove duplicate expressions
+      let mut new_a = Vec::new();
       let mut set = HashSet::new();
-      for e in c {
-        let e = Self::optimize(e)?;
-        if set.insert(e.clone()) {
-          new_c.push(e);
+      for e in a {
+        match Self::optimize(e)? {
+          Self::Alter(a) => new_a.extend(
+            a.into_iter()
+              .filter_map(|e| set.insert(e.clone()).then_some(e)),
+          ),
+          e => {
+            if set.insert(e.clone()) {
+              new_a.push(e);
+            }
+          }
         }
       }
       // check length
-      Ok(match new_c.len() {
-        1 => new_c.swap_remove(0),
-        _ => Self::Alter(new_c),
+      Ok(match new_a.len() {
+        1 => new_a.swap_remove(0),
+        _ => Self::Alter(new_a),
       })
     }
   }
