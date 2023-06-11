@@ -651,7 +651,8 @@ impl<S> DFA<S> {
               let index = partition
                 .iter()
                 .take(num_states)
-                .find_map(|ids| ids.get(&next).copied());
+                .enumerate()
+                .find_map(|(i, ids)| ids.contains(&next).then_some(i));
               // add the index to division ID set
               if let Some(index) = index {
                 div_id.insert(index);
