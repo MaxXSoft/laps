@@ -100,7 +100,7 @@ where
       Self::Concat(c) => Self::optimize_concat(c),
       Self::Alter(a) => Self::optimize_alter(a),
       Self::Kleene(k) => Self::optimize_kleene(k),
-      mir => Ok(mir),
+      e => Ok(e),
     }
   }
 
@@ -158,11 +158,60 @@ where
         }
       }
     }
-    // check length
-    Ok(match new_a.len() {
-      1 => new_a.swap_remove(0).0,
-      _ => Self::Alter(new_a),
-    })
+    // return if the alternation has only one untagged sub-expression
+    if let Some((e, None)) = new_a.first() {
+      return Ok(e.clone());
+    }
+    // optimize alternation of concatenations
+    if new_a.iter().all(|(e, _)| matches!(e, Self::Concat(_))) {
+      // extract reversed sub-expressions in concatenations
+      let mut rev_subs: Vec<(Vec<_>, _)> = new_a
+        .into_iter()
+        .map(|(e, t)| match e {
+          Self::Concat(mut c) => {
+            c.reverse();
+            (c, t)
+          }
+          _ => unreachable!(),
+        })
+        .collect();
+      // extract the first n same expressions in sub-expressions
+      let mut same_subs = Vec::new();
+      loop {
+        // check if all the last expressions are same
+        let mut iter = rev_subs.iter().map(|(es, _)| es.last());
+        let first = iter.next().unwrap();
+        if first.is_none() {
+          break;
+        }
+        if !iter.all(|e| e == first) {
+          break;
+        }
+        // add to `same_subs`, and pop the last expression
+        same_subs.push(first.unwrap().clone());
+        rev_subs.iter_mut().for_each(|(es, _)| {
+          es.pop();
+        });
+      }
+      // create alternation
+      let alter = Self::Alter(
+        rev_subs
+          .into_iter()
+          .map(|(mut es, t)| {
+            es.reverse();
+            (Self::Concat(es), t)
+          })
+          .collect(),
+      );
+      // create concatenation
+      return Ok(if same_subs.is_empty() {
+        alter
+      } else {
+        same_subs.push(Self::optimize(alter)?);
+        Self::Concat(same_subs)
+      });
+    }
+    Ok(Self::Alter(new_a))
   }
 
   /// Optimized the given kleene closure.
