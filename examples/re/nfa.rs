@@ -5,10 +5,10 @@ use std::str::from_utf8;
 use std::{fmt, io};
 
 /// Possible errors during the creation of the [`NFA`].
-#[derive(Clone, Copy, Debug)]
+#[derive(Debug)]
 pub enum Error {
   InvalidUtf8,
-  UnsupportedRegex(&'static str),
+  UnsupportedOp(&'static str),
   MatchesNothing,
 }
 
@@ -16,7 +16,7 @@ impl fmt::Display for Error {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
     match self {
       Self::InvalidUtf8 => write!(f, "invalid UTF-8 string in regex"),
-      Self::UnsupportedRegex(e) => write!(f, "{e}"),
+      Self::UnsupportedOp(e) => write!(f, "{e} is not supported"),
       Self::MatchesNothing => write!(f, "the regex matches nothing"),
     }
   }
@@ -35,15 +35,11 @@ impl<S> NFA<S> {
     Self: NFAHelper,
   {
     match kind {
-      HirKind::Empty => Ok(Self::new_nfa_with_edge(None)),
+      HirKind::Empty => Ok(Self::new_nfa_with_symbol(None)),
       HirKind::Literal(l) => Self::new_from_literal(l),
       HirKind::Class(c) => Self::new_from_class(c),
-      HirKind::Look(_) => Err(Error::UnsupportedRegex(
-        "look-around assertion is not supported",
-      )),
-      HirKind::Repetition(r) if !r.greedy => Err(Error::UnsupportedRegex(
-        "non-greedy matching is not supported",
-      )),
+      HirKind::Look(_) => Err(Error::UnsupportedOp("look-around assertion")),
+      HirKind::Repetition(r) if !r.greedy => Err(Error::UnsupportedOp("non-greedy matching")),
       HirKind::Repetition(Repetition { min, max, sub, .. }) if min != 0 => {
         let rep1 = Self::new_n_repeats(*sub.clone(), min as usize)?;
         let rep2 = Self::new_from_hir_kind(HirKind::Repetition(Repetition {
@@ -58,7 +54,7 @@ impl<S> NFA<S> {
         max: Some(max),
         sub,
         ..
-      }) => once(Ok(Self::new_nfa_with_edge(None)))
+      }) => once(Ok(Self::new_nfa_with_symbol(None)))
         .chain((1..=max as usize).map(|n| Self::new_n_repeats(*sub.clone(), n)))
         .reduce(|l, r| Ok(Self::alter(l?, r?)))
         .ok_or(Error::MatchesNothing)?,
@@ -100,11 +96,11 @@ impl<S> NFA<S> {
       .ok_or(Error::MatchesNothing)?
   }
 
-  /// Creates a new NFA which matches the given edge.
-  fn new_nfa_with_edge(edge: Option<S>) -> Self {
+  /// Creates a new NFA which matches the given symbol.
+  fn new_nfa_with_symbol(sym: Option<S>) -> Self {
     let mut fa = FiniteAutomaton::new();
     let fs = fa.add_final_state();
-    fa.init_mut().add(edge, fs);
+    fa.init_mut().add(sym, fs);
     Self { fa }
   }
 
@@ -134,7 +130,7 @@ impl<S> NFA<S> {
     nfa1
   }
 
-  /// Concatinates the given two NFAs into a new NFA.
+  /// Concatenates the given two NFAs into a new NFA.
   pub fn concat(mut nfa1: Self, nfa2: Self) -> Self {
     let fs1 = nfa1.normalize();
     nfa1.fa.state_mut(fs1).unwrap().add(None, nfa2.fa.init_id());
@@ -264,13 +260,13 @@ impl NFAHelper for NFA<char> {
       Class::Bytes(b) => b
         .ranges()
         .iter()
-        .flat_map(|r| (r.start()..=r.end()).map(|b| Self::new_nfa_with_edge(Some(b as char))))
+        .flat_map(|r| (r.start()..=r.end()).map(|b| Self::new_nfa_with_symbol(Some(b as char))))
         .reduce(|l, r| Self::alter(l, r))
         .ok_or(Error::MatchesNothing),
       Class::Unicode(u) => u
         .ranges()
         .iter()
-        .flat_map(|r| (r.start()..=r.end()).map(|c| Self::new_nfa_with_edge(Some(c))))
+        .flat_map(|r| (r.start()..=r.end()).map(|c| Self::new_nfa_with_symbol(Some(c))))
         .reduce(|l, r| Self::alter(l, r))
         .ok_or(Error::MatchesNothing),
     }
@@ -295,7 +291,7 @@ impl NFAHelper for NFA<u8> {
       Class::Bytes(b) => b
         .ranges()
         .iter()
-        .flat_map(|r| (r.start()..=r.end()).map(|b| Self::new_nfa_with_edge(Some(b))))
+        .flat_map(|r| (r.start()..=r.end()).map(|b| Self::new_nfa_with_symbol(Some(b))))
         .reduce(|l, r| Self::alter(l, r))
         .ok_or(Error::MatchesNothing),
       Class::Unicode(u) => u
