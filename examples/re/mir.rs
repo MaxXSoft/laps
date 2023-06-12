@@ -91,8 +91,8 @@ impl<S> Mir<S>
 where
   S: Hash + Eq + Clone,
 {
-  /// Optimizes the given MIR.
-  fn optimize(self) -> Result<Self, Error> {
+  /// Optimizes the current MIR into a new one.
+  pub fn optimize(self) -> Result<Self, Error> {
     // TODO: split symbol ranges
     match self {
       Self::Concat(c) => Self::optimize_concat(c),
@@ -206,7 +206,7 @@ impl MirHelper for Mir<char> {
       hir.properties().is_utf8(),
       "expected regex that matching UTF-8 characters"
     );
-    Self::new_from_hir_kind(hir.into_kind()).and_then(Self::optimize)
+    Self::new_from_hir_kind(hir.into_kind())
   }
 
   fn new_from_literal(Literal(bs): Literal) -> Result<Self, Error> {
@@ -239,7 +239,7 @@ impl MirHelper for Mir<u8> {
       !hir.properties().is_utf8(),
       "expected regex that matching bytes"
     );
-    Self::new_from_hir_kind(hir.into_kind()).and_then(Self::optimize)
+    Self::new_from_hir_kind(hir.into_kind())
   }
 
   fn new_from_literal(Literal(bs): Literal) -> Result<Self, Error> {
