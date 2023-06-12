@@ -1,5 +1,5 @@
 use regex_syntax::hir::{Class, Hir, HirKind, Literal, Repetition};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fmt;
 use std::hash::Hash;
 use std::iter::{once, repeat};
@@ -90,17 +90,101 @@ impl<S, T> Mir<S, T> {
 
 impl<S, T> Mir<S, T>
 where
-  S: Hash + Eq + Clone,
+  S: Hash + Eq + Clone + Ord,
   T: Hash + Eq + Clone,
 {
   /// Optimizes the current MIR into a new one.
   pub fn optimize(self) -> Result<Self, Error> {
-    // TODO: split symbol ranges
-    match self {
+    // get symbol set and mappings
+    let (syms, lmap, rmap) = self.symbol_set();
+    // rebuild and optimize
+    match self.rebuild(&syms, &lmap, &rmap) {
       Self::Concat(c) => Self::optimize_concat(c),
       Self::Alter(a) => Self::optimize_alter(a),
       Self::Kleene(k) => Self::optimize_kleene(k),
       e => Ok(e),
+    }
+  }
+
+  /// Returns the symbol set of the current MIR.
+  fn symbol_set(&self) -> (Vec<(S, S)>, HashMap<S, usize>, HashMap<S, usize>) {
+    // collect all symbols
+    let mut syms = self.collect_symbols().into_iter();
+    match syms.next() {
+      None => Default::default(),
+      Some(first) => {
+        // get new ranges
+        let (_, syms, _) = syms.fold((first, vec![], 0), |(last, mut v, mut nest), e| {
+          let should_push = match (last.dir, &e.dir) {
+            (Dir::Right, Dir::Left) => nest != 0,
+            _ => true,
+          };
+          if should_push {
+            v.push((last.sym, e.sym.clone()));
+          }
+          match e.dir {
+            Dir::Left => nest += 1,
+            Dir::Right => nest -= 1,
+          }
+          (e, v, nest)
+        });
+        // get mapping of range endpoints to indices
+        let (lmap, rmap) = syms
+          .iter()
+          .cloned()
+          .enumerate()
+          .map(|(i, (l, r))| ((l, i), (r, i)))
+          .unzip();
+        (syms, lmap, rmap)
+      }
+    }
+  }
+
+  /// Collects all symbols (ranges) in the given MIR as endpoints.
+  fn collect_symbols(&self) -> BTreeSet<Endpoint<S>> {
+    match self {
+      Self::Empty => BTreeSet::new(),
+      Self::Range(l, r) => BTreeSet::from([
+        Endpoint {
+          sym: l.clone(),
+          dir: Dir::Left,
+        },
+        Endpoint {
+          sym: r.clone(),
+          dir: Dir::Right,
+        },
+      ]),
+      Self::Concat(c) => c
+        .iter()
+        .flat_map(|e| e.collect_symbols().into_iter())
+        .collect(),
+      Self::Alter(a) => a
+        .iter()
+        .flat_map(|(e, _)| e.collect_symbols().into_iter())
+        .collect(),
+      Self::Kleene(k) => k.collect_symbols(),
+    }
+  }
+
+  /// Rebuilds the current MIR by the given symbol set and mappings.
+  fn rebuild(self, syms: &[(S, S)], lmap: &HashMap<S, usize>, rmap: &HashMap<S, usize>) -> Self {
+    match self {
+      Self::Empty => self,
+      Self::Range(l, r) => Self::Alter(
+        (lmap[&l]..=rmap[&r])
+          .map(|i| {
+            let (l, r) = syms[i].clone();
+            (Self::Range(l, r), None)
+          })
+          .collect(),
+      ),
+      Self::Concat(c) => Self::Concat(c.into_iter().map(|e| e.rebuild(syms, lmap, rmap)).collect()),
+      Self::Alter(a) => Self::Alter(
+        a.into_iter()
+          .map(|(e, t)| (e.rebuild(syms, lmap, rmap), t))
+          .collect(),
+      ),
+      Self::Kleene(k) => Self::Kleene(Box::new(k.rebuild(syms, lmap, rmap))),
     }
   }
 
@@ -337,4 +421,18 @@ impl fmt::Display for Error {
       Self::MatchesNothing => write!(f, "the regex matches nothing"),
     }
   }
+}
+
+/// Endpoint of symbol ranges
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
+struct Endpoint<S> {
+  sym: S,
+  dir: Dir,
+}
+
+/// Direction of endpoint.
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
+enum Dir {
+  Left,
+  Right,
 }
