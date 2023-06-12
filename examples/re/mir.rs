@@ -95,15 +95,8 @@ where
 {
   /// Optimizes the current MIR into a new one.
   pub fn optimize(self) -> Result<Self, Error> {
-    // get symbol set and mappings
     let (syms, lmap, rmap) = self.symbol_set();
-    // rebuild and optimize
-    match self.rebuild(&syms, &lmap, &rmap) {
-      Self::Concat(c) => Self::optimize_concat(c),
-      Self::Alter(a) => Self::optimize_alter(a),
-      Self::Kleene(k) => Self::optimize_kleene(k),
-      e => Ok(e),
-    }
+    self.rebuild(&syms, &lmap, &rmap).opt_without_rebuild()
   }
 
   /// Returns the symbol set of the current MIR.
@@ -114,7 +107,7 @@ where
       None => Default::default(),
       Some(first) => {
         // get new ranges
-        let (_, syms, _) = syms.fold((first, vec![], 0), |(last, mut v, mut nest), e| {
+        let (syms, ..) = syms.fold((vec![], first, 0), |(mut v, last, mut nest), e| {
           let should_push = match (last.dir, &e.dir) {
             (Dir::Right, Dir::Left) => nest != 0,
             _ => true,
@@ -126,7 +119,7 @@ where
             Dir::Left => nest += 1,
             Dir::Right => nest -= 1,
           }
-          (e, v, nest)
+          (v, e, nest)
         });
         // get mapping of range endpoints to indices
         let (lmap, rmap) = syms
@@ -188,6 +181,18 @@ where
     }
   }
 
+  /// Optimizes the current MIR into a new one.
+  ///
+  /// This method will not rebuild the MIR.
+  fn opt_without_rebuild(self) -> Result<Self, Error> {
+    match self {
+      Self::Concat(c) => Self::optimize_concat(c),
+      Self::Alter(a) => Self::optimize_alter(a),
+      Self::Kleene(k) => Self::optimize_kleene(k),
+      e => Ok(e),
+    }
+  }
+
   /// Optimized the given concatenation.
   fn optimize_concat(c: Vec<Self>) -> Result<Self, Error> {
     if c.is_empty() {
@@ -197,7 +202,7 @@ where
       // and remove empty expressions
       let mut new_c = Vec::new();
       for e in c {
-        match Self::optimize(e)? {
+        match e.opt_without_rebuild()? {
           Self::Empty => {}
           Self::Concat(c) => new_c.extend(c),
           e => new_c.push(e),
@@ -230,7 +235,7 @@ where
       // get the tag of the current expresson
       let t = tagged_exps.get(&e).cloned();
       // optimize, and handle by kind
-      match Self::optimize(e)? {
+      match e.opt_without_rebuild()? {
         Self::Alter(a) => new_a
           .extend(a.into_iter().filter_map(|(e, inner_t)| {
             set.insert(e.clone()).then_some((e, t.clone().or(inner_t)))
@@ -293,7 +298,7 @@ where
       return Ok(if same_subs.is_empty() {
         alter
       } else {
-        same_subs.push(Self::optimize(alter)?);
+        same_subs.push(alter.opt_without_rebuild()?);
         Self::Concat(same_subs)
       });
     }
@@ -302,8 +307,7 @@ where
 
   /// Optimized the given kleene closure.
   fn optimize_kleene(k: Box<Self>) -> Result<Self, Error> {
-    let k = Self::optimize(*k)?;
-    Ok(match k {
+    Ok(match k.opt_without_rebuild()? {
       // empty kleene closure is just an empty expression
       Self::Empty => Self::Empty,
       k => Self::Kleene(Box::new(k)),
