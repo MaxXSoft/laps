@@ -1,5 +1,5 @@
 use regex_syntax::hir::{Class, Hir, HirKind, Literal, Repetition};
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::hash::Hash;
 use std::iter::{once, repeat};
@@ -90,63 +90,87 @@ impl<S, T> Mir<S, T> {
 
 impl<S, T> Mir<S, T>
 where
-  S: Hash + Eq + Clone + Ord,
+  S: Hash + Eq + Clone + Ord + SymbolOp,
   T: Hash + Eq + Clone,
 {
   /// Optimizes the current MIR into a new one.
   pub fn optimize(self) -> Result<Self, Error> {
-    let (syms, lmap, rmap) = self.symbol_set();
+    let (syms, lmap, rmap) = self.symbol_set()?;
     self.rebuild(&syms, &lmap, &rmap).opt_without_rebuild()
   }
 
   /// Returns the symbol set of the current MIR.
-  fn symbol_set(&self) -> (Vec<(S, S)>, HashMap<S, usize>, HashMap<S, usize>) {
-    // collect all symbols
-    let mut syms = self.collect_symbols().into_iter();
-    match syms.next() {
-      None => Default::default(),
-      Some(first) => {
-        // get new ranges
-        let (syms, ..) = syms.fold((vec![], first, 0), |(mut v, last, mut nest), e| {
-          let should_push = match (last.dir, &e.dir) {
-            (Dir::Right, Dir::Left) => nest != 0,
-            _ => true,
-          };
-          if should_push {
-            v.push((last.sym, e.sym.clone()));
+  fn symbol_set(&self) -> Result<(Vec<(S, S)>, HashMap<S, usize>, HashMap<S, usize>), Error> {
+    // collect all endpoints
+    let mut ends = self.collect_endpoints();
+    ends.sort();
+    // get symbol set
+    let mut syms = Vec::new();
+    let mut unmatched = Vec::new();
+    for Endpoint { sym, dir } in ends {
+      match dir {
+        Dir::Left => {
+          if let Some(s) = unmatched.pop() {
+            if s != sym {
+              syms.push((s, sym.prev().ok_or(Error::FailedToBuildSymbolSet)?));
+            }
+            unmatched.push(sym.clone());
           }
-          match e.dir {
-            Dir::Left => nest += 1,
-            Dir::Right => nest -= 1,
+          unmatched.push(sym);
+        }
+        Dir::Right => match unmatched.pop() {
+          Some(s) => {
+            syms.push((s, sym.clone()));
+            if let Some(last) = unmatched.last_mut() {
+              if *last <= sym {
+                *last = sym.next().ok_or(Error::FailedToBuildSymbolSet)?;
+              }
+            }
           }
-          (v, e, nest)
-        });
-        // get mapping of range endpoints to indices
-        let (lmap, rmap) = syms
-          .iter()
-          .cloned()
-          .enumerate()
-          .map(|(i, (l, r))| ((l, i), (r, i)))
-          .unzip();
-        (syms, lmap, rmap)
+          None => match syms.last() {
+            Some((_, s)) if *s == sym => {}
+            _ => syms.push((sym.clone(), sym)),
+          },
+        },
       }
     }
+    // check if all endpoints are matched
+    if !unmatched.is_empty() {
+      return Err(Error::FailedToBuildSymbolSet);
+    }
+    // get mapping of range endpoints to indices
+    let (lmap, rmap) = syms
+      .iter()
+      .cloned()
+      .enumerate()
+      .map(|(i, (l, r))| ((l, i), (r, i)))
+      .unzip();
+    Ok((syms, lmap, rmap))
   }
 
-  /// Collects all symbols (ranges) in the given MIR as endpoints.
-  fn collect_symbols(&self) -> BTreeSet<Endpoint<S>> {
-    match self {
-      Self::Empty => BTreeSet::new(),
-      Self::Range(l, r) => BTreeSet::from([
-        Endpoint {
-          sym: l.clone(),
+  /// Collects all symbols (ranges) in the current MIR as endpoints.
+  fn collect_endpoints(&self) -> Vec<Endpoint<S>> {
+    self
+      .collect_symbols()
+      .into_iter()
+      .flat_map(|(l, r)| {
+        once(Endpoint {
+          sym: l,
           dir: Dir::Left,
-        },
-        Endpoint {
-          sym: r.clone(),
+        })
+        .chain(once(Endpoint {
+          sym: r,
           dir: Dir::Right,
-        },
-      ]),
+        }))
+      })
+      .collect()
+  }
+
+  /// Collects all symbols in the current MIR.
+  fn collect_symbols(&self) -> HashSet<(S, S)> {
+    match self {
+      Self::Empty => HashSet::new(),
+      Self::Range(l, r) => HashSet::from([(l.clone(), r.clone())]),
       Self::Concat(c) => c
         .iter()
         .flat_map(|e| e.collect_symbols().into_iter())
@@ -415,6 +439,7 @@ pub enum Error {
   InvalidUtf8,
   UnsupportedOp(&'static str),
   MatchesNothing,
+  FailedToBuildSymbolSet,
 }
 
 impl fmt::Display for Error {
@@ -423,6 +448,7 @@ impl fmt::Display for Error {
       Self::InvalidUtf8 => write!(f, "invalid UTF-8 string in regex"),
       Self::UnsupportedOp(e) => write!(f, "{e} is not supported"),
       Self::MatchesNothing => write!(f, "the regex matches nothing"),
+      Self::FailedToBuildSymbolSet => write!(f, "failed to build the symbol set"),
     }
   }
 }
@@ -439,4 +465,45 @@ struct Endpoint<S> {
 enum Dir {
   Left,
   Right,
+}
+
+/// Trait for getting the previous or next symbol of a given symbol.
+pub trait SymbolOp: Sized {
+  /// Returns the previous symbol of the current symbol.
+  ///
+  /// Returns [`None`] if there is no previous symbol of the current symbol.
+  fn prev(&self) -> Option<Self>;
+
+  /// Returns the next symbol of the current symbol.
+  ///
+  /// Returns [`None`] if there is no next symbol of the current symbol.
+  fn next(&self) -> Option<Self>;
+}
+
+impl SymbolOp for char {
+  fn prev(&self) -> Option<Self> {
+    match self {
+      '\0' => None,
+      '\u{e000}' => Some('\u{d7ff}'),
+      _ => Some(unsafe { char::from_u32_unchecked(*self as u32 - 1) }),
+    }
+  }
+
+  fn next(&self) -> Option<Self> {
+    match self {
+      '\u{d7ff}' => Some('\u{e000}'),
+      '\u{10fff}' => None,
+      _ => Some(unsafe { char::from_u32_unchecked(*self as u32 + 1) }),
+    }
+  }
+}
+
+impl SymbolOp for u8 {
+  fn prev(&self) -> Option<Self> {
+    (*self != u8::MIN).then_some(self - 1)
+  }
+
+  fn next(&self) -> Option<Self> {
+    (*self != u8::MAX).then_some(self + 1)
+  }
 }
