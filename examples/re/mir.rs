@@ -1,5 +1,5 @@
 use regex_syntax::hir::{Class, Hir, HirKind, Literal, Repetition};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::hash::Hash;
 use std::iter::{once, repeat};
@@ -131,32 +131,38 @@ where
   /// Optimized the given alternation.
   fn optimize_alter(a: Vec<(Self, Option<T>)>) -> Result<Self, Error> {
     if a.is_empty() {
-      Err(Error::MatchesNothing)
-    } else {
-      // optimize all sub-expressions, flatten nested alternations
-      // and remove duplicate expressions
-      let mut new_a = Vec::new();
-      let mut set = HashSet::new();
-      for (e, tag) in a {
-        match Self::optimize(e)? {
-          Self::Alter(alt) => new_a.extend(
-            alt
-              .into_iter()
-              .filter_map(|(e, tag)| set.insert(e.clone()).then_some((e, tag))),
-          ),
-          e => {
-            if set.insert(e.clone()) {
-              new_a.push((e, tag));
-            }
+      return Err(Error::MatchesNothing);
+    }
+    // collect expressions that have a tag
+    let tagged_exps: HashMap<_, _> = a
+      .iter()
+      .filter_map(|(e, t)| t.clone().map(|t| (e.clone(), t)))
+      .collect();
+    // optimize all sub-expressions, flatten nested alternations
+    // and remove duplicate expressions
+    let mut new_a = Vec::new();
+    let mut set = HashSet::new();
+    for (e, _) in a {
+      // get the tag of the current expresson
+      let t = tagged_exps.get(&e).cloned();
+      // optimize, and handle by kind
+      match Self::optimize(e)? {
+        Self::Alter(a) => new_a
+          .extend(a.into_iter().filter_map(|(e, inner_t)| {
+            set.insert(e.clone()).then_some((e, t.clone().or(inner_t)))
+          })),
+        e => {
+          if set.insert(e.clone()) {
+            new_a.push((e, t));
           }
         }
       }
-      // check length
-      Ok(match new_a.len() {
-        1 => new_a.swap_remove(0).0,
-        _ => Self::Alter(new_a),
-      })
     }
+    // check length
+    Ok(match new_a.len() {
+      1 => new_a.swap_remove(0).0,
+      _ => Self::Alter(new_a),
+    })
   }
 
   /// Optimized the given kleene closure.
