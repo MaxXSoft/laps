@@ -159,8 +159,10 @@ where
       }
     }
     // return if the alternation has only one untagged sub-expression
-    if let Some((e, None)) = new_a.first() {
-      return Ok(e.clone());
+    if new_a.len() == 1 {
+      if let Some((e, None)) = new_a.first() {
+        return Ok(e.clone());
+      }
     }
     // optimize alternation of concatenations
     if new_a.iter().all(|(e, _)| matches!(e, Self::Concat(_))) {
