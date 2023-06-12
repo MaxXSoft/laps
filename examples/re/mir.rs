@@ -22,9 +22,18 @@ pub enum Mir<S> {
   ///
   /// An alternation matches only if at least one of its sub-expressions match.
   /// If multiple sub-expressions match, then the leftmost is preferred.
-  Alter(Vec<Self>),
+  Alter(Alter<S>),
   /// A kleene closure of an expression.
   Kleene(Box<Self>),
+}
+
+/// An alternation of expressions.
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+pub struct Alter<S> {
+  /// The sub-expressions being alternated.
+  pub subs: Vec<Mir<S>>,
+  /// Whether this alternation merges final states of sub-expressions.
+  pub merge: bool,
 }
 
 impl<S> Mir<S> {
@@ -56,7 +65,7 @@ impl<S> Mir<S> {
       }) => once(Ok(Self::Empty))
         .chain((1..=max as usize).map(|n| Self::new_n_repeats(*sub.clone(), n)))
         .collect::<Result<_, _>>()
-        .map(Self::Alter),
+        .map(|subs| Self::Alter(Alter { subs, merge: true })),
       HirKind::Repetition(Repetition { max: None, sub, .. }) => {
         Self::new(*sub).map(|e| Self::Kleene(Box::new(e)))
       }
@@ -70,7 +79,7 @@ impl<S> Mir<S> {
         .into_iter()
         .map(Self::new)
         .collect::<Result<_, _>>()
-        .map(Self::Alter),
+        .map(|subs| Self::Alter(Alter { subs, merge: true })),
     }
   }
 
@@ -96,7 +105,7 @@ where
     // TODO: split symbol ranges
     match self {
       Self::Concat(c) => Self::optimize_concat(c),
-      Self::Alter(c) => Self::optimize_alter(c),
+      Self::Alter(a) => Self::optimize_alter(a),
       Self::Kleene(k) => Self::optimize_kleene(k),
       mir => Ok(mir),
     }
@@ -127,31 +136,36 @@ where
   }
 
   /// Optimized the given alternation.
-  fn optimize_alter(a: Vec<Self>) -> Result<Self, Error> {
-    if a.is_empty() {
+  fn optimize_alter(a: Alter<S>) -> Result<Self, Error> {
+    if a.subs.is_empty() {
       Err(Error::MatchesNothing)
     } else {
       // optimize all sub-expressions, flatten nested alternations
       // and remove duplicate expressions
-      let mut new_a = Vec::new();
+      let mut subs = Vec::new();
       let mut set = HashSet::new();
-      for e in a {
+      for e in a.subs {
         match Self::optimize(e)? {
-          Self::Alter(a) => new_a.extend(
-            a.into_iter()
+          Self::Alter(alt) if alt.merge == a.merge => subs.extend(
+            alt
+              .subs
+              .into_iter()
               .filter_map(|e| set.insert(e.clone()).then_some(e)),
           ),
           e => {
             if set.insert(e.clone()) {
-              new_a.push(e);
+              subs.push(e);
             }
           }
         }
       }
       // check length
-      Ok(match new_a.len() {
-        1 => new_a.swap_remove(0),
-        _ => Self::Alter(new_a),
+      Ok(match subs.len() {
+        1 => subs.swap_remove(0),
+        _ => Self::Alter(Alter {
+          subs,
+          merge: a.merge,
+        }),
       })
     }
   }
@@ -217,18 +231,22 @@ impl MirHelper for Mir<char> {
 
   fn new_from_class(c: Class) -> Result<Self, Error> {
     match c {
-      Class::Bytes(b) => Ok(Self::Alter(
-        b.ranges()
+      Class::Bytes(b) => Ok(Self::Alter(Alter {
+        subs: b
+          .ranges()
           .iter()
           .map(|r| Self::Range(r.start() as char, r.end() as char))
           .collect(),
-      )),
-      Class::Unicode(u) => Ok(Self::Alter(
-        u.ranges()
+        merge: true,
+      })),
+      Class::Unicode(u) => Ok(Self::Alter(Alter {
+        subs: u
+          .ranges()
           .iter()
           .map(|r| Self::Range(r.start(), r.end()))
           .collect(),
-      )),
+        merge: true,
+      })),
     }
   }
 }
@@ -250,12 +268,14 @@ impl MirHelper for Mir<u8> {
 
   fn new_from_class(c: Class) -> Result<Self, Error> {
     match c {
-      Class::Bytes(b) => Ok(Self::Alter(
-        b.ranges()
+      Class::Bytes(b) => Ok(Self::Alter(Alter {
+        subs: b
+          .ranges()
           .iter()
           .map(|r| Self::Range(r.start(), r.end()))
           .collect(),
-      )),
+        merge: true,
+      })),
       Class::Unicode(_) => Err(Error::UnsupportedOp("Unicode in byte mode")),
     }
   }
