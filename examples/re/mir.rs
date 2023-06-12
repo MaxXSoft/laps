@@ -6,9 +6,9 @@ use std::iter::{once, repeat};
 use std::str::from_utf8;
 
 /// Mid-level intermediate representation of regular expressions
-/// with symbol type `S`.
+/// with symbol type `S` and tag type `T`.
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
-pub enum Mir<S> {
+pub enum Mir<S, T> {
   /// The empty regular expression.
   Empty,
   /// A range of symbols.
@@ -18,25 +18,16 @@ pub enum Mir<S> {
   Range(S, S),
   /// A concatenation of expressions.
   Concat(Vec<Self>),
-  /// An alternation of expressions.
+  /// An alternation of expressions and their tags.
   ///
   /// An alternation matches only if at least one of its sub-expressions match.
   /// If multiple sub-expressions match, then the leftmost is preferred.
-  Alter(Alter<S>),
+  Alter(Vec<(Self, Option<T>)>),
   /// A kleene closure of an expression.
   Kleene(Box<Self>),
 }
 
-/// An alternation of expressions.
-#[derive(Debug, PartialEq, Eq, Hash, Clone)]
-pub struct Alter<S> {
-  /// The sub-expressions being alternated.
-  pub subs: Vec<Mir<S>>,
-  /// Whether this alternation merges final states of sub-expressions.
-  pub merge: bool,
-}
-
-impl<S> Mir<S> {
+impl<S, T> Mir<S, T> {
   /// Creates a new MIR from the given [`HirKind`].
   fn new_from_hir_kind(kind: HirKind) -> Result<Self, Error>
   where
@@ -64,8 +55,9 @@ impl<S> Mir<S> {
         ..
       }) => once(Ok(Self::Empty))
         .chain((1..=max as usize).map(|n| Self::new_n_repeats(*sub.clone(), n)))
+        .map(|r| r.map(|e| (e, None)))
         .collect::<Result<_, _>>()
-        .map(|subs| Self::Alter(Alter { subs, merge: true })),
+        .map(Self::Alter),
       HirKind::Repetition(Repetition { max: None, sub, .. }) => {
         Self::new(*sub).map(|e| Self::Kleene(Box::new(e)))
       }
@@ -77,9 +69,9 @@ impl<S> Mir<S> {
         .map(Self::Concat),
       HirKind::Alternation(a) => a
         .into_iter()
-        .map(Self::new)
+        .map(|hir| Self::new(hir).map(|e| (e, None)))
         .collect::<Result<_, _>>()
-        .map(|subs| Self::Alter(Alter { subs, merge: true })),
+        .map(Self::Alter),
     }
   }
 
@@ -96,9 +88,10 @@ impl<S> Mir<S> {
   }
 }
 
-impl<S> Mir<S>
+impl<S, T> Mir<S, T>
 where
   S: Hash + Eq + Clone,
+  T: Hash + Eq + Clone,
 {
   /// Optimizes the current MIR into a new one.
   pub fn optimize(self) -> Result<Self, Error> {
@@ -136,36 +129,32 @@ where
   }
 
   /// Optimized the given alternation.
-  fn optimize_alter(a: Alter<S>) -> Result<Self, Error> {
-    if a.subs.is_empty() {
+  fn optimize_alter(a: Vec<(Self, Option<T>)>) -> Result<Self, Error> {
+    if a.is_empty() {
       Err(Error::MatchesNothing)
     } else {
       // optimize all sub-expressions, flatten nested alternations
       // and remove duplicate expressions
-      let mut subs = Vec::new();
+      let mut new_a = Vec::new();
       let mut set = HashSet::new();
-      for e in a.subs {
+      for (e, tag) in a {
         match Self::optimize(e)? {
-          Self::Alter(alt) if alt.merge == a.merge => subs.extend(
+          Self::Alter(alt) => new_a.extend(
             alt
-              .subs
               .into_iter()
-              .filter_map(|e| set.insert(e.clone()).then_some(e)),
+              .filter_map(|(e, tag)| set.insert(e.clone()).then_some((e, tag))),
           ),
           e => {
             if set.insert(e.clone()) {
-              subs.push(e);
+              new_a.push((e, tag));
             }
           }
         }
       }
       // check length
-      Ok(match subs.len() {
-        1 => subs.swap_remove(0),
-        _ => Self::Alter(Alter {
-          subs,
-          merge: a.merge,
-        }),
+      Ok(match new_a.len() {
+        1 => new_a.swap_remove(0).0,
+        _ => Self::Alter(new_a),
       })
     }
   }
@@ -183,14 +172,14 @@ where
 
 macro_rules! impl_mir {
   ($ty:ty) => {
-    impl Mir<$ty> {
+    impl<T> Mir<$ty, T> {
       /// Creates a new MIR from the given [`Hir`].
       pub fn new(hir: Hir) -> Result<Self, Error> {
         MirHelper::new(hir)
       }
     }
 
-    impl TryFrom<Hir> for Mir<$ty> {
+    impl<T> TryFrom<Hir> for Mir<$ty, T> {
       type Error = Error;
 
       fn try_from(hir: Hir) -> Result<Self, Self::Error> {
@@ -214,7 +203,7 @@ trait MirHelper: Sized {
   fn new_from_class(c: Class) -> Result<Self, Error>;
 }
 
-impl MirHelper for Mir<char> {
+impl<T> MirHelper for Mir<char, T> {
   fn new(hir: Hir) -> Result<Self, Error> {
     assert!(
       hir.properties().is_utf8(),
@@ -231,27 +220,23 @@ impl MirHelper for Mir<char> {
 
   fn new_from_class(c: Class) -> Result<Self, Error> {
     match c {
-      Class::Bytes(b) => Ok(Self::Alter(Alter {
-        subs: b
-          .ranges()
+      Class::Bytes(b) => Ok(Self::Alter(
+        b.ranges()
           .iter()
-          .map(|r| Self::Range(r.start() as char, r.end() as char))
+          .map(|r| (Self::Range(r.start() as char, r.end() as char), None))
           .collect(),
-        merge: true,
-      })),
-      Class::Unicode(u) => Ok(Self::Alter(Alter {
-        subs: u
-          .ranges()
+      )),
+      Class::Unicode(u) => Ok(Self::Alter(
+        u.ranges()
           .iter()
-          .map(|r| Self::Range(r.start(), r.end()))
+          .map(|r| (Self::Range(r.start(), r.end()), None))
           .collect(),
-        merge: true,
-      })),
+      )),
     }
   }
 }
 
-impl MirHelper for Mir<u8> {
+impl<T> MirHelper for Mir<u8, T> {
   fn new(hir: Hir) -> Result<Self, Error> {
     assert!(
       !hir.properties().is_utf8(),
@@ -268,14 +253,12 @@ impl MirHelper for Mir<u8> {
 
   fn new_from_class(c: Class) -> Result<Self, Error> {
     match c {
-      Class::Bytes(b) => Ok(Self::Alter(Alter {
-        subs: b
-          .ranges()
+      Class::Bytes(b) => Ok(Self::Alter(
+        b.ranges()
           .iter()
-          .map(|r| Self::Range(r.start(), r.end()))
+          .map(|r| (Self::Range(r.start(), r.end()), None))
           .collect(),
-        merge: true,
-      })),
+      )),
       Class::Unicode(_) => Err(Error::UnsupportedOp("Unicode in byte mode")),
     }
   }
