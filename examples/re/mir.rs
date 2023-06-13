@@ -100,7 +100,7 @@ where
   }
 
   /// Returns the symbol set of the current MIR.
-  fn symbol_set(&self) -> Result<(Vec<(S, S)>, HashMap<S, usize>, HashMap<S, usize>), Error> {
+  fn symbol_set(&self) -> Result<SymbolSetTriple<S>, Error> {
     // collect all endpoints
     let mut ends = self.collect_endpoints();
     ends.sort();
@@ -212,7 +212,7 @@ where
     match self {
       Self::Concat(c) => Self::optimize_concat(c),
       Self::Alter(a) => Self::optimize_alter(a),
-      Self::Kleene(k) => Self::optimize_kleene(k),
+      Self::Kleene(k) => Self::optimize_kleene(*k),
       e => Ok(e),
     }
   }
@@ -334,7 +334,7 @@ where
   }
 
   /// Optimized the given kleene closure.
-  fn optimize_kleene(k: Box<Self>) -> Result<Self, Error> {
+  fn optimize_kleene(k: Self) -> Result<Self, Error> {
     Ok(match k.opt_without_rebuild()? {
       // empty kleene closure is just an empty expression
       Self::Empty => Self::Empty,
@@ -420,7 +420,7 @@ impl<T> MirHelper for Mir<u8, T> {
 
   fn new_from_literal(Literal(bs): Literal) -> Result<Self, Error> {
     Ok(Self::Concat(
-      bs.into_iter().map(|b| Self::Range(*b, *b)).collect(),
+      bs.iter().map(|b| Self::Range(*b, *b)).collect(),
     ))
   }
 
@@ -456,6 +456,9 @@ impl fmt::Display for Error {
     }
   }
 }
+
+/// A triple of symbol set, left bound index map and right bound index map.
+type SymbolSetTriple<S> = (Vec<(S, S)>, HashMap<S, usize>, HashMap<S, usize>);
 
 /// Endpoint of symbol ranges
 #[derive(PartialEq, Eq, PartialOrd, Ord)]

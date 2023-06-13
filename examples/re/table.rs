@@ -113,6 +113,15 @@ impl<S, T> StateTransTable<S, T> {
   }
 }
 
+impl<S, T> From<DFA<S, T>> for StateTransTable<S, T>
+where
+  S: Clone + Hash + Eq + Ord + SymbolOp,
+{
+  fn from(dfa: DFA<S, T>) -> Self {
+    Self::new(dfa)
+  }
+}
+
 /// A temporary state-transition table.
 ///
 /// This structure will be constructed during the creation of
@@ -133,7 +142,7 @@ impl<S, T> TempTable<S, T> {
     let num_states = fa.states().len();
     // assign IDs for all states
     let mut ids = HashMap::new();
-    for (id, _) in fa.states() {
+    for id in fa.states().keys() {
       let next_id = ids.len();
       ids.insert(*id, next_id);
     }
@@ -165,7 +174,7 @@ impl<S, T> TempTable<S, T> {
   ///
   /// Returns equivalence classes, state-transition table,
   /// initial state ID and tags.
-  fn into_optimized(self) -> (Vec<Vec<(S, S)>>, Vec<Vec<usize>>, usize, HashMap<usize, T>)
+  fn into_optimized(self) -> OptimizedTable<S, T>
   where
     S: Ord + SymbolOp,
   {
@@ -199,11 +208,8 @@ impl<S, T> TempTable<S, T> {
   }
 }
 
-impl<S, T> From<DFA<S, T>> for StateTransTable<S, T>
-where
-  S: Clone + Hash + Eq + Ord + SymbolOp,
-{
-  fn from(dfa: DFA<S, T>) -> Self {
-    Self::new(dfa)
-  }
-}
+/// Intermediate result of an optimized state-transition table.
+///
+/// Contains equivalence classes, optimized state-transition table,
+/// initial state ID and tags.
+type OptimizedTable<S, T> = (Vec<Vec<(S, S)>>, Vec<Vec<usize>>, usize, HashMap<usize, T>);

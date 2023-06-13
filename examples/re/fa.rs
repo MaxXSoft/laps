@@ -253,3 +253,9 @@ impl<S> FiniteAutomaton<Option<S>> {
       .collect()
   }
 }
+
+impl<S> Default for FiniteAutomaton<S> {
+  fn default() -> Self {
+    Self::new()
+  }
+}

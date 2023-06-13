@@ -129,7 +129,7 @@ impl<S, T> NFA<S, T> {
   }
 
   /// Converts the current NFA into a [`FiniteAutomaton`] and a tag set.
-  pub fn into_fa_tags(self) -> (FiniteAutomaton<Option<(S, S)>>, HashMap<usize, T>) {
+  pub fn into_fa_tags(self) -> FATags<S, T> {
     (self.fa, self.tags)
   }
 
@@ -148,3 +148,8 @@ impl<S, T> From<Mir<S, T>> for NFA<S, T> {
     Self::new(mir)
   }
 }
+
+/// A pair of [`NFA`]'s internal finite automaton and the tag map.
+///
+/// Used by method `into_fa_tags` of [`NFA`].
+pub type FATags<S, T> = (FiniteAutomaton<Option<(S, S)>>, HashMap<usize, T>);
