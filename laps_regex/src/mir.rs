@@ -28,10 +28,18 @@ pub enum Mir<S, T> {
 }
 
 impl<S, T> Mir<S, T> {
+  /// Creates a new MIR from the given [`Hir`].
+  pub fn new(hir: Hir) -> Result<Self, Error>
+  where
+    Self: MirBuilder,
+  {
+    Self::new_from_hir_kind(hir.into_kind())
+  }
+
   /// Creates a new MIR from the given [`HirKind`].
   fn new_from_hir_kind(kind: HirKind) -> Result<Self, Error>
   where
-    Self: MirHelper,
+    Self: MirBuilder,
   {
     match kind {
       HirKind::Empty => Ok(Self::Empty),
@@ -78,7 +86,7 @@ impl<S, T> Mir<S, T> {
   /// Creates a new MIR which matches `n` repeats of the given [`Hir`].
   fn new_n_repeats(hir: Hir, n: usize) -> Result<Self, Error>
   where
-    Self: MirHelper,
+    Self: MirBuilder,
   {
     repeat(hir)
       .take(n)
@@ -103,7 +111,7 @@ where
   fn symbol_set(&self) -> Result<SymbolSetTriple<S>, Error> {
     // collect all endpoints
     let mut ends = self.collect_endpoints();
-    ends.sort();
+    ends.sort_unstable();
     // get symbol set
     let mut syms = Vec::new();
     let mut unmatched = Vec::new();
@@ -343,32 +351,19 @@ where
   }
 }
 
-macro_rules! impl_mir {
-  ($ty:ty) => {
-    impl<T> Mir<$ty, T> {
-      /// Creates a new MIR from the given [`Hir`].
-      pub fn new(hir: Hir) -> Result<Self, Error> {
-        MirHelper::new(hir)
-      }
-    }
+impl<S, T> TryFrom<Hir> for Mir<S, T>
+where
+  Self: MirBuilder,
+{
+  type Error = Error;
 
-    impl<T> TryFrom<Hir> for Mir<$ty, T> {
-      type Error = Error;
-
-      fn try_from(hir: Hir) -> Result<Self, Self::Error> {
-        Self::new(hir)
-      }
-    }
-  };
+  fn try_from(hir: Hir) -> Result<Self, Self::Error> {
+    Self::new(hir)
+  }
 }
 
-impl_mir!(char);
-impl_mir!(u8);
-
-trait MirHelper: Sized {
-  /// Creates a new MIR from the given [`Hir`].
-  fn new(hir: Hir) -> Result<Self, Error>;
-
+/// Helper trait for building MIRs with some specific symbol types.
+pub trait MirBuilder: Sized {
   /// Creates a new MIR from the given [`Literal`].
   fn new_from_literal(l: Literal) -> Result<Self, Error>;
 
@@ -376,15 +371,7 @@ trait MirHelper: Sized {
   fn new_from_class(c: Class) -> Result<Self, Error>;
 }
 
-impl<T> MirHelper for Mir<char, T> {
-  fn new(hir: Hir) -> Result<Self, Error> {
-    assert!(
-      hir.properties().is_utf8(),
-      "expected regex that matching UTF-8 characters"
-    );
-    Self::new_from_hir_kind(hir.into_kind())
-  }
-
+impl<T> MirBuilder for Mir<char, T> {
   fn new_from_literal(Literal(bs): Literal) -> Result<Self, Error> {
     from_utf8(&bs)
       .map(|s| Self::Concat(s.chars().map(|c| Self::Range(c, c)).collect()))
@@ -409,15 +396,7 @@ impl<T> MirHelper for Mir<char, T> {
   }
 }
 
-impl<T> MirHelper for Mir<u8, T> {
-  fn new(hir: Hir) -> Result<Self, Error> {
-    assert!(
-      !hir.properties().is_utf8(),
-      "expected regex that matching bytes"
-    );
-    Self::new_from_hir_kind(hir.into_kind())
-  }
-
+impl<T> MirBuilder for Mir<u8, T> {
   fn new_from_literal(Literal(bs): Literal) -> Result<Self, Error> {
     Ok(Self::Concat(
       bs.iter().map(|b| Self::Range(*b, *b)).collect(),
