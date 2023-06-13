@@ -260,10 +260,10 @@ where
       let t = tagged_exps.get(&e).cloned();
       // optimize, and handle by kind
       match e.opt_without_rebuild()? {
-        Self::Alter(a) => new_a
-          .extend(a.into_iter().filter_map(|(e, inner_t)| {
-            set.insert(e.clone()).then_some((e, t.clone().or(inner_t)))
-          })),
+        Self::Alter(a) => new_a.extend(
+          a.into_iter()
+            .filter_map(|(e, inner_t)| set.insert(e.clone()).then(|| (e, t.clone().or(inner_t)))),
+        ),
         e => {
           if set.insert(e.clone()) {
             new_a.push((e, t));
