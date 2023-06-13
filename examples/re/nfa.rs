@@ -18,12 +18,23 @@ impl<S, T> NFA<S, T> {
       Mir::Empty => Self::new_nfa_with_symbol(None),
       Mir::Range(l, r) => Self::new_nfa_with_symbol(Some((l, r))),
       Mir::Concat(c) => c.into_iter().map(Self::new).reduce(Self::concat).unwrap(),
-      Mir::Alter(a) => {
-        a.into_iter()
-          .map(|(mir, tag)| (Self::new(mir), tag))
-          .reduce(Self::alter)
-          .unwrap()
-          .0
+      Mir::Alter(mut a) => {
+        if a.len() == 1 {
+          let (mir, tag) = a.swap_remove(0);
+          let mut nfa = Self::new(mir);
+          if let Some(tag) = tag {
+            let fs = nfa.normalize();
+            nfa.fa.set_final_state(fs);
+            nfa.tags.insert(fs, tag);
+          }
+          nfa
+        } else {
+          a.into_iter()
+            .map(|(mir, tag)| (Self::new(mir), tag))
+            .reduce(Self::alter)
+            .unwrap()
+            .0
+        }
       }
       Mir::Kleene(k) => {
         // create NFA and normalize
@@ -99,7 +110,12 @@ impl<S, T> NFA<S, T> {
       .copied()
       .find(|id| !self.tags.contains_key(id));
     // get the target state id
-    let target = untagged.unwrap_or(self.fa.add_state());
+    let target = if let Some(untagged) = untagged {
+      self.fa.set_normal_state(untagged);
+      untagged
+    } else {
+      self.fa.add_state()
+    };
     // add edges to the target state
     for id in self.fa.finals().clone() {
       if id != target {
