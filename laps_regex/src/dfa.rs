@@ -37,7 +37,7 @@ impl<S, T> DFA<S, T> {
     let syms = nfa.symbol_set();
     // stuffs for maintaining tags mappings between NFA and DFA
     let mut nfa_tags: Vec<_> = nfa_tags.into_iter().map(|(id, tag)| (tag, id)).collect();
-    nfa_tags.sort();
+    nfa_tags.sort_unstable();
     let mut tags = HashMap::new();
     macro_rules! first_tag {
       ($states:expr) => {

@@ -180,7 +180,7 @@ impl<S, T> TempTable<S, T> {
   {
     // sort the table
     let mut table: Vec<_> = self.table.into_iter().map(|(s, t)| (t, s)).collect();
-    table.sort();
+    table.sort_unstable();
     // get equivalence classes and the state-transition table
     let mut equivs: Vec<Vec<(S, S)>> = Vec::new();
     let mut trans_table = Vec::new();
