@@ -1,14 +1,17 @@
 use crate::dfa::DFA;
+use crate::fa::FiniteAutomaton;
+use crate::mir::SymbolOp;
 use std::collections::{BTreeMap, HashMap};
+use std::hash::Hash;
 
 /// A state-transition table with symbol type `S` and tag type `T`.
 #[derive(Debug)]
 pub struct StateTransTable<S, T> {
   /// State-transition table, which is a `num_equivs * num_states` 2d array.
   table: Box<[usize]>,
+  /// Initial state ID.
+  init_id: usize,
   /// Number of states.
-  ///
-  /// The first state (with state ID 0) is always the initial state.
   num_states: usize,
   /// Mapping between symbol ranges and equivalence class ID.
   ///
@@ -23,15 +26,37 @@ pub struct StateTransTable<S, T> {
 
 impl<S, T> StateTransTable<S, T> {
   /// Creates a new state-transition table from the given [`DFA`].
-  pub fn new(dfa: DFA<S, T>) -> Self {
-    todo!()
+  pub fn new(dfa: DFA<S, T>) -> Self
+  where
+    S: Clone + Hash + Eq + Ord + SymbolOp,
+  {
+    let (fa, tags) = dfa.into_fa_tags();
+    let num_states = fa.states().len();
+    let (equivs, trans_table, init_id) = TempTable::new(fa).into_optimized();
+    // get the final table
+    let table = trans_table
+      .into_iter()
+      .flat_map(|s| s.into_iter())
+      .collect::<Vec<_>>()
+      .into_boxed_slice();
+    // get symbol map
+    let sym_map = equivs
+      .into_iter()
+      .enumerate()
+      .flat_map(|(i, es)| es.into_iter().map(move |(l, r)| (r, (l, i))))
+      .collect();
+    Self {
+      table,
+      init_id,
+      num_states,
+      sym_map,
+      tags,
+    }
   }
 
   /// Returns the ID of the initial state.
-  ///
-  /// Currently this method will always return zero.
   pub fn init_id(&self) -> usize {
-    0
+    self.init_id
   }
 
   /// Returns the ID of the next state after
@@ -59,5 +84,96 @@ impl<S, T> StateTransTable<S, T> {
   /// regular expression, otherwise returns [`None`].
   pub fn is_final(&self, id: usize) -> Option<&T> {
     self.tags.get(&id)
+  }
+}
+
+/// A temporary state-transition table.
+///
+/// This structure will be constructed during the creation of
+/// [`StateTransTable`].
+struct TempTable<S> {
+  table: HashMap<(S, S), Vec<usize>>,
+  init_id: usize,
+}
+
+impl<S> TempTable<S> {
+  /// Creates a new temporary state-transition table from
+  /// the given [`FiniteAutomaton`].
+  fn new(fa: FiniteAutomaton<(S, S)>) -> Self
+  where
+    S: Clone + Hash + Eq,
+  {
+    let num_states = fa.states().len();
+    // assign IDs for all states
+    let mut ids = HashMap::new();
+    for (id, _) in fa.states() {
+      let next_id = ids.len();
+      ids.insert(*id, next_id);
+    }
+    // build the table
+    let mut table = HashMap::new();
+    for (id, state) in fa.states() {
+      let id = ids[id];
+      for (sym, next) in state.outs() {
+        // create or get a state table
+        let states = table.entry(sym.clone()).or_insert_with(|| {
+          let mut v = Vec::new();
+          v.resize(num_states, num_states);
+          v
+        });
+        // update it
+        states[id] = ids[next];
+      }
+    }
+    Self {
+      table,
+      init_id: ids[&fa.init_id()],
+    }
+  }
+
+  /// Optimizes the current table.
+  ///
+  /// Returns equivalence classes, state-transition table and
+  /// initial state ID.
+  fn into_optimized(self) -> (Vec<Vec<(S, S)>>, Vec<Vec<usize>>, usize)
+  where
+    S: Ord + SymbolOp,
+  {
+    // sort the table
+    let mut table: Vec<_> = self.table.into_iter().map(|(s, t)| (t, s)).collect();
+    table.sort();
+    // get equivalence classes and the state-transition table
+    let mut equivs: Vec<Vec<(S, S)>> = Vec::new();
+    let mut trans_table = Vec::new();
+    for (states, sym) in table {
+      match trans_table.last() {
+        Some(t) if t == &states => {
+          // get the last equivalence classes
+          let equiv = equivs.last_mut().unwrap();
+          // check if the current symbol can be merged into the last one
+          let (_, last_r) = equiv.last_mut().unwrap();
+          if last_r.next().as_ref() == Some(&sym.0) {
+            *last_r = sym.1;
+          } else {
+            // can not be merged, add as a new symbol
+            equiv.push(sym);
+          }
+        }
+        _ => {
+          equivs.push(vec![sym]);
+          trans_table.push(states);
+        }
+      }
+    }
+    (equivs, trans_table, self.init_id)
+  }
+}
+
+impl<S, T> From<DFA<S, T>> for StateTransTable<S, T>
+where
+  S: Clone + Hash + Eq + Ord + SymbolOp,
+{
+  fn from(dfa: DFA<S, T>) -> Self {
+    Self::new(dfa)
   }
 }
