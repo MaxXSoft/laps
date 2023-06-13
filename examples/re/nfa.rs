@@ -128,6 +128,11 @@ impl<S, T> NFA<S, T> {
     target
   }
 
+  /// Converts the current NFA into a [`FiniteAutomaton`] and a tag set.
+  pub fn into_fa_tags(self) -> (FiniteAutomaton<Option<(S, S)>>, HashMap<usize, T>) {
+    (self.fa, self.tags)
+  }
+
   /// Dumps the current finite automaton to the given writer as Graphviz.
   pub fn dump<W>(&self, writer: &mut W) -> io::Result<()>
   where
