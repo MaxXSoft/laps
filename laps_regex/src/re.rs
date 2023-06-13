@@ -69,7 +69,7 @@ where
           .into_iter()
           .map(|(re, tag)| {
             re_parse(&re)
-              .map_err(Error::Regex)
+              .map_err(|e| Error::Regex(Box::new(e)))
               .and_then(|hir| Mir::new(hir).map_err(Error::Mir))
               .map(|mir| (mir, Some(tag)))
           })
@@ -92,7 +92,7 @@ impl<T> Default for RegexBuilder<T> {
 #[derive(Debug)]
 pub enum Error {
   EmptyBuilder,
-  Regex(RegexError),
+  Regex(Box<RegexError>),
   Mir(MirError),
 }
 
@@ -149,7 +149,7 @@ impl<S, T> RegexMatcher<S, T> {
   where
     S: Ord,
   {
-    if let Some(next) = self.table.next_state(self.state, &s) {
+    if let Some(next) = self.table.next_state(self.state, s) {
       self.state = next;
       true
     } else {
