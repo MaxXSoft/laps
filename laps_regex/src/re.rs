@@ -1,5 +1,5 @@
 use crate::dfa::DFA;
-use crate::mir::{Error as MirError, Mir, SymbolOp};
+use crate::mir::{Error as MirError, Mir, MirBuilder, SymbolOp};
 use crate::nfa::NFA;
 use crate::table::StateTransTable;
 use regex_syntax::hir::Hir;
@@ -31,45 +31,54 @@ impl<T> RegexBuilder<T>
 where
   T: Clone + Hash + Eq + Ord,
 {
-  /// Builds all regular expressions in the current builder.
+  /// Builds all regular expressions in the current builder as UTF-8 mode.
   ///
   /// Returns a [`RegexMatcher`], or an error.
-  pub fn build(self) -> Result<RegexMatcher<char, T>, Error> {
-    self.build_impl(parse, Mir::<char, T>::new)
+  pub fn build<S>(self) -> Result<RegexMatcher<S, T>, Error>
+  where
+    S: Hash + Eq + Clone + Ord + SymbolOp,
+    Mir<S, T>: MirBuilder,
+  {
+    self.build_impl(parse)
   }
 
-  /// Builds all regular expressions in the current builder as byte mode.
+  /// Builds all regular expressions in the current builder as bytes mode.
   ///
   /// Returns a [`RegexMatcher`], or an error.
-  pub fn build_byte(self) -> Result<RegexMatcher<u8, T>, Error> {
-    self.build_impl(
-      |re| ParserBuilder::new().utf8(false).build().parse(re),
-      Mir::<u8, T>::new,
-    )
+  pub fn build_bytes<S>(self) -> Result<RegexMatcher<S, T>, Error>
+  where
+    S: Hash + Eq + Clone + Ord + SymbolOp,
+    Mir<S, T>: MirBuilder,
+  {
+    self.build_impl(|re| ParserBuilder::new().utf8(false).build().parse(re))
   }
 
   /// Implementation of all building methods.
-  fn build_impl<R, M, S>(self, re_parse: R, mir_new: M) -> Result<RegexMatcher<S, T>, Error>
+  fn build_impl<R, S>(self, re_parse: R) -> Result<RegexMatcher<S, T>, Error>
   where
     R: Fn(&str) -> Result<Hir, RegexError>,
-    M: Fn(Hir) -> Result<Mir<S, T>, MirError>,
     S: Hash + Eq + Clone + Ord + SymbolOp,
+    Mir<S, T>: MirBuilder,
   {
-    Mir::Alter(
-      self
-        .re_tags
-        .into_iter()
-        .map(|(re, tag)| {
-          re_parse(&re)
-            .map_err(Error::Regex)
-            .and_then(|hir| mir_new(hir).map_err(Error::Mir))
-            .map(|mir| (mir, Some(tag)))
-        })
-        .collect::<Result<_, _>>()?,
-    )
-    .optimize()
-    .map(|mir| RegexMatcher::new(StateTransTable::new(DFA::new(NFA::new(mir)))))
-    .map_err(Error::Mir)
+    if self.re_tags.is_empty() {
+      Err(Error::EmptyBuilder)
+    } else {
+      Mir::Alter(
+        self
+          .re_tags
+          .into_iter()
+          .map(|(re, tag)| {
+            re_parse(&re)
+              .map_err(Error::Regex)
+              .and_then(|hir| Mir::new(hir).map_err(Error::Mir))
+              .map(|mir| (mir, Some(tag)))
+          })
+          .collect::<Result<_, _>>()?,
+      )
+      .optimize()
+      .map(|mir| RegexMatcher::new(StateTransTable::new(DFA::new(NFA::new(mir)))))
+      .map_err(Error::Mir)
+    }
   }
 }
 
@@ -82,6 +91,7 @@ impl<T> Default for RegexBuilder<T> {
 /// Possible errors in building of regular expressions.
 #[derive(Debug)]
 pub enum Error {
+  EmptyBuilder,
   Regex(RegexError),
   Mir(MirError),
 }
@@ -89,6 +99,7 @@ pub enum Error {
 impl fmt::Display for Error {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
     match self {
+      Self::EmptyBuilder => write!(f, "no regular expressions in the builder"),
       Self::Regex(e) => write!(f, "{e}"),
       Self::Mir(e) => write!(f, "{e}"),
     }
@@ -111,6 +122,26 @@ impl<S, T> RegexMatcher<S, T> {
     }
   }
 
+  /// Checks if the given bytes can be matched.
+  /// If so, returns a reference to the corresponding tag.
+  /// Otherwise, returns [`None`].
+  ///
+  /// Smaller tags have higher precedence.
+  pub fn is_match(&self, seq: &[S]) -> Option<&T>
+  where
+    S: Ord,
+  {
+    let mut id = self.table.init_id();
+    for s in seq {
+      if let Some(next) = self.table.next_state(id, s) {
+        id = next;
+      } else {
+        return None;
+      }
+    }
+    self.table.is_final(id)
+  }
+
   /// Returns true if the given symbol can be accepted.
   ///
   /// This method will update the internal state.
@@ -129,6 +160,8 @@ impl<S, T> RegexMatcher<S, T> {
   /// Checks if the current state is a final state.
   /// If so, returns a reference to the corresponding tag.
   /// Otherwise, returns [`None`].
+  ///
+  /// Smaller tags have higher precedence.
   pub fn is_final(&self) -> Option<&T> {
     self.table.is_final(self.state)
   }
@@ -139,11 +172,16 @@ impl<S, T> RegexMatcher<S, T> {
   }
 }
 
-impl<T> RegexMatcher<char, T> {
+/// A regular expression matcher for matching characters.
+pub type CharsMatcher<T> = RegexMatcher<char, T>;
+
+impl<T> CharsMatcher<T> {
   /// Checks if the given string can be matched.
   /// If so, returns a reference to the corresponding tag.
   /// Otherwise, returns [`None`].
-  pub fn is_match(&self, s: &str) -> Option<&T> {
+  ///
+  /// Smaller tags have higher precedence.
+  pub fn is_str_match(&self, s: &str) -> Option<&T> {
     let mut id = self.table.init_id();
     for c in s.chars() {
       if let Some(next) = self.table.next_state(id, &c) {
@@ -156,11 +194,16 @@ impl<T> RegexMatcher<char, T> {
   }
 }
 
-impl<T> RegexMatcher<u8, T> {
+/// A regular expression matcher for matching bytes.
+pub type BytesMatcher<T> = RegexMatcher<u8, T>;
+
+impl<T> BytesMatcher<T> {
   /// Checks if the given string can be matched.
   /// If so, returns a reference to the corresponding tag.
   /// Otherwise, returns [`None`].
-  pub fn is_match(&self, s: &str) -> Option<&T> {
+  ///
+  /// Smaller tags have higher precedence.
+  pub fn is_str_match(&self, s: &str) -> Option<&T> {
     let mut id = self.table.init_id();
     for c in s.bytes() {
       if let Some(next) = self.table.next_state(id, &c) {
@@ -171,19 +214,57 @@ impl<T> RegexMatcher<u8, T> {
     }
     self.table.is_final(id)
   }
+}
 
-  /// Checks if the given bytes can be matched.
-  /// If so, returns a reference to the corresponding tag.
-  /// Otherwise, returns [`None`].
-  pub fn is_bytes_match(&self, b: &[u8]) -> Option<&T> {
-    let mut id = self.table.init_id();
-    for c in b {
-      if let Some(next) = self.table.next_state(id, &c) {
-        id = next;
-      } else {
-        return None;
-      }
+#[cfg(test)]
+mod test {
+  use super::*;
+
+  #[test]
+  fn match_string() {
+    use Token::*;
+    #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    enum Token {
+      Keyword,
+      Identifier,
+      Number,
     }
-    self.table.is_final(id)
+    let matcher: CharsMatcher<_> = RegexBuilder::new()
+      .add("if|else|while", Keyword)
+      .add("[_a-zA-Z][_a-zA-Z0-9]*", Identifier)
+      .add("[0-9]|[1-9][0-9]+", Number)
+      .build()
+      .unwrap();
+    assert_eq!(matcher.is_str_match("if"), Some(&Keyword));
+    assert_eq!(matcher.is_str_match("else"), Some(&Keyword));
+    assert_eq!(matcher.is_str_match("while"), Some(&Keyword));
+    assert_eq!(matcher.is_str_match("ifi"), Some(&Identifier));
+    assert_eq!(matcher.is_str_match("else1"), Some(&Identifier));
+    assert_eq!(matcher.is_str_match("_while"), Some(&Identifier));
+    assert_eq!(matcher.is_str_match("a_8"), Some(&Identifier));
+    assert_eq!(matcher.is_str_match("_"), Some(&Identifier));
+    assert_eq!(matcher.is_str_match("A_good_id"), Some(&Identifier));
+    assert_eq!(matcher.is_str_match("A_b@d_id"), None);
+    assert_eq!(matcher.is_str_match("0"), Some(&Number));
+    assert_eq!(matcher.is_str_match("5"), Some(&Number));
+    assert_eq!(matcher.is_str_match("12450"), Some(&Number));
+    assert_eq!(matcher.is_str_match("10"), Some(&Number));
+    assert_eq!(matcher.is_str_match("01"), None);
+    assert_eq!(matcher.is_str_match(""), None);
+    assert_eq!(matcher.is_str_match("?"), None);
+  }
+
+  #[test]
+  fn match_bytes() {
+    let matcher: BytesMatcher<_> = RegexBuilder::new()
+      .add("hello|hi", 0)
+      .add("goodbye|bye", 1)
+      .build_bytes()
+      .unwrap();
+    assert_eq!(matcher.is_str_match("hello"), Some(&0));
+    assert_eq!(matcher.is_match("hello".as_bytes()), Some(&0));
+    assert_eq!(matcher.is_match("hi".as_bytes()), Some(&0));
+    assert_eq!(matcher.is_match("goodbye".as_bytes()), Some(&1));
+    assert_eq!(matcher.is_match(&[0x62, 0x79, 0x65]), Some(&1));
   }
 }
