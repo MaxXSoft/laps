@@ -122,10 +122,12 @@ impl<S> FiniteAutomaton<S> {
 
   /// Unions the current finite automaton with the given finite automaton.
   ///
-  /// The initial state and all final states of the given finite automaton
-  /// will be added to the current finite automaton as normal states.
+  /// The initial state of the given finite automaton will be added to
+  /// the current finite automaton as normal states. All final states of
+  /// the given finite automaton will be kept.
   pub fn union(&mut self, fa: Self) {
     self.states.extend(fa.states);
+    self.finals.extend(fa.finals);
   }
 
   /// Returns a reference to the state map.
