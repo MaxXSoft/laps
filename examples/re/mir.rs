@@ -278,7 +278,7 @@ where
       }
     }
     // optimize alternation of concatenations
-    if new_a.iter().all(|(e, _)| matches!(e, Self::Concat(_))) {
+    if new_a.len() > 1 && new_a.iter().all(|(e, _)| matches!(e, Self::Concat(_))) {
       // extract reversed sub-expressions in concatenations
       let mut rev_subs: Vec<(Vec<_>, _)> = new_a
         .into_iter()
@@ -313,8 +313,12 @@ where
         rev_subs
           .into_iter()
           .map(|(mut es, t)| {
-            es.reverse();
-            (Self::Concat(es), t)
+            if es.is_empty() {
+              (Self::Empty, t)
+            } else {
+              es.reverse();
+              (Self::Concat(es), t)
+            }
           })
           .collect(),
       );
