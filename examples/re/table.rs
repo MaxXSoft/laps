@@ -1,5 +1,4 @@
 use crate::dfa::DFA;
-use crate::fa::FiniteAutomaton;
 use crate::mir::SymbolOp;
 use std::collections::{BTreeMap, HashMap};
 use std::hash::Hash;
@@ -30,9 +29,9 @@ impl<S, T> StateTransTable<S, T> {
   where
     S: Clone + Hash + Eq + Ord + SymbolOp,
   {
-    let (fa, tags) = dfa.into_fa_tags();
-    let num_states = fa.states().len();
-    let (equivs, trans_table, init_id) = TempTable::new(fa).into_optimized();
+    let (equivs, trans_table, init_id, tags) = TempTable::new(dfa).into_optimized();
+    // get number of states
+    let num_states = trans_table[0].len();
     // get the final table
     let table = trans_table
       .into_iter()
@@ -91,18 +90,19 @@ impl<S, T> StateTransTable<S, T> {
 ///
 /// This structure will be constructed during the creation of
 /// [`StateTransTable`].
-struct TempTable<S> {
+struct TempTable<S, T> {
   table: HashMap<(S, S), Vec<usize>>,
+  tags: HashMap<usize, T>,
   init_id: usize,
 }
 
-impl<S> TempTable<S> {
-  /// Creates a new temporary state-transition table from
-  /// the given [`FiniteAutomaton`].
-  fn new(fa: FiniteAutomaton<(S, S)>) -> Self
+impl<S, T> TempTable<S, T> {
+  /// Creates a new temporary state-transition table from the given [`DFA`].
+  fn new(dfa: DFA<S, T>) -> Self
   where
     S: Clone + Hash + Eq,
   {
+    let (fa, tags) = dfa.into_fa_tags();
     let num_states = fa.states().len();
     // assign IDs for all states
     let mut ids = HashMap::new();
@@ -125,17 +125,20 @@ impl<S> TempTable<S> {
         states[id] = ids[next];
       }
     }
+    // build the tag map
+    let tags = tags.into_iter().map(|(id, tag)| (ids[&id], tag)).collect();
     Self {
       table,
+      tags,
       init_id: ids[&fa.init_id()],
     }
   }
 
   /// Optimizes the current table.
   ///
-  /// Returns equivalence classes, state-transition table and
-  /// initial state ID.
-  fn into_optimized(self) -> (Vec<Vec<(S, S)>>, Vec<Vec<usize>>, usize)
+  /// Returns equivalence classes, state-transition table,
+  /// initial state ID and tags.
+  fn into_optimized(self) -> (Vec<Vec<(S, S)>>, Vec<Vec<usize>>, usize, HashMap<usize, T>)
   where
     S: Ord + SymbolOp,
   {
@@ -165,7 +168,7 @@ impl<S> TempTable<S> {
         }
       }
     }
-    (equivs, trans_table, self.init_id)
+    (equivs, trans_table, self.init_id, self.tags)
   }
 }
 
