@@ -4,47 +4,54 @@ use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 use std::hash::Hash;
 use std::{fmt, io};
 
-/// A deterministic finite automaton (DFA) with symbol type `S`.
+/// A deterministic finite automaton (DFA)
+/// with symbol type `S` and tag type `T`.
 #[derive(Debug)]
-pub struct DFA<S> {
-  fa: FiniteAutomaton<S>,
-  final_ids: HashMap<usize, usize>,
+pub struct DFA<S, T> {
+  fa: FiniteAutomaton<(S, S)>,
+  tags: HashMap<usize, T>,
 }
 
-impl<S> DFA<S> {
+impl<S, T> DFA<S, T> {
   /// Creates a new DFA from the given [`NFA`].
-  pub fn new(nfa: NFA<S>) -> Self
+  pub fn new(nfa: NFA<S, T>) -> Self
   where
     S: Clone + Hash + Eq + Ord,
+    T: Clone + Hash + Eq + Ord,
   {
     let (dfa, syms) = Self::new_from_nfa(nfa);
     let partition = Self::minimize(&dfa, &syms);
     Self::rebuild(dfa, syms, partition)
   }
 
-  /// Creates a new DFA from the given [`NFA`].
+  /// Creates a new DFA from the given [`NFA`]. Returns the created DFA
+  /// and its symbol set.
   ///
   /// The created DFA is not minimal.
-  fn new_from_nfa(nfa: NFA<S>) -> (Self, HashSet<S>)
+  fn new_from_nfa(nfa: NFA<S, T>) -> (Self, HashSet<(S, S)>)
   where
     S: Clone + Hash + Eq,
+    T: Clone + Ord,
   {
-    let nfa = FiniteAutomaton::from(nfa);
+    let (nfa, nfa_tags) = nfa.into_fa_tags();
     let syms = nfa.symbol_set();
-    // stuffs for maintaining final ID mappings between NFA and DFA
-    let nfa_finals: BTreeSet<_> = nfa.finals().iter().copied().collect();
-    let mut final_ids = HashMap::new();
-    macro_rules! first_final {
+    // stuffs for maintaining tags mappings between NFA and DFA
+    let mut nfa_tags: Vec<_> = nfa_tags.into_iter().map(|(id, tag)| (tag, id)).collect();
+    nfa_tags.sort();
+    let mut tags = HashMap::new();
+    macro_rules! first_tag {
       ($states:expr) => {
-        nfa_finals.iter().find(|id| $states.contains(id)).copied()
+        nfa_tags
+          .iter()
+          .find_map(|(tag, id)| $states.contains(id).then(|| tag.clone()))
       };
     }
     // create DFA, update the initial state
     let mut fa = FiniteAutomaton::new();
     let init = nfa.epsilon_closure(nfa.init_id());
-    if let Some(id) = first_final!(init) {
+    if let Some(tag) = first_tag!(init) {
       fa.set_final_state(fa.init_id());
-      final_ids.insert(fa.init_id(), id);
+      tags.insert(fa.init_id(), tag);
     }
     // create other states
     let mut states = vec![init.clone()];
@@ -61,9 +68,9 @@ impl<S> DFA<S> {
           *id
         } else {
           // add a new state
-          let id = if let Some(final_id) = first_final!(next) {
+          let id = if let Some(tag) = first_tag!(next) {
             let id = fa.add_final_state();
-            final_ids.insert(id, final_id);
+            tags.insert(id, tag);
             id
           } else {
             fa.add_state()
@@ -77,22 +84,23 @@ impl<S> DFA<S> {
         fa.state_mut(ids[&cur]).unwrap().add(s.clone(), id);
       }
     }
-    (Self { fa, final_ids }, syms)
+    (Self { fa, tags }, syms)
   }
 
   /// Creates a minimal DFA by the given DFA and symbol set.
-  fn minimize(dfa: &Self, syms: &HashSet<S>) -> VecDeque<HashSet<usize>>
+  fn minimize(dfa: &Self, syms: &HashSet<(S, S)>) -> VecDeque<HashSet<usize>>
   where
     S: Ord + Hash,
+    T: Hash + Eq,
   {
-    let Self { fa, final_ids } = dfa;
+    let Self { fa, tags } = dfa;
     // get the initial partition
-    let mut partition = final_ids
+    let mut partition = tags
       .iter()
       .fold(
         HashMap::new(),
-        |mut m: HashMap<_, HashSet<_>>, (id, nfa_id)| {
-          m.entry(*nfa_id).or_default().insert(*id);
+        |mut m: HashMap<_, HashSet<_>>, (id, tag)| {
+          m.entry(tag).or_default().insert(*id);
           m
         },
       )
@@ -154,17 +162,18 @@ impl<S> DFA<S> {
   }
 
   /// Rebuilds a DFA by the given partition.
-  fn rebuild(dfa: Self, syms: HashSet<S>, partition: VecDeque<HashSet<usize>>) -> Self
+  fn rebuild(dfa: Self, syms: HashSet<(S, S)>, partition: VecDeque<HashSet<usize>>) -> Self
   where
     S: Clone + Eq + Hash,
+    T: Clone,
   {
     let Self {
       fa: dfa,
-      final_ids: dfa_finals,
+      tags: dfa_tags,
     } = dfa;
     let mut fa = FiniteAutomaton::new();
     // rebuild mapping of states
-    let mut final_ids = HashMap::new();
+    let mut tags = HashMap::new();
     let partition: Vec<_> = partition
       .into_iter()
       .map(|ids| {
@@ -175,9 +184,9 @@ impl<S> DFA<S> {
           fa.add_state()
         };
         // check if is a final state
-        if let Some(final_id) = ids.iter().find_map(|id| dfa_finals.get(id)) {
+        if let Some(tag) = ids.iter().find_map(|id| dfa_tags.get(id)) {
           fa.set_final_state(id);
-          final_ids.insert(id, *final_id);
+          tags.insert(id, tag.clone());
         }
         (ids, id)
       })
@@ -205,37 +214,7 @@ impl<S> DFA<S> {
         }
       }
     }
-    Self { fa, final_ids }
-  }
-
-  /// Returns the ID of the initial state.
-  pub fn init_id(&self) -> usize {
-    self.fa.init_id()
-  }
-
-  /// Returns the ID of the next state after
-  /// accepting symbol `s` on the given state.
-  ///
-  /// Returns [`None`] if the given state ID is invalid,
-  /// or the given state can not accept symbol `s`.
-  pub fn next_state(&self, id: usize, s: &S) -> Option<usize>
-  where
-    S: PartialEq,
-  {
-    self
-      .fa
-      .states()
-      .get(&id)
-      .and_then(|state| state.next_state(s))
-  }
-
-  /// Checks if the given state ID corresponds to a final state.
-  ///
-  /// Returns [`Some(id)`] which `id` is a final state ID of the NFA
-  /// for building the current DFA if the given ID corresponds to a
-  /// final state, otherwise returns [`None`].
-  pub fn is_final(&self, id: usize) -> Option<usize> {
-    self.final_ids.get(&id).copied()
+    Self { fa, tags }
   }
 
   /// Dumps the current finite automaton to the given writer as Graphviz.
@@ -248,11 +227,12 @@ impl<S> DFA<S> {
   }
 }
 
-impl<S> From<NFA<S>> for DFA<S>
+impl<S, T> From<NFA<S, T>> for DFA<S, T>
 where
   S: Clone + Hash + Eq + Ord,
+  T: Clone + Hash + Eq + Ord,
 {
-  fn from(nfa: NFA<S>) -> Self {
+  fn from(nfa: NFA<S, T>) -> Self {
     Self::new(nfa)
   }
 }
