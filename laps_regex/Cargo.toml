@@ -1,7 +1,15 @@
 [package]
 name = "laps_regex"
 version = "0.0.1"
+authors = ["MaxXing <x@MaxXSoft.net>"]
 edition = "2021"
+description = "Tools for generating NFAs, DFAs and state-transition tables from regular expressions."
+repository = "https://github.com/MaxXSoft/laps"
+documentation = "https://docs.rs/laps_regex"
+categories = ["parsing", "text-processing"]
+keywords = ["laps", "regex", "lexer", "parser", "automaton"]
+readme = "README.md"
+license = "MIT OR Apache-2.0"
 
 [dependencies]
 regex-syntax = "0.7.2"
