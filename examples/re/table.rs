@@ -53,9 +53,36 @@ impl<S, T> StateTransTable<S, T> {
     }
   }
 
+  /// Returns a reference to the internal transition table,
+  /// which is a `num_equivs * num_states` 2d array.
+  pub fn table(&self) -> &[usize] {
+    &self.table
+  }
+
   /// Returns the ID of the initial state.
   pub fn init_id(&self) -> usize {
     self.init_id
+  }
+
+  /// Returns number of states.
+  pub fn num_states(&self) -> usize {
+    self.num_states
+  }
+
+  /// Returns a reference to the mapping between symbol ranges
+  /// and equivalence class ID.
+  ///
+  /// The key of the map is the right bound of the range, and
+  /// the value is `(left_bound, equiv_id)`.
+  pub fn sym_map(&self) -> &BTreeMap<S, (S, usize)> {
+    &self.sym_map
+  }
+
+  /// Returns a reference to the mapping between state IDs and tags.
+  ///
+  /// Only the state presents in this map are final states.
+  pub fn tags(&self) -> &HashMap<usize, T> {
+    &self.tags
   }
 
   /// Returns the ID of the next state after
