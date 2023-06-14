@@ -1,3 +1,8 @@
+//! User interfaces for building and matching regular expressions.
+//!
+//! This module contains the regular expression builder [`RegexBuilder`]
+//! and the regular expression matcher [`RegexMatcher`].
+
 use crate::dfa::DFA;
 use crate::mir::{Error as MirError, Mir, MirBuilder, SymbolOp};
 use crate::nfa::NFA;
@@ -91,8 +96,11 @@ impl<T> Default for RegexBuilder<T> {
 /// Possible errors in building of regular expressions.
 #[derive(Debug)]
 pub enum Error {
+  /// There is no regular expressions in [`RegexBuilder`].
   EmptyBuilder,
+  /// An error occurred during parsing regular expressions.
   Regex(Box<RegexError>),
+  /// An error occurred during compiling or optimizing regular expressions.
   Mir(MirError),
 }
 
