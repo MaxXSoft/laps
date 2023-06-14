@@ -1,3 +1,8 @@
+//! Mid-level intermediate representation ([`Mir`]) of regular expressions.
+//!
+//! A [`Mir`] can be built from the high-level intermediate representation
+//! ([`regex_syntax::hir::Hir`]).
+
 use regex_syntax::hir::{Class, Hir, HirKind, Literal, Repetition};
 use std::collections::{HashMap, HashSet};
 use std::fmt;
@@ -422,9 +427,13 @@ impl<T> MirBuilder for Mir<u8, T> {
 /// Possible errors during the creation of the [`Mir`].
 #[derive(Debug)]
 pub enum Error {
+  /// There is a invalid UTF-8 string regular expression.
   InvalidUtf8,
+  /// Regular expression contains unsupported operations.
   UnsupportedOp(&'static str),
+  /// Regular expression matches nothing.
   MatchesNothing,
+  /// Failed to build the symbol set of regular expressions.
   FailedToBuildSymbolSet,
 }
 
