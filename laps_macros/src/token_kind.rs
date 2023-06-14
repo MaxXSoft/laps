@@ -14,7 +14,7 @@ pub fn token_kind(attr: TokenStream, item: TokenStream) -> Result<TokenStream> {
   // generate trait implementations
   let froms = gen_from_impls(&input);
   let display = gen_display_impl(&input);
-  Ok(TokenStream::from(quote!{
+  Ok(TokenStream::from(quote! {
     #[derive(Clone, PartialEq)]
     #input
     #froms #display
