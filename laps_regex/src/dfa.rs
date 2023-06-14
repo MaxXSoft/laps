@@ -1,3 +1,7 @@
+//! Deterministic finite automaton ([`DFA`]) related implementations.
+//!
+//! A DFA can be built from a nondeterministic finite automaton ([`NFA`]).
+
 use crate::fa::FiniteAutomaton;
 use crate::nfa::NFA;
 use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
