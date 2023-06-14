@@ -94,6 +94,10 @@ impl<S, T> StateTransTable<S, T> {
   where
     S: Ord,
   {
+    // check if the ID is valid
+    if id >= self.num_states {
+      return None;
+    }
     // get equivalence class ID
     let equiv = match self.sym_map.range(s..).next() {
       Some((_, (l, id))) if s >= l => *id,
