@@ -233,16 +233,21 @@ impl<T> BytesMatcher<T> {
 #[cfg(test)]
 mod test {
   use super::*;
+  use Token::*;
+
+  #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+  enum Token {
+    Keyword,
+    Identifier,
+    Number,
+    Str,
+    Operator,
+    Skip,
+    Other,
+  }
 
   #[test]
   fn match_string() {
-    use Token::*;
-    #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-    enum Token {
-      Keyword,
-      Identifier,
-      Number,
-    }
     let matcher: CharsMatcher<_> = RegexBuilder::new()
       .add("if|else|while", Keyword)
       .add("[_a-zA-Z][_a-zA-Z0-9]*", Identifier)
@@ -280,5 +285,124 @@ mod test {
     assert_eq!(matcher.is_match("hi".as_bytes()), Some(&0));
     assert_eq!(matcher.is_match("goodbye".as_bytes()), Some(&1));
     assert_eq!(matcher.is_match(&[0x62, 0x79, 0x65]), Some(&1));
+  }
+
+  #[test]
+  fn match_stream() {
+    use std::io::{Cursor, Read};
+
+    struct Lexer<R> {
+      reader: R,
+      matcher: CharsMatcher<Token>,
+      last_char: Option<char>,
+    }
+
+    impl<R> Lexer<R> {
+      fn new(reader: R) -> Self {
+        Self {
+          reader,
+          matcher: RegexBuilder::new()
+            .add("if|else|while", Keyword)
+            .add("[_a-zA-Z][_a-zA-Z0-9]*", Identifier)
+            .add("[0-9]|[1-9][0-9]+", Number)
+            .add("\"[^\"\r\n]*\"", Str)
+            .add(r"==|>|-=|\+=", Operator)
+            .add(r"\s+", Skip)
+            .add(".", Other)
+            .build()
+            .unwrap(),
+          last_char: None,
+        }
+      }
+
+      fn unread(&mut self, c: char) {
+        self.last_char = Some(c);
+      }
+    }
+
+    impl<R> Lexer<R>
+    where
+      R: Read,
+    {
+      fn read(&mut self) -> Option<char> {
+        let mut buf = [0];
+        match self.last_char.take() {
+          None => match self.reader.read(&mut buf) {
+            Ok(1) => Some(buf[0] as char),
+            _ => None,
+          },
+          c => c,
+        }
+      }
+
+      fn next_token_impl(&mut self) -> Option<(Token, String)> {
+        let mut last_state;
+        let mut buf = String::new();
+        self.matcher.reset();
+        loop {
+          let c = self.read()?;
+          last_state = self.matcher.state();
+          if !self.matcher.is_accept(&c) {
+            self.unread(c);
+            break;
+          }
+          buf.push(c);
+        }
+        self.matcher.is_state_final(last_state).map(|t| (*t, buf))
+      }
+
+      fn next_token(&mut self) -> Option<(Token, String)> {
+        loop {
+          let ts = self.next_token_impl();
+          if !matches!(ts, Some((Skip, _))) {
+            return ts;
+          }
+        }
+      }
+    }
+
+    let mut lexer = Lexer::new(Cursor::new(
+      r#"
+      while (test(b) =="hello!") {
+        if (b> 5) {
+          b-=1;
+        } else {
+          b += 2;
+        }
+      }
+    "#,
+    ));
+
+    assert_eq!(lexer.next_token(), Some((Keyword, "while".into())));
+    assert_eq!(lexer.next_token(), Some((Other, "(".into())));
+    assert_eq!(lexer.next_token(), Some((Identifier, "test".into())));
+    assert_eq!(lexer.next_token(), Some((Other, "(".into())));
+    assert_eq!(lexer.next_token(), Some((Identifier, "b".into())));
+    assert_eq!(lexer.next_token(), Some((Other, ")".into())));
+    assert_eq!(lexer.next_token(), Some((Operator, "==".into())));
+    assert_eq!(lexer.next_token(), Some((Str, "\"hello!\"".into())));
+    assert_eq!(lexer.next_token(), Some((Other, ")".into())));
+    assert_eq!(lexer.next_token(), Some((Other, "{".into())));
+    assert_eq!(lexer.next_token(), Some((Keyword, "if".into())));
+    assert_eq!(lexer.next_token(), Some((Other, "(".into())));
+    assert_eq!(lexer.next_token(), Some((Identifier, "b".into())));
+    assert_eq!(lexer.next_token(), Some((Operator, ">".into())));
+    assert_eq!(lexer.next_token(), Some((Number, "5".into())));
+    assert_eq!(lexer.next_token(), Some((Other, ")".into())));
+    assert_eq!(lexer.next_token(), Some((Other, "{".into())));
+    assert_eq!(lexer.next_token(), Some((Identifier, "b".into())));
+    assert_eq!(lexer.next_token(), Some((Operator, "-=".into())));
+    assert_eq!(lexer.next_token(), Some((Number, "1".into())));
+    assert_eq!(lexer.next_token(), Some((Other, ";".into())));
+    assert_eq!(lexer.next_token(), Some((Other, "}".into())));
+    assert_eq!(lexer.next_token(), Some((Keyword, "else".into())));
+    assert_eq!(lexer.next_token(), Some((Other, "{".into())));
+    assert_eq!(lexer.next_token(), Some((Identifier, "b".into())));
+    assert_eq!(lexer.next_token(), Some((Operator, "+=".into())));
+    assert_eq!(lexer.next_token(), Some((Number, "2".into())));
+    assert_eq!(lexer.next_token(), Some((Other, ";".into())));
+    assert_eq!(lexer.next_token(), Some((Other, "}".into())));
+    assert_eq!(lexer.next_token(), Some((Other, "}".into())));
+    assert_eq!(lexer.next_token(), None);
   }
 }
