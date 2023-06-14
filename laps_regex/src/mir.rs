@@ -126,20 +126,23 @@ where
           }
           unmatched.push(sym);
         }
-        Dir::Right => match unmatched.pop() {
-          Some(s) => {
+        Dir::Right => {
+          let s = unmatched.pop().ok_or(Error::FailedToBuildSymbolSet)?;
+          if s <= sym {
             syms.push((s, sym.clone()));
-            if let Some(last) = unmatched.last_mut() {
-              if *last <= sym {
-                *last = sym.next().ok_or(Error::FailedToBuildSymbolSet)?;
-              }
+          }
+          if let Some(last) = unmatched.last_mut() {
+            if *last > sym {
+              return Err(Error::FailedToBuildSymbolSet);
+            }
+            if let Some(next) = sym.next() {
+              *last = next;
+            } else {
+              unmatched.clear();
+              break;
             }
           }
-          None => match syms.last() {
-            Some((_, s)) if *s == sym => {}
-            _ => syms.push((sym.clone(), sym)),
-          },
-        },
+        }
       }
     }
     // check if all endpoints are matched
