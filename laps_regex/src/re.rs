@@ -364,7 +364,7 @@ mod test {
     let mut lexer = Lexer::new(Cursor::new(
       r#"
       while (test(b) =="hello!") {
-        if (b> 5) {
+        if (b> 5){
           b-=1;
         } else {
           b += 2;
