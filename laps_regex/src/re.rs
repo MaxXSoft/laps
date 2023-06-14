@@ -122,6 +122,11 @@ impl<S, T> RegexMatcher<S, T> {
     }
   }
 
+  /// Returns the current state ID.
+  pub fn state(&self) -> usize {
+    self.state
+  }
+
   /// Checks if the given bytes can be matched.
   /// If so, returns a reference to the corresponding tag.
   /// Otherwise, returns [`None`].
@@ -164,6 +169,15 @@ impl<S, T> RegexMatcher<S, T> {
   /// Smaller tags have higher precedence.
   pub fn is_final(&self) -> Option<&T> {
     self.table.is_final(self.state)
+  }
+
+  /// Checks if the given state is a final state.
+  /// If so, returns a reference to the corresponding tag.
+  /// Otherwise, returns [`None`].
+  ///
+  /// Smaller tags have higher precedence.
+  pub fn is_state_final(&self, id: usize) -> Option<&T> {
+    self.table.is_final(id)
   }
 
   /// Resets the internal state of the current matcher to initial state.
