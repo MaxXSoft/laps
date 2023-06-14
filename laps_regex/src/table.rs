@@ -1,3 +1,8 @@
+//! State-transition table ([`StateTransTable`]) related implementations.
+//!
+//! A state-transition table can be built from a deterministic finite
+//! automaton ([`DFA`]).
+
 use crate::dfa::DFA;
 use crate::mir::SymbolOp;
 use std::collections::{BTreeMap, HashMap};
