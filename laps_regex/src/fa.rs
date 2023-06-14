@@ -1,3 +1,9 @@
+//! Finite automaton representations.
+//!
+//! This module contains [`FiniteAutomaton`], which is a simple finite
+//! automaton implementation, and [`State`], which represents a state in
+//! the automaton.
+
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::hash::Hash;
 use std::sync::{Mutex, MutexGuard, OnceLock};
