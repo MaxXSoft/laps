@@ -218,7 +218,7 @@ impl<S, T> DFA<S, T> {
   }
 
   /// Converts the current NFA into a [`FiniteAutomaton`] and a tag set.
-  pub fn into_fa_tags(self) -> (FiniteAutomaton<(S, S)>, HashMap<usize, T>) {
+  pub fn into_fa_tags(self) -> FATags<S, T> {
     (self.fa, self.tags)
   }
 
@@ -241,3 +241,8 @@ where
     Self::new(nfa)
   }
 }
+
+/// A pair of [`DFA`]'s internal finite automaton and the tag map.
+///
+/// Used by method `into_fa_tags` of [`DFA`].
+pub type FATags<S, T> = (FiniteAutomaton<(S, S)>, HashMap<usize, T>);
