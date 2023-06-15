@@ -14,7 +14,7 @@ With `laps`, you can build parsers by just defining ASTs and deriving `Parse` tr
 Add `laps` to your project by running `cargo add`:
 
 ```
-cargo add laps
+cargo add laps --features macros
 ```
 
 ## Example
