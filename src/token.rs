@@ -24,67 +24,6 @@ use std::{fmt, hash};
 #[cfg(feature = "macros")]
 pub use laps_macros::{token_ast, token_kind};
 
-/// Trait for creating tokens that holding values of type `T`.
-pub trait TokenBuilder<T> {
-  /// Creates a new token from the given value and span.
-  fn new(value: T, span: Span) -> Self;
-}
-
-/// Wrapper type representing an identifier.
-///
-/// In order not to be confused with string literals
-/// in built-in methods of [`InputStream`](crate::input::InputStream) trait.
-#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Ident(pub String);
-
-impl From<Ident> for String {
-  fn from(id: Ident) -> Self {
-    id.0
-  }
-}
-
-impl From<String> for Ident {
-  fn from(s: String) -> Self {
-    Self(s)
-  }
-}
-
-impl<'a> From<&'a str> for Ident {
-  fn from(s: &'a str) -> Self {
-    Self(s.into())
-  }
-}
-
-impl fmt::Display for Ident {
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    self.0.fmt(f)
-  }
-}
-
-impl AsMut<str> for Ident {
-  fn as_mut(&mut self) -> &mut str {
-    self.0.as_mut()
-  }
-}
-
-impl AsRef<str> for Ident {
-  fn as_ref(&self) -> &str {
-    self.0.as_ref()
-  }
-}
-
-impl Borrow<str> for Ident {
-  fn borrow(&self) -> &str {
-    self.0.borrow()
-  }
-}
-
-impl BorrowMut<str> for Ident {
-  fn borrow_mut(&mut self) -> &mut str {
-    self.0.borrow_mut()
-  }
-}
-
 /// A generic token.
 #[derive(Clone, Debug)]
 pub struct Token<Kind> {
@@ -92,18 +31,6 @@ pub struct Token<Kind> {
   pub kind: Kind,
   /// Span of the token.
   pub span: Span,
-}
-
-impl<T, Kind> TokenBuilder<T> for Token<Kind>
-where
-  Kind: From<T>,
-{
-  fn new(value: T, span: Span) -> Self {
-    Self {
-      kind: value.into(),
-      span,
-    }
-  }
 }
 
 impl<Kind> Spanned for Token<Kind> {
