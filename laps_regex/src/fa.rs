@@ -104,7 +104,7 @@ impl<S> FiniteAutomaton<S> {
 
   /// Sets the given state as a final state.
   ///
-  /// Returns `false` if the given state does not exist.
+  /// Returns [`false`](bool) if the given state does not exist.
   pub fn set_final_state(&mut self, id: usize) -> bool {
     if self.states.contains_key(&id) {
       self.finals.insert(id);
@@ -116,7 +116,7 @@ impl<S> FiniteAutomaton<S> {
 
   /// Sets the given state as a normal state.
   ///
-  /// Returns `false` if the given state does not exist.
+  /// Returns [`false`](bool) if the given state does not exist.
   pub fn set_normal_state(&mut self, id: usize) -> bool {
     if self.states.contains_key(&id) {
       self.finals.remove(&id);

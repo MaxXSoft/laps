@@ -254,7 +254,7 @@ pub trait InputStream {
     Ok((s, span))
   }
 
-  /// Returns `true` if the current character may be the beginning of
+  /// Returns [`true`](bool) if the current character may be the beginning of
   /// an integer literal.
   fn maybe_int(&mut self) -> Result<bool> {
     Ok(self.peek()?.map_or(false, |c| c.is_ascii_digit()))
@@ -300,7 +300,7 @@ pub trait InputStream {
     }
   }
 
-  /// Returns `true` if the current character may be the beginning of
+  /// Returns [`true`](bool) if the current character may be the beginning of
   /// an floating-point literal.
   fn maybe_float(&mut self) -> Result<bool> {
     Ok(
@@ -333,7 +333,7 @@ pub trait InputStream {
     }
   }
 
-  /// Returns `true` if the current character may be the beginning of
+  /// Returns [`true`](bool) if the current character may be the beginning of
   /// a number (integer literal or floating-point literal).
   fn maybe_num(&mut self) -> Result<bool> {
     self.maybe_float()
@@ -396,7 +396,7 @@ pub trait InputStream {
     }
   }
 
-  /// Returns `true` if the current character may be the beginning of
+  /// Returns [`true`](bool) if the current character may be the beginning of
   /// an identifier.
   fn maybe_ident(&mut self) -> Result<bool> {
     Ok(
@@ -424,7 +424,7 @@ pub trait InputStream {
     Ok(T::new(Ident(id), span))
   }
 
-  /// Returns `true` if the current character may be the beginning of
+  /// Returns [`true`](bool) if the current character may be the beginning of
   /// a Unicode identifier.
   fn maybe_unicode_ident(&mut self) -> Result<bool> {
     Ok(
@@ -453,7 +453,7 @@ pub trait InputStream {
     Ok(T::new(Ident(id), span))
   }
 
-  /// Returns `true` if the current character may be the beginning of
+  /// Returns [`true`](bool) if the current character may be the beginning of
   /// a string literal.
   fn maybe_str(&mut self) -> Result<bool> {
     Ok(self.peek()?.map_or(false, |c| c == '"'))
@@ -488,7 +488,7 @@ pub trait InputStream {
     }
   }
 
-  /// Returns `true` if the current character may be the beginning of
+  /// Returns [`true`](bool) if the current character may be the beginning of
   /// a character literal.
   fn maybe_char_literal(&mut self) -> Result<bool> {
     Ok(self.peek()?.map_or(false, |c| c == '\''))

@@ -155,5 +155,5 @@ impl<S, T> From<Mir<S, T>> for NFA<S, T> {
 
 /// A pair of [`NFA`]'s internal finite automaton and the tag map.
 ///
-/// Used by method `into_fa_tags` of [`NFA`].
+/// Used by method [`into_fa_tags`](NFA#method.into_fa_tags) of [`NFA`].
 pub type FATags<S, T> = (FiniteAutomaton<Option<(S, S)>>, HashMap<usize, T>);

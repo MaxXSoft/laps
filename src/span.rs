@@ -64,13 +64,13 @@ pub enum Error {
 }
 
 impl Error {
-  /// Returns `true` if the current error is fatal.
+  /// Returns [`true`](bool) if the current error is fatal.
   #[cfg(not(feature = "logger"))]
   pub fn is_fatal(&self) -> bool {
     matches!(self, Self::Fatal(..))
   }
 
-  /// Returns `true` if the current error is fatal.
+  /// Returns [`true`](bool) if the current error is fatal.
   #[cfg(feature = "logger")]
   pub fn is_fatal(&self) -> bool {
     matches!(self, Self::Fatal)

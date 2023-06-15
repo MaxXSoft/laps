@@ -29,10 +29,11 @@ pub fn derive_spanned(item: TokenStream) -> TokenStream {
   result_to_tokens!(spanned::derive_spanned(item))
 }
 
-/// Implements `From`, `TryFrom` and `Display` trait for token kind enums.
+/// Implements [`From`], [`TryFrom`] and [`Display`](std::fmt::Display)
+/// trait for token kind enums.
 ///
-/// The `From` and `TryFrom` trait will only be implemented for variants with
-/// single unnamed field.
+/// The [`From`] and [`TryFrom`] trait will only be implemented for variants
+/// with single unnamed field.
 ///
 /// # Examples
 ///

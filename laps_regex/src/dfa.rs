@@ -248,5 +248,5 @@ where
 
 /// A pair of [`DFA`]'s internal finite automaton and the tag map.
 ///
-/// Used by method `into_fa_tags` of [`DFA`].
+/// Used by method [`into_fa_tags`](DFA#method.into_fa_tags) of [`DFA`].
 pub type FATags<S, T> = (FiniteAutomaton<(S, S)>, HashMap<usize, T>);

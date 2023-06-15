@@ -344,7 +344,8 @@ where
   }
 
   #[cfg(feature = "macros")]
-  /// Consumes and returns the final result of the `maybe` chain.
+  /// Consumes and returns the final result of the
+  /// [`maybe`](Lookahead#method.maybe) chain.
   pub fn result(self) -> Result<bool> {
     Ok(self.last_result)
   }
