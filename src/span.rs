@@ -321,19 +321,25 @@ impl Span {
   ///
   /// let mut span = Span::new(FileType::Buffer);
   /// assert_eq!(format!("{span}"), "1:0-1:0");
-  /// span.update(' ');
+  /// span.update(&' ');
   /// assert_eq!(format!("{span}"), "1:1-1:1");
-  /// span.update('\n');
+  /// span.update(&'\n');
   /// assert_eq!(format!("{span}"), "2:0-2:0");
   /// ```
-  pub fn update(&mut self, c: char) {
+  pub fn update<C>(&mut self, c: &C)
+  where
+    C: LocationUpdate,
+  {
     self.start.update(c);
     self.end = self.start;
   }
 
   /// Converts the current span into a new one
   /// where the location has been updated.
-  pub fn into_updated(self, c: char) -> Self {
+  pub fn into_updated<C>(self, c: &C) -> Self
+  where
+    C: LocationUpdate,
+  {
     let mut location = self.start;
     location.update(c);
     Self {
@@ -531,8 +537,8 @@ impl AsRef<Self> for Span {
 /// A line-column mark.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Location {
-  line: u32,
-  col: u32,
+  pub line: u32,
+  pub col: u32,
 }
 
 impl Location {
@@ -542,13 +548,11 @@ impl Location {
   }
 
   /// Updates the line number and column number based on the given character.
-  fn update(&mut self, c: char) {
-    if c == '\n' {
-      self.col = 0;
-      self.line += 1;
-    } else {
-      self.col += 1;
-    }
+  fn update<C>(&mut self, c: &C)
+  where
+    C: LocationUpdate,
+  {
+    c.update(self)
   }
 }
 
@@ -603,6 +607,29 @@ where
 {
   fn span(&self) -> Span {
     self.as_ref().span()
+  }
+}
+
+/// Trait for updating a location with a specific character type.
+pub trait LocationUpdate {
+  /// Updates the given location with the current character.
+  fn update(&self, loc: &mut Location);
+}
+
+impl LocationUpdate for char {
+  fn update(&self, loc: &mut Location) {
+    if *self == '\n' {
+      loc.col = 0;
+      loc.line += 1;
+    } else {
+      loc.col += 1;
+    }
+  }
+}
+
+impl LocationUpdate for u8 {
+  fn update(&self, loc: &mut Location) {
+    (*self as char).update(loc)
   }
 }
 
@@ -670,23 +697,23 @@ mod test {
   fn loc_update() {
     let mut loc = Location::new();
     assert_eq!(format!("{loc}"), "1:0");
-    loc.update(' ');
-    loc.update(' ');
+    loc.update(&' ');
+    loc.update(&' ');
     assert_eq!(format!("{loc}"), "1:2");
-    loc.update('\n');
+    loc.update(&'\n');
     assert_eq!(format!("{loc}"), "2:0");
-    loc.update('\n');
-    loc.update('\n');
+    loc.update(&'\n');
+    loc.update(&'\n');
     assert_eq!(format!("{loc}"), "4:0");
   }
 
   #[test]
   fn span_update() {
     let mut span = Span::new(FileType::Buffer);
-    span.update(' ');
+    span.update(&' ');
     let sp1 = span.clone();
-    span.update(' ');
-    span.update(' ');
+    span.update(&' ');
+    span.update(&' ');
     let sp2 = sp1.clone().into_end_updated(span);
     assert!(sp1.is_in_same_line_as(&sp2));
     log_error!(sp2, "test error");
