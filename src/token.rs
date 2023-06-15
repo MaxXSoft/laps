@@ -33,6 +33,19 @@ pub struct Token<Kind> {
   pub span: Span,
 }
 
+impl<Kind> Token<Kind> {
+  /// Creates a new token from the given value and span.
+  pub fn new<T>(value: T, span: Span) -> Self
+  where
+    Kind: From<T>,
+  {
+    Self {
+      kind: value.into(),
+      span,
+    }
+  }
+}
+
 impl<Kind> Spanned for Token<Kind> {
   fn span(&self) -> Span {
     self.span.clone()
