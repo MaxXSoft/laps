@@ -96,7 +96,7 @@ impl<T, const BUFFER_SIZE: usize> Reader<T, BUFFER_SIZE> {
       self.byte_buf_offset = 0;
     }
     // update the span
-    self.span.update(c);
+    self.span.update(&c);
     Ok((Some(c), loc))
   }
 }
@@ -108,7 +108,7 @@ impl<T, const BUFFER_SIZE: usize> Reader<T, BUFFER_SIZE> {
 pub struct ByteReader<T, const BUFFER_SIZE: usize = BYTE_BUFFER_SIZE> {
   reader: T,
   span: Span,
-  char_buf: Vec<char>,
+  char_buf: Vec<u8>,
 }
 
 impl<T, const BUFFER_SIZE: usize> ByteReader<T, BUFFER_SIZE> {
@@ -121,8 +121,8 @@ impl<T, const BUFFER_SIZE: usize> ByteReader<T, BUFFER_SIZE> {
     }
   }
 
-  /// Returns the next character and the last location from the reader.
-  fn next_char_loc_from_reader(&mut self) -> Result<(Option<char>, Location)>
+  /// Returns the next byte and the last location from the reader.
+  fn next_char_loc_from_reader(&mut self) -> Result<(Option<u8>, Location)>
   where
     T: Read,
   {
@@ -138,20 +138,18 @@ impl<T, const BUFFER_SIZE: usize> ByteReader<T, BUFFER_SIZE> {
     if count == 0 {
       return Ok((None, loc));
     }
-    // get the character and fill the char buffer
-    let c = buf[0] as char;
-    self
-      .char_buf
-      .extend(buf[1..count].iter().rev().map(|b| *b as char));
+    // get the byte and fill the char buffer
+    let b = buf[0];
+    self.char_buf.extend(buf[1..count].iter().rev());
     // update the span
-    self.span.update(c);
-    Ok((Some(c), loc))
+    self.span.update(&b);
+    Ok((Some(b), loc))
   }
 }
 
 /// Implements necessary methods for the given reader.
 macro_rules! impl_reader {
-  ($name:ident) => {
+  ($name:ident, $char:ty) => {
     impl<T> $name<T> {
       /// Converts the reader into the inner reader.
       pub fn into_inner(self) -> T {
@@ -208,17 +206,19 @@ macro_rules! impl_reader {
     where
       T: Read,
     {
-      fn next_char_loc(&mut self) -> Result<(Option<char>, Location)> {
+      type CharType = $char;
+
+      fn next_char_loc(&mut self) -> Result<(Option<$char>, Location)> {
         if let Some(c) = self.char_buf.pop() {
           let loc = self.span.start();
-          self.span.update(c);
+          self.span.update(&c);
           Ok((Some(c), loc))
         } else {
           self.next_char_loc_from_reader()
         }
       }
 
-      fn unread(&mut self, last: (Option<char>, Location)) {
+      fn unread(&mut self, last: (Option<$char>, Location)) {
         self.span.update_loc(last.1);
         if let Some(c) = last.0 {
           self.char_buf.push(c);
@@ -229,7 +229,7 @@ macro_rules! impl_reader {
         &self.span
       }
 
-      fn peek(&mut self) -> Result<Option<char>> {
+      fn peek(&mut self) -> Result<Option<$char>> {
         if let Some(c) = self.char_buf.last() {
           Ok(Some(*c))
         } else {
@@ -239,9 +239,9 @@ macro_rules! impl_reader {
         }
       }
 
-      fn peek_with_span(&mut self) -> Result<(Option<char>, Span)> {
+      fn peek_with_span(&mut self) -> Result<(Option<$char>, Span)> {
         if let Some(c) = self.char_buf.last() {
-          Ok((Some(*c), self.span.clone().into_updated(*c)))
+          Ok((Some(*c), self.span.clone().into_updated(c)))
         } else {
           let char_loc = self.next_char_loc_from_reader()?;
           let span = self.span.clone();
@@ -253,8 +253,8 @@ macro_rules! impl_reader {
   };
 }
 
-impl_reader!(Reader);
-impl_reader!(ByteReader);
+impl_reader!(Reader, char);
+impl_reader!(ByteReader, u8);
 
 #[cfg(test)]
 mod test {
@@ -326,22 +326,22 @@ mod test {
     assert!(reader.next_char().is_err());
     assert!(reader.next_char().is_err());
     let mut reader = ByteReader::from(bytes.as_slice());
-    assert_eq!(reader.next_char(), Ok(Some(0xe4 as char)));
-    assert_eq!(reader.next_char(), Ok(Some(0xbd as char)));
-    assert_eq!(reader.next_char(), Ok(Some(0xa0 as char)));
-    assert_eq!(reader.next_char(), Ok(Some(0xe5 as char)));
-    assert_eq!(reader.next_char(), Ok(Some(0xa5 as char)));
-    assert_eq!(reader.next_char(), Ok(Some(0xbd as char)));
-    assert_eq!(reader.next_char(), Ok(Some(',')));
-    assert_eq!(reader.next_char(), Ok(Some(' ')));
-    assert_eq!(reader.next_char(), Ok(Some('a')));
-    assert_eq!(reader.next_char(), Ok(Some('b')));
-    assert_eq!(reader.next_char(), Ok(Some('c')));
-    assert_eq!(reader.next_char(), Ok(Some(0xe2 as char)));
-    assert_eq!(reader.next_char(), Ok(Some(0x9c as char)));
-    assert_eq!(reader.next_char(), Ok(Some(0xa8 as char)));
-    assert_eq!(reader.next_char(), Ok(Some(0xff as char)));
-    assert_eq!(reader.next_char(), Ok(Some('z')));
+    assert_eq!(reader.next_char(), Ok(Some(0xe4)));
+    assert_eq!(reader.next_char(), Ok(Some(0xbd)));
+    assert_eq!(reader.next_char(), Ok(Some(0xa0)));
+    assert_eq!(reader.next_char(), Ok(Some(0xe5)));
+    assert_eq!(reader.next_char(), Ok(Some(0xa5)));
+    assert_eq!(reader.next_char(), Ok(Some(0xbd)));
+    assert_eq!(reader.next_char(), Ok(Some(b',')));
+    assert_eq!(reader.next_char(), Ok(Some(b' ')));
+    assert_eq!(reader.next_char(), Ok(Some(b'a')));
+    assert_eq!(reader.next_char(), Ok(Some(b'b')));
+    assert_eq!(reader.next_char(), Ok(Some(b'c')));
+    assert_eq!(reader.next_char(), Ok(Some(0xe2)));
+    assert_eq!(reader.next_char(), Ok(Some(0x9c)));
+    assert_eq!(reader.next_char(), Ok(Some(0xa8)));
+    assert_eq!(reader.next_char(), Ok(Some(0xff)));
+    assert_eq!(reader.next_char(), Ok(Some(b'z')));
     assert_eq!(reader.next_char(), Ok(None));
     assert_eq!(reader.next_char(), Ok(None));
   }
