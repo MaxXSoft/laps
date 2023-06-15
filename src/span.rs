@@ -363,7 +363,7 @@ impl Span {
   /// use laps::span::{FileType, Span};
   ///
   /// let mut span = Span::new(FileType::Buffer);
-  /// span.update_end(&span.clone().into_updated('\n'));
+  /// span.update_end(&span.clone().into_updated(&'\n'));
   /// assert_eq!(format!("{span}"), "1:0-2:0");
   /// ```
   pub fn update_end<S>(&mut self, span: S)
@@ -394,9 +394,9 @@ impl Span {
   /// use laps::span::{FileType, Span};
   ///
   /// let span = Span::new(FileType::Buffer);
-  /// let span2 = span.clone().into_updated(' ');
+  /// let span2 = span.clone().into_updated(&' ');
   /// assert!(span.is_in_same_line_as(&span2));
-  /// let span3 = span.clone().into_updated('\n');
+  /// let span3 = span.clone().into_updated(&'\n');
   /// assert!(!span.is_in_same_line_as(&span3));
   /// ```
   pub fn is_in_same_line_as<S>(&self, span: S) -> bool
