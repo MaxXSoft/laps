@@ -160,7 +160,7 @@ pub mod prelude {
   pub use crate::input::InputStream;
   pub use crate::parse::Parse;
   pub use crate::span::Spanned;
-  pub use crate::token::{TokenBuilder, TokenStream, Tokenizer};
+  pub use crate::token::{TokenStream, Tokenizer};
 
   #[cfg(feature = "macros")]
   pub use crate::token::{token_ast, token_kind};
