@@ -129,7 +129,7 @@ pub trait InputStream {
       (_, span) => return Ok((v, span)),
     };
     while let Some(c) = self.peek()? {
-      if !f(&c) {
+      if f(&c) {
         break;
       }
       v.push(c);
