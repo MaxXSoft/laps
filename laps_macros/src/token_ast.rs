@@ -104,7 +104,7 @@ impl Parse for TokenAstArm {
       token: bracket_content.parse()?,
       _fat_arrow_token: input.parse()?,
       _paren_token: parenthesized!(paren_content in input),
-      pat: paren_content.parse()?,
+      pat: Pat::parse_multi_with_leading_vert(&paren_content)?,
       _comma_token: paren_content.parse()?,
       prompt: {
         let lookahead = paren_content.lookahead1();

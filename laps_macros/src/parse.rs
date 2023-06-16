@@ -1,11 +1,11 @@
-use crate::utils::{ident, return_error, Parenthesized};
+use crate::utils::{ident, return_error};
 use proc_macro::TokenStream;
 use proc_macro2::{Ident, TokenStream as TokenStream2};
 use quote::{quote, ToTokens, TokenStreamExt};
 use std::iter;
 use syn::{
   parse::Parser, punctuated::Punctuated, spanned::Spanned, AttrStyle, Attribute, Data, DataEnum,
-  DataStruct, DeriveInput, Expr, Field, Fields, GenericParam, Generics, Path, PredicateType,
+  DataStruct, DeriveInput, Expr, Field, Fields, GenericParam, Generics, Meta, Path, PredicateType,
   Result, Token, Type, TypePath, WhereClause, WherePredicate,
 };
 
@@ -45,13 +45,16 @@ pub fn derive_parse(item: TokenStream) -> Result<TokenStream> {
 macro_rules! match_attr {
   (for $attr:ident in $attrs:ident if $name:literal && $cond:expr => $body:block) => {
     for $attr in $attrs {
-      if $attr.path.is_ident($name) {
-        if $cond $body else {
-          return_error!(
-            $attr.span(),
-            concat!("attribute `", $name, "` is bound more than once")
-          );
+      match &$attr.meta {
+        Meta::List($attr) if $attr.path.is_ident($name) => {
+          if $cond $body else {
+            return_error!(
+              $attr.span(),
+              concat!("attribute `", $name, "` is bound more than once")
+            );
+          }
         }
+        _ => {}
       }
     }
   };
@@ -62,8 +65,7 @@ fn parse_token(attrs: &Vec<Attribute>) -> Result<Option<Path>> {
   let mut token = None;
   match_attr! {
     for attr in attrs if "token" && token.is_none() => {
-      let Parenthesized(path) = syn::parse2(attr.tokens.clone())?;
-      token = Some(path);
+      token = Some(syn::parse2(attr.tokens.clone())?);
     }
   }
   Ok(token)
@@ -74,8 +76,7 @@ fn parse_starts_with(attrs: &Vec<Attribute>) -> Result<Vec<Expr>> {
   let mut starts_with = Vec::new();
   match_attr! {
     for attr in attrs if "starts_with" && starts_with.is_empty() => {
-      let Parenthesized(exprs) = syn::parse2(attr.tokens.clone())?;
-      let exprs: Punctuated<Expr, Token![,]> = Punctuated::parse_separated_nonempty.parse2(exprs)?;
+      let exprs: Punctuated<Expr, Token![,]> = Punctuated::parse_separated_nonempty.parse2(attr.tokens.clone())?;
       starts_with = exprs.into_iter().collect();
     }
   }

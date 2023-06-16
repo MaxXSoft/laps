@@ -2,7 +2,7 @@ use crate::utils::return_error;
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use syn::{Attribute, Fields, ItemEnum, Lit, Meta, MetaNameValue, Result};
+use syn::{Attribute, Expr, ExprLit, Fields, ItemEnum, Lit, Meta, MetaNameValue, Result};
 
 /// Entry function of `#[token_kind]`.
 pub fn token_kind(attr: TokenStream, item: TokenStream) -> Result<TokenStream> {
@@ -106,11 +106,14 @@ fn gen_display_impl(input: &ItemEnum) -> TokenStream2 {
 fn parse_doc_comments(attrs: &[Attribute]) -> Option<String> {
   attrs
     .iter()
-    .filter(|attr| attr.path.is_ident("doc"))
-    .filter_map(|attr| match attr.parse_meta() {
-      Ok(Meta::NameValue(MetaNameValue {
-        lit: Lit::Str(s), ..
-      })) => Some(s.value().trim().to_string()),
+    .filter_map(|attr| match &attr.meta {
+      Meta::NameValue(MetaNameValue {
+        path,
+        value: Expr::Lit(ExprLit {
+          lit: Lit::Str(s), ..
+        }),
+        ..
+      }) if path.is_ident("doc") => Some(s.value().trim().to_string()),
       _ => None,
     })
     .reduce(|mut s, cur| {
