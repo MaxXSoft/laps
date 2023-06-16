@@ -1,8 +1,8 @@
-use crate::utils::return_error;
+use crate::utils::{parse_doc_comments, return_error};
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use syn::{Attribute, Expr, ExprLit, Fields, ItemEnum, Lit, Meta, MetaNameValue, Result};
+use syn::{Fields, ItemEnum, Result};
 
 /// Entry function of `#[token_kind]`.
 pub fn token_kind(attr: TokenStream, item: TokenStream) -> Result<TokenStream> {
@@ -100,28 +100,6 @@ fn gen_display_impl(input: &ItemEnum) -> TokenStream2 {
       }
     }
   }
-}
-
-/// Parses doc comments.
-fn parse_doc_comments(attrs: &[Attribute]) -> Option<String> {
-  attrs
-    .iter()
-    .filter_map(|attr| match &attr.meta {
-      Meta::NameValue(MetaNameValue {
-        path,
-        value: Expr::Lit(ExprLit {
-          lit: Lit::Str(s), ..
-        }),
-        ..
-      }) if path.is_ident("doc") => Some(s.value().trim().to_string()),
-      _ => None,
-    })
-    .reduce(|mut s, cur| {
-      s.reserve(cur.len() + 1);
-      s.push_str(&cur);
-      s.push(' ');
-      s
-    })
 }
 
 /// Converts the given camel case string to lower case space-delimited string.

@@ -1,6 +1,6 @@
 use proc_macro2::{Ident, Span};
 use syn::parse::{Parse, ParseStream};
-use syn::{parenthesized, Result};
+use syn::{parenthesized, Attribute, Expr, ExprLit, Lit, Meta, MetaNameValue, Result};
 
 /// Generates a compile error.
 macro_rules! error {
@@ -70,4 +70,30 @@ impl<T: Parse> Parse for Parenthesized<T> {
 /// Creates a new identifier by the given string.
 pub fn ident(s: &str) -> Ident {
   Ident::new(s, Span::call_site())
+}
+
+/// Parses doc comments.
+pub fn parse_doc_comments(attrs: &[Attribute]) -> Option<String> {
+  attrs
+    .iter()
+    .filter_map(|attr| match &attr.meta {
+      Meta::NameValue(MetaNameValue {
+        path,
+        value: Expr::Lit(ExprLit {
+          lit: Lit::Str(s), ..
+        }),
+        ..
+      }) if path.is_ident("doc") => Some(s.value().trim().to_string()),
+      _ => None,
+    })
+    .reduce(|mut s, cur| {
+      s.reserve(cur.len() + 1);
+      s.push(' ');
+      s.push_str(&cur);
+      s
+    })
+    .and_then(|s| {
+      let s = s.trim().to_string();
+      (!s.is_empty()).then_some(s)
+    })
 }
