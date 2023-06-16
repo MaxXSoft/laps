@@ -4,9 +4,9 @@ use proc_macro2::{Ident, TokenStream as TokenStream2};
 use quote::{quote, ToTokens, TokenStreamExt};
 use std::iter;
 use syn::{
-  parse::Parser, punctuated::Punctuated, spanned::Spanned, AttrStyle, Attribute, Data, DataEnum,
-  DataStruct, DeriveInput, Expr, Field, Fields, GenericParam, Generics, Meta, Path, PredicateType,
-  Result, Token, Type, TypePath, WhereClause, WherePredicate,
+  parse::Parser, punctuated::Punctuated, AttrStyle, Attribute, Data, DataEnum, DataStruct,
+  DeriveInput, Expr, Field, Fields, GenericParam, Generics, Path, PredicateType, Result, Token,
+  Type, TypePath, WhereClause, WherePredicate,
 };
 
 /// Entry function of `#[derive(Parse)]`.
