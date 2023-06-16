@@ -3,9 +3,9 @@ use laps::prelude::*;
 use laps::reader::Reader;
 use laps::return_error;
 use laps::span::{Result, Span};
-use laps::token::{TokenBuffer, Tokenizer};
+use laps::token::TokenBuffer;
 use laps_regex::re::{CharsMatcher, RegexBuilder};
-use std::io::Read;
+use std::sync::{Mutex, MutexGuard, OnceLock};
 
 #[token_kind]
 #[derive(Debug)]
@@ -23,17 +23,21 @@ enum TokenKind {
  * ```
  #[token_kind]
 #[derive(Debug, Tokenize)]
-#[byte]
+// #[char_type(u8)] // current supports char and u8 only
 enum TokenKind {
   #[skip(r"\s+")]
   Skip,
   /// Number.
-  #[regex(r"[0-9]|[1-9][0-9]+", |s| s.parse().ok())]
-  Num(i32),
+  #[regex(r"[0-9]|[1-9][0-9]+")]
+  Num(i32), // must implement `FromStr` if char_type = char
+  // or you can manually specify a parse function
+  // of type `(&str) -> Option<T>` (char_type = char)
+  // or type `(&[u8]) -> Option<T>` (char_type = u8)
+  // #[regex(r"[0-9]|[1-9][0-9]+", |s| s.parse().ok())]
   /// Other character.
-  #[regex(r"." |s| s.chars().next())]
+  #[regex(r".")]
   // multiple regex is ok
-  // #[regex(r".", ...)]
+  // #[regex(r"...")]
   Other(char),
   /// End-of-file.
   #[eof]
@@ -44,82 +48,82 @@ enum TokenKind {
 
 type Token = laps::token::Token<TokenKind>;
 
-struct Lexer<T> {
-  reader: Reader<T>,
-  matcher: CharsMatcher<usize>,
+static MATCHER: OnceLock<Mutex<CharsMatcher<usize>>> = OnceLock::new();
+
+fn matcher() -> MutexGuard<'static, CharsMatcher<usize>> {
+  MATCHER
+    .get_or_init(|| {
+      Mutex::new(
+        RegexBuilder::new()
+          .add(r"\s+", 0)
+          .add(r"[0-9]|[1-9][0-9]+", 1)
+          .add(r".", 2)
+          .build()
+          .unwrap(),
+      )
+    })
+    .lock()
+    .unwrap()
 }
 
-impl<T> Lexer<T> {
-  fn new(reader: Reader<T>) -> Self {
-    Self {
-      reader,
-      matcher: RegexBuilder::new()
-        .add(r"\s+", 0)
-        .add(r"[0-9]|[1-9][0-9]+", 1)
-        .add(r".", 2)
-        .build()
-        .unwrap(),
-    }
-  }
+impl Tokenize for TokenKind {
+  type CharType = char;
 
-  fn next_token_impl(&mut self) -> Result<Token>
+  fn next_token<I>(input: &mut I) -> Result<Token>
   where
-    T: Read,
+    I: InputStream<CharType = Self::CharType>,
   {
-    let mut last_state;
-    let mut buf = String::new();
-    let mut span = self.reader.peek_with_span()?.1;
-    self.matcher.reset();
-    loop {
-      let (c, loc) = self.reader.next_char_loc()?;
-      last_state = self.matcher.state();
-      if let Some(c) = c {
-        if !self.matcher.is_accept(&c) {
-          self.reader.unread((Some(c), loc));
-          break;
-        }
-        buf.push(c);
-        span.update_end(self.reader.span());
-      } else {
-        if let Some(tag) = self.matcher.is_state_final(last_state) {
-          return Self::tag_to_token(*tag, buf, span);
-        } else if buf.is_empty() {
-          return Ok(Token::new(TokenKind::Eof, span));
+    fn next_token_impl<I>(input: &mut I) -> Result<Token>
+    where
+      I: InputStream<CharType = char>,
+    {
+      let mut last_state;
+      let mut buf = String::new();
+      let mut span = input.peek_with_span()?.1;
+      let mut matcher = matcher();
+      matcher.reset();
+      loop {
+        let (c, loc) = input.next_char_loc()?;
+        last_state = matcher.state();
+        if let Some(c) = c {
+          if !matcher.is_accept(&c) {
+            input.unread((Some(c), loc));
+            break;
+          }
+          buf.push(c);
+          span.update_end(input.span());
         } else {
-          return_error!(span, "unexpected end-of-file");
+          if let Some(tag) = matcher.is_state_final(last_state) {
+            return tag_to_token(*tag, buf, span);
+          } else if buf.is_empty() {
+            return Ok(Token::new(TokenKind::Eof, span));
+          } else {
+            return_error!(span, "unexpected end-of-file");
+          }
         }
       }
+      if let Some(tag) = matcher.is_state_final(last_state) {
+        tag_to_token(*tag, buf, span)
+      } else {
+        return_error!(span, "unrecognized token")
+      }
     }
-    if let Some(tag) = self.matcher.is_state_final(last_state) {
-      Self::tag_to_token(*tag, buf, span)
-    } else {
-      return_error!(span, "unrecognized token")
+
+    fn tag_to_token(tag: usize, buf: String, span: Span) -> Result<Token> {
+      let kind = match tag {
+        0 => TokenKind::Skip,
+        1 => TokenKind::Num(match buf.parse() {
+          Ok(num) => num,
+          _ => return_error!(span, "invalid number"),
+        }),
+        2 => TokenKind::Other(buf.chars().next().unwrap()),
+        _ => unreachable!(),
+      };
+      Ok(Token::new(kind, span))
     }
-  }
 
-  fn tag_to_token(tag: usize, buf: String, span: Span) -> Result<Token> {
-    let kind = match tag {
-      0 => TokenKind::Skip,
-      1 => TokenKind::Num(match buf.parse() {
-        Ok(num) => num,
-        _ => return_error!(span, "invalid number"),
-      }),
-      2 => TokenKind::Other(buf.chars().next().unwrap()),
-      _ => unreachable!(),
-    };
-    Ok(Token::new(kind, span))
-  }
-}
-
-impl<T> Tokenizer for Lexer<T>
-where
-  T: Read,
-{
-  type Token = Token;
-
-  fn next_token(&mut self) -> Result<Self::Token> {
     loop {
-      let token = self.next_token_impl()?;
+      let token = next_token_impl(input)?;
       if !matches!(token.kind, TokenKind::Skip) {
         return Ok(token);
       }
@@ -243,7 +247,7 @@ impl Calculate for Value {
 
 fn main() -> Result<()> {
   let reader = Reader::from_stdin();
-  let lexer = Lexer::new(reader);
+  let lexer = TokenKind::lexer(reader);
   let mut tokens = TokenBuffer::new(lexer);
   println!("{}", tokens.parse::<Expr>()?.calc()?);
   Ok(())
