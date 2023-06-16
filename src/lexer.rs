@@ -5,33 +5,34 @@ use crate::token::{Token, Tokenizer};
 use std::marker::PhantomData;
 use std::num::ParseIntError;
 
-/// Trait for token kinds that can be tokenized.
+/// Trait for token kinds that can be tokenized from an input stream.
 pub trait Tokenize: Sized {
   /// The type of the character produced by the input stream.
   type CharType;
 
-  // TODO
+  /// Reads the next token from the given input stream.
+  ///
+  /// Returns the token ([`Token<Self>`]) if successful, otherwise [`Err`].
+  fn next_token<I>(input: &mut I) -> crate::span::Result<Token<Self>>
+  where
+    I: InputStream<CharType = Self::CharType>;
 
-  /// Creates a lexer from the given reader that
+  /// Creates a lexer from the given input stream that
   /// produces the current token kind.
-  fn lexer<I>(reader: I) -> Lexer<I, Self> {
+  fn lexer<I>(input: I) -> Lexer<I, Self> {
     Lexer {
-      reader,
+      input,
       token: PhantomData,
     }
   }
 }
 
-/// A lexer with reader type `I` and token kind type `K`.
+/// A lexer with input stream type `I` and token kind type `K`.
 ///
 /// This lexer will produce tokens of type [`Token<K>`].
 pub struct Lexer<I, K> {
-  reader: I,
+  input: I,
   token: PhantomData<K>,
-}
-
-impl<I, K> Lexer<I, K> {
-  // TODO
 }
 
 impl<I, K, C> Tokenizer for Lexer<I, K>
@@ -42,7 +43,7 @@ where
   type Token = Token<K>;
 
   fn next_token(&mut self) -> crate::span::Result<Self::Token> {
-    todo!()
+    K::next_token(&mut self.input)
   }
 }
 
