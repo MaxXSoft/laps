@@ -35,14 +35,15 @@ macro_rules! result_to_tokens {
 }
 pub(crate) use result_to_tokens;
 
-/// Helper macro for handling attributes.
+/// Helper macro for handling attributes like `#[name(...)]`.
 macro_rules! match_attr {
   (for $id:ident in $attrs:ident if $name:literal && $cond:expr => $body:block) => {
     for $id in $attrs {
       match &$id.meta {
-        Meta::List($id) if $id.path.is_ident($name) => {
+        syn::Meta::List($id) if $id.path.is_ident($name) => {
           if $cond $body else {
-            return_error!(
+            use syn::spanned::Spanned;
+            crate::utils::return_error!(
               $id.span(),
               concat!("attribute `", $name, "` is bound more than once")
             );
