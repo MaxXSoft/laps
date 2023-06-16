@@ -13,6 +13,9 @@ use crate::token::{Token, Tokenizer};
 use std::marker::PhantomData;
 use std::num::ParseIntError;
 
+#[cfg(feature = "macros")]
+pub use laps_macros::Tokenize;
+
 /// Trait for token kinds that can be tokenized from an input stream.
 pub trait Tokenize: Sized {
   /// The type of the character produced by the input stream.
@@ -41,6 +44,13 @@ pub trait Tokenize: Sized {
 pub struct Lexer<I, K> {
   input: I,
   token: PhantomData<K>,
+}
+
+impl<I, K> Lexer<I, K> {
+  /// Converts the lexer into its inner input stream.
+  pub fn into_input(self) -> I {
+    self.input
+  }
 }
 
 impl<I, K, C> Tokenizer for Lexer<I, K>
