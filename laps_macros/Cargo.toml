@@ -15,7 +15,7 @@ license = "MIT OR Apache-2.0"
 proc-macro = true
 
 [dependencies]
-proc-macro2 = "1.0.47"
-quote = "1.0.21"
-syn = { version = "1.0.107", features = ["full"] }
+proc-macro2 = "1.0"
+quote = "1.0"
+syn = { version = "2.0", features = ["full"] }
 laps_regex = { path = "../laps_regex", version = "0.0.1" }
