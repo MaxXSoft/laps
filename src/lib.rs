@@ -158,6 +158,7 @@ pub mod token;
 /// ```
 pub mod prelude {
   pub use crate::input::InputStream;
+  pub use crate::lexer::Tokenize;
   pub use crate::parse::Parse;
   pub use crate::span::Spanned;
   pub use crate::token::{TokenStream, Tokenizer};
