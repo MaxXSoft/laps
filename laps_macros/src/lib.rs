@@ -5,6 +5,7 @@ mod parse;
 mod spanned;
 mod token_ast;
 mod token_kind;
+mod tokenize;
 mod utils;
 
 use proc_macro::TokenStream;
@@ -27,6 +28,12 @@ pub fn derive_parse(item: TokenStream) -> TokenStream {
 #[proc_macro_derive(Spanned)]
 pub fn derive_spanned(item: TokenStream) -> TokenStream {
   result_to_tokens!(spanned::derive_spanned(item))
+}
+
+/// Generates the `Tokenize` trait implementation for token kinds.
+#[proc_macro_derive(Tokenize, attributes(char_type, regex, skip, eof))]
+pub fn derive_tokenize(item: TokenStream) -> TokenStream {
+  result_to_tokens!(tokenize::derive_tokenize(item))
 }
 
 /// Implements [`From`], [`TryFrom`] and [`Display`](std::fmt::Display)
