@@ -4,9 +4,7 @@
 //! All of these implementations can be used in lexers and parsers,
 //! specifically:
 //!
-//! * [`Token`] and [`Ident`]: generic token representations, can be
-//!   produced by lexers.
-//! * [`TokenBuilder`]: trait for creating tokens, can be used in lexers.
+//! * [`Token`]: generic token representations, can be produced by lexers.
 //! * [`Tokenizer`]: trait for tokenizers (structures that can produce
 //!   tokens), all lexers should implement this trait.
 //! * [`TokenStream`]: a tokenizer wrapper trait, provides several helper

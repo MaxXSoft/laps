@@ -1,4 +1,12 @@
-//! TODO
+//! Implementations for constructing lexers.
+//!
+//! This module contains:
+//!
+//! * [`Tokenize`]: trait for tokenizing token kinds. With feature `macros`
+//!   enabled, you can derive this trait for token kinds.
+//! * [`Lexer`]: a lexer implementation for token kinds that implemented
+//!   [`Tokenize`] trait.
+//! * Some helper functions for constructing lexers.
 
 use crate::input::InputStream;
 use crate::token::{Token, Tokenizer};

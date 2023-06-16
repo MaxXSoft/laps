@@ -151,7 +151,7 @@ impl<T, const BUFFER_SIZE: usize> ByteReader<T, BUFFER_SIZE> {
 macro_rules! impl_reader {
   ($name:ident, $char:ty) => {
     impl<T> $name<T> {
-      /// Converts the reader into the inner reader.
+      /// Converts the reader into its inner reader.
       pub fn into_inner(self) -> T {
         self.reader
       }
