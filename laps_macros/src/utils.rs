@@ -35,6 +35,26 @@ macro_rules! result_to_tokens {
 }
 pub(crate) use result_to_tokens;
 
+/// Helper macro for handling attributes.
+macro_rules! match_attr {
+  (for $id:ident in $attrs:ident if $name:literal && $cond:expr => $body:block) => {
+    for $id in $attrs {
+      match &$id.meta {
+        Meta::List($id) if $id.path.is_ident($name) => {
+          if $cond $body else {
+            return_error!(
+              $id.span(),
+              concat!("attribute `", $name, "` is bound more than once")
+            );
+          }
+        }
+        _ => {}
+      }
+    }
+  };
+}
+pub(crate) use match_attr;
+
 /// Data of `(...)`.
 pub struct Parenthesized<T>(pub T);
 

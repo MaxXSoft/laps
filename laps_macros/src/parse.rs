@@ -1,4 +1,4 @@
-use crate::utils::{ident, return_error};
+use crate::utils::{ident, match_attr, return_error};
 use proc_macro::TokenStream;
 use proc_macro2::{Ident, TokenStream as TokenStream2};
 use quote::{quote, ToTokens, TokenStreamExt};
@@ -41,31 +41,12 @@ pub fn derive_parse(item: TokenStream) -> Result<TokenStream> {
   }))
 }
 
-/// Helper macro for handling attributes.
-macro_rules! match_attr {
-  (for $attr:ident in $attrs:ident if $name:literal && $cond:expr => $body:block) => {
-    for $attr in $attrs {
-      match &$attr.meta {
-        Meta::List($attr) if $attr.path.is_ident($name) => {
-          if $cond $body else {
-            return_error!(
-              $attr.span(),
-              concat!("attribute `", $name, "` is bound more than once")
-            );
-          }
-        }
-        _ => {}
-      }
-    }
-  };
-}
-
 /// Parses attribute `#[token(...)]`.
 fn parse_token(attrs: &Vec<Attribute>) -> Result<Option<Path>> {
   let mut token = None;
   match_attr! {
-    for attr in attrs if "token" && token.is_none() => {
-      token = Some(syn::parse2(attr.tokens.clone())?);
+    for meta in attrs if "token" && token.is_none() => {
+      token = Some(syn::parse2(meta.tokens.clone())?);
     }
   }
   Ok(token)
@@ -75,8 +56,8 @@ fn parse_token(attrs: &Vec<Attribute>) -> Result<Option<Path>> {
 fn parse_starts_with(attrs: &Vec<Attribute>) -> Result<Vec<Expr>> {
   let mut starts_with = Vec::new();
   match_attr! {
-    for attr in attrs if "starts_with" && starts_with.is_empty() => {
-      let exprs: Punctuated<Expr, Token![,]> = Punctuated::parse_separated_nonempty.parse2(attr.tokens.clone())?;
+    for meta in attrs if "starts_with" && starts_with.is_empty() => {
+      let exprs: Punctuated<Expr, Token![,]> = Punctuated::parse_separated_nonempty.parse2(meta.tokens.clone())?;
       starts_with = exprs.into_iter().collect();
     }
   }
