@@ -194,6 +194,12 @@ impl<S, T> RegexMatcher<S, T> {
   }
 }
 
+impl<S, T> From<RegexMatcher<S, T>> for StateTransTable<S, T> {
+  fn from(matcher: RegexMatcher<S, T>) -> Self {
+    matcher.table
+  }
+}
+
 /// A regular expression matcher for matching characters.
 pub type CharsMatcher<T> = RegexMatcher<char, T>;
 
