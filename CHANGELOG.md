@@ -7,6 +7,14 @@ All notable changes to the `laps` will be documented in this file.
 ### Added
 
 * Sub-crate `laps_regex` for generating state-transition table for multiple regular expressions.
+* Trait and derive macro `Tokenize`, allow users to get a lexer by deriving `Tokenize` for a token kind.
+
+### Changed
+
+* New and more intuitive syntax for macro `token_ast`.
+* `Span` and `InputStream` now supports generic character types.
+* Removed trait `TokenBuilder` and struct `Ident`.
+* Removed some lexing methods in trait `InputStream`.
 
 ## 0.0.2 - 2023-01-13
 
