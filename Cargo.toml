@@ -32,9 +32,6 @@ colored = { version = "2.0.0", optional = true }
 laps_macros = { path = "./laps_macros", version = "0.0.2", optional = true }
 unicode-width = "0.1.10"
 
-[dev-dependencies]
-laps_regex = { path = "./laps_regex", version = "0.0.1" }
-
 [[example]]
 name = "sexp"
 required-features = ["macros"]
