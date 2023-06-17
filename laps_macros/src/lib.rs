@@ -13,12 +13,13 @@ use utils::result_to_tokens;
 
 /// Generates the `Parse` trait implementation.
 ///
-/// # Helper attributes
+/// # Helper Attributes
 ///
-/// * `#[token(...)]`: implements `Parse` trait for token streams
-///   that produce tokens of the given type.
-/// * `#[starts_with(...)]`: specifies which tokens the current AST starts with.
-///   This will affect the implementation of method `maybe` of the `Parse` trait.
+/// * `#[token(type)]`: implements `Parse` trait for token streams that
+///   produce tokens of the given type.
+/// * `#[starts_with(token_ast0, token_ast1, ...)]`: specifies which token
+///   the current AST may start with. This will affect the implementation of
+///   method `maybe` of the `Parse` trait.
 #[proc_macro_derive(Parse, attributes(token, starts_with))]
 pub fn derive_parse(item: TokenStream) -> TokenStream {
   result_to_tokens!(parse::derive_parse(item))
@@ -30,7 +31,27 @@ pub fn derive_spanned(item: TokenStream) -> TokenStream {
   result_to_tokens!(spanned::derive_spanned(item))
 }
 
-/// Generates the `Tokenize` trait implementation for token kinds.
+/// Generates the `Tokenize` trait implementation for token kinds. This macro
+/// can only be applied to `enum`s.
+///
+/// # Helper Attributes
+///
+/// * `#[char_type(type)]`: optional, specifies `CharType` of `Tokenize` trait.
+///   Defaults to [`char`], and can only be [`char`] or [`u8`].
+/// * `#[regex(regex [, parser])]`: marks a enum variant can be matched by the
+///   given regular expression. The `parser` parameter is optional, which is a
+///   function that converts a <code>&[str]</code> (`char_type` = [`char`]) or
+///   a <code>&[[u8]]</code> (`char_type` = [`u8`]) to [`Option<T>`], which `T`
+///   is type of the tuple field of this variant. If `parser` is omitted,
+///   [`std::str::FromStr`] will be called.
+/// * `#[skip(regex)]`: marks a enum variant can be matched by the
+///   given regular expression, and it should be skipped.
+/// * `#[eof]`: marks a enum variant should be returned when the tokenizer
+///   encountered end-of-file.
+///
+/// # Notes
+///
+/// The variants that appear first will be matched first.
 #[proc_macro_derive(Tokenize, attributes(char_type, regex, skip, eof))]
 pub fn derive_tokenize(item: TokenStream) -> TokenStream {
   result_to_tokens!(tokenize::derive_tokenize(item))
