@@ -97,3 +97,19 @@ pub fn parse_doc_comments(attrs: &[Attribute]) -> Option<String> {
       (!s.is_empty()).then_some(s)
     })
 }
+
+/// Converts the given camel case string to lower case space-delimited string.
+pub fn camel_to_lower(s: String) -> String {
+  let mut ans = String::new();
+  for c in s.chars() {
+    if c.is_ascii_uppercase() {
+      if !ans.is_empty() {
+        ans.push(' ');
+      }
+      ans.push(c.to_ascii_lowercase());
+    } else {
+      ans.push(c);
+    }
+  }
+  ans
+}

@@ -1,4 +1,4 @@
-use crate::utils::{parse_doc_comments, return_error};
+use crate::utils::{camel_to_lower, parse_doc_comments, return_error};
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
@@ -100,20 +100,4 @@ fn gen_display_impl(input: &ItemEnum) -> TokenStream2 {
       }
     }
   }
-}
-
-/// Converts the given camel case string to lower case space-delimited string.
-fn camel_to_lower(s: String) -> String {
-  let mut ans = String::new();
-  for c in s.chars() {
-    if c.is_ascii_uppercase() {
-      if !ans.is_empty() {
-        ans.push(' ');
-      }
-      ans.push(c.to_ascii_lowercase());
-    } else {
-      ans.push(c);
-    }
-  }
-  ans
 }
