@@ -3,17 +3,21 @@ use laps::{ast::NonEmptySepList, prelude::*, reader::Reader, span::Result, token
 /// Kinds of the token.
 ///
 /// The tokenizer (lexer) will read user input and turn it into a stream of
-/// tokens.
-///
-/// In the subsequent implementation of the [`Tokenizer`] trait of [`Lexer`],
-/// the corresponding code to generate tokens based on the input is included.
+/// tokens based on regular expressions.
 #[token_kind]
+#[derive(Tokenize)]
 enum TokenKind {
+  // This token will be skipped.
+  #[skip(r"\s+")]
+  _Skip,
   /// Floating-point number.
+  #[regex(r"[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?")]
   Float(f64),
   /// Other character.
+  #[regex(r".")]
   Other(char),
   /// End-of-file.
+  #[eof]
   Eof,
 }
 
@@ -24,47 +28,21 @@ enum TokenKind {
 /// the token in the input.
 type Token = laps::token::Token<TokenKind>;
 
-/// The lexer.
-///
-/// There is a [`Reader`] in the lexer in order to read characters from
-/// the input.
-struct Lexer<T>(Reader<T>);
-
-impl<T: std::io::Read> Tokenizer for Lexer<T> {
-  type Token = Token;
-
-  fn next_token(&mut self) -> Result<Self::Token> {
-    // Skip spaces.
-    self.0.skip_until(|c| !c.is_ascii_whitespace())?;
-    // Check the current character.
-    if self.0.maybe_float()? {
-      // Floating-point number.
-      self.0.next_float()
-    } else if let Some(c) = self.0.peek()? {
-      // Other character.
-      Ok(Token::new(c, self.0.next_span()?.clone()))
-    } else {
-      // End-of-file.
-      Ok(Token::new(TokenKind::Eof, self.0.next_span()?.clone()))
-    }
-  }
-}
-
 token_ast! {
   /// Macro for referencing ASTs corresponding to tokens.
   ///
   /// The [`token_ast`] macro defines ASTs for tokens, and automatically
   /// implements methods for parsing them.
-  macro Token(mod = crate, Kind = TokenKind) {
-    [float] => (TokenKind::Float(_), "floating-point"),
-    [+] => (TokenKind::Other('+'), _),
-    [-] => (TokenKind::Other('-'), _),
-    [*] => (TokenKind::Other('*'), _),
-    [/] => (TokenKind::Other('/'), _),
-    [%] => (TokenKind::Other('%'), _),
-    [lpr] => (TokenKind::Other('('), _),
-    [rpr] => (TokenKind::Other(')'), _),
-    [eof] => (TokenKind::Eof, _),
+  macro Token<TokenKind> {
+    [float] => { kind: TokenKind::Float(_), prompt: "floating-point" },
+    [+] => { kind: TokenKind::Other('+') },
+    [-] => { kind: TokenKind::Other('-') },
+    [*] => { kind: TokenKind::Other('*') },
+    [/] => { kind: TokenKind::Other('/') },
+    [%] => { kind: TokenKind::Other('%') },
+    [lpr] => { kind: TokenKind::Other('(') },
+    [rpr] => { kind: TokenKind::Other(')') },
+    [eof] => { kind: TokenKind::Eof },
   }
 }
 
@@ -170,7 +148,7 @@ impl Calculate for Value {
 fn main() -> Result<()> {
   // Create a reader and a lexer.
   let reader = Reader::from_stdin();
-  let lexer = Lexer(reader);
+  let lexer = TokenKind::lexer(reader);
   // Create a token buffer for parsing.
   // Token buffer can temporarily hold tokens to help the parser perform
   // some look-ahead operations.
