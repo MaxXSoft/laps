@@ -1,10 +1,12 @@
 use laps::ast::{NonEmptySepList, NonEmptySepSeq, SepSeq};
+use laps::input::InputStream;
+use laps::lexer::{int_literal, Lexer};
 use laps::prelude::*;
 use laps::reader::Reader;
-use laps::span::{Error, Result, Span};
-use laps::token::{Ident, TokenBuffer};
+use laps::span::{Error, Result};
+use laps::token::TokenBuffer;
 use laps::{log_error, log_raw_error, return_error};
-use std::{collections::HashMap, env, fmt, io, io::Read, mem, process};
+use std::{collections::HashMap, env, fmt, io, io::Read, mem, process, str::FromStr};
 
 // ==============================
 // Token definitions.
@@ -13,19 +15,27 @@ use std::{collections::HashMap, env, fmt, io, io::Read, mem, process};
 type Token = laps::token::Token<TokenKind>;
 
 #[token_kind]
-#[derive(Debug)]
+#[derive(Debug, Tokenize)]
 enum TokenKind {
-  /// Identifier.
-  Ident(Ident),
+  #[skip(r"\s+")]
+  _Skip,
   /// Keyword.
+  #[regex(r"int|void|if|else|while|break|continue|return")]
   Keyword(Keyword),
+  /// Identifier.
+  #[regex(r"[_a-zA-Z][_a-zA-Z0-9]*")]
+  Ident(String),
   /// Integer-literal.
+  #[regex(r"[0-9]|[1-9][0-9]+|0x[0-9a-fA-F]+", int_literal)]
   Int(u64),
   /// Operator.
+  #[regex(r"\+|-|\*|/|%|<|>|<=|>=|==|!=|&&|\|\||!|=")]
   Operator(Operator),
   /// Other character.
+  #[regex(r".")]
   Other(char),
   /// End-of-file.
+  #[eof]
   Eof,
 }
 
@@ -39,6 +49,24 @@ enum Keyword {
   Break,
   Continue,
   Return,
+}
+
+impl FromStr for Keyword {
+  type Err = ();
+
+  fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+    match s {
+      "int" => Ok(Keyword::Int),
+      "void" => Ok(Keyword::Void),
+      "if" => Ok(Keyword::If),
+      "else" => Ok(Keyword::Else),
+      "while" => Ok(Keyword::While),
+      "break" => Ok(Keyword::Break),
+      "continue" => Ok(Keyword::Continue),
+      "return" => Ok(Keyword::Return),
+      _ => Err(()),
+    }
+  }
 }
 
 impl fmt::Display for Keyword {
@@ -75,6 +103,31 @@ enum Operator {
   Assign,
 }
 
+impl FromStr for Operator {
+  type Err = ();
+
+  fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+    match s {
+      "+" => Ok(Self::Add),
+      "-" => Ok(Self::Sub),
+      "*" => Ok(Self::Mul),
+      "/" => Ok(Self::Div),
+      "%" => Ok(Self::Mod),
+      "<" => Ok(Self::Lt),
+      ">" => Ok(Self::Gt),
+      "<=" => Ok(Self::Le),
+      ">=" => Ok(Self::Ge),
+      "==" => Ok(Self::Eq),
+      "!=" => Ok(Self::Ne),
+      "&&" => Ok(Self::And),
+      "||" => Ok(Self::Or),
+      "!" => Ok(Self::Not),
+      "=" => Ok(Self::Assign),
+      _ => Err(()),
+    }
+  }
+}
+
 impl fmt::Display for Operator {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self {
@@ -98,181 +151,46 @@ impl fmt::Display for Operator {
 }
 
 // ==============================
-// Lexer.
-// ==============================
-
-struct Lexer<T>(Reader<T>);
-
-impl<T: Read> Tokenizer for Lexer<T> {
-  type Token = Token;
-
-  fn next_token(&mut self) -> Result<Self::Token> {
-    // skip spaces
-    self.0.skip_until(|c| !c.is_ascii_whitespace())?;
-    // check the current character
-    if self.0.maybe_ident()? {
-      // identifier or keyword
-      self.next_ident_or_keyword()
-    } else if self.0.maybe_int()? {
-      // integer literal
-      self.0.next_int()
-    } else if let Some(c) = self.0.peek()? {
-      if c == '/' {
-        // comment or operator
-        self.skip_comment()
-      } else if Self::maybe_operator(c) {
-        // operator
-        self.next_operator(c)
-      } else {
-        // other character
-        Ok(Token::new(c, self.0.next_span()?.clone()))
-      }
-    } else {
-      // end-of-file
-      Ok(Token::new(TokenKind::Eof, self.0.next_span()?.clone()))
-    }
-  }
-}
-
-macro_rules! hash_map {
-  ($($k:expr => $v:expr),* $(,)?) => {{
-    let mut hash_map = HashMap::new();
-    $(hash_map.insert($k, $v);)*
-    hash_map
-  }};
-}
-
-impl<T: Read> Lexer<T> {
-  thread_local! {
-    static KEYWORDS: HashMap<&'static str, Keyword> = hash_map! {
-      "int" => Keyword::Int,
-      "void" => Keyword::Void,
-      "if" => Keyword::If,
-      "else" => Keyword::Else,
-      "while" => Keyword::While,
-      "break" => Keyword::Break,
-      "continue" => Keyword::Continue,
-      "return" => Keyword::Return,
-    };
-
-    static OPERATORS: HashMap<&'static str, Operator> = hash_map! {
-      "+" => Operator::Add,
-      "-" => Operator::Sub,
-      "*" => Operator::Mul,
-      "/" => Operator::Div,
-      "%" => Operator::Mod,
-      "<" => Operator::Lt,
-      ">" => Operator::Gt,
-      "<=" => Operator::Le,
-      ">=" => Operator::Ge,
-      "==" => Operator::Eq,
-      "!=" => Operator::Ne,
-      "&&" => Operator::And,
-      "||" => Operator::Or,
-      "!" => Operator::Not,
-      "=" => Operator::Assign,
-    };
-  }
-
-  fn span(&self) -> &Span {
-    self.0.span()
-  }
-
-  fn next_ident_or_keyword(&mut self) -> Result<Token> {
-    let token: Token = self.0.next_ident()?;
-    let ident = match &token.kind {
-      TokenKind::Ident(ident) => ident,
-      _ => unreachable!(),
-    };
-    match Self::KEYWORDS.with(|ks| ks.get(ident.as_ref()).copied()) {
-      Some(keyword) => Ok(Token::new(keyword, token.span)),
-      None => Ok(token),
-    }
-  }
-
-  fn skip_comment(&mut self) -> Result<Token> {
-    // eat '/'
-    let (_, span) = self.0.next_char_span()?;
-    // check the next char
-    match self.0.peek()? {
-      Some(c) if c == '/' => self.0.skip_until(|c| c == '\n')?,
-      Some(c) if c == '*' => {
-        // eat '*'
-        self.0.next_char()?;
-        // skip until '*/'
-        let mut star = false;
-        self.0.skip_until(|c| {
-          let last_star = star;
-          star = c == '*';
-          last_star && c == '/'
-        })?;
-        // eat '/' and check if is valid
-        if let (None, sp) = self.0.next_char_span()? {
-          return_error!(span.into_end_updated(sp), "comment unclosed at EOF");
-        }
-      }
-      _ => return Ok(Token::new(Operator::Div, span)),
-    }
-    self.next_token()
-  }
-
-  fn maybe_operator(c: char) -> bool {
-    "+-*/%<>=!&|".contains(c)
-  }
-
-  fn next_operator(&mut self, c: char) -> Result<Token> {
-    let span = self.0.next_span()?.clone();
-    if let Some(c2) = self.0.peek()? {
-      let op = format!("{c}{c2}");
-      if let Some(op) = Self::OPERATORS.with(|os| os.get(op.as_str()).copied()) {
-        return Ok(Token::new(op, span.into_end_updated(self.0.next_span()?)));
-      }
-    }
-    let op = Self::OPERATORS.with(|os| *os.get(c.to_string().as_str()).unwrap());
-    Ok(Token::new(op, span))
-  }
-}
-
-// ==============================
 // AST definitions.
 // ==============================
 
 token_ast! {
-  macro Token(mod = crate, Kind = TokenKind, derive = (Debug, PartialEq)) {
-    [ident] => (TokenKind::Ident(_), "identifier"),
-    [int] => (TokenKind::Keyword(Keyword::Int), _),
-    [void] => (TokenKind::Keyword(Keyword::Void), _),
-    [if] => (TokenKind::Keyword(Keyword::If), _),
-    [else] => (TokenKind::Keyword(Keyword::Else), _),
-    [while] => (TokenKind::Keyword(Keyword::While), _),
-    [break] => (TokenKind::Keyword(Keyword::Break), _),
-    [continue] => (TokenKind::Keyword(Keyword::Continue), _),
-    [return] => (TokenKind::Keyword(Keyword::Return), _),
-    [litint] => (TokenKind::Int(_), "integer literal"),
-    [+] => (TokenKind::Operator(Operator::Add), _),
-    [-] => (TokenKind::Operator(Operator::Sub), _),
-    [*] => (TokenKind::Operator(Operator::Mul), _),
-    [/] => (TokenKind::Operator(Operator::Div), _),
-    [%] => (TokenKind::Operator(Operator::Mod), _),
-    [<] => (TokenKind::Operator(Operator::Lt), _),
-    [>] => (TokenKind::Operator(Operator::Gt), _),
-    [<=] => (TokenKind::Operator(Operator::Le), _),
-    [>=] => (TokenKind::Operator(Operator::Ge), _),
-    [==] => (TokenKind::Operator(Operator::Eq), _),
-    [!=] => (TokenKind::Operator(Operator::Ne), _),
-    [&&] => (TokenKind::Operator(Operator::And), _),
-    [||] => (TokenKind::Operator(Operator::Or), _),
-    [!] => (TokenKind::Operator(Operator::Not), _),
-    [=] => (TokenKind::Operator(Operator::Assign), _),
-    [,] => (TokenKind::Other(','), _),
-    [;] => (TokenKind::Other(';'), _),
-    [lpr] => (TokenKind::Other('('), _),
-    [rpr] => (TokenKind::Other(')'), _),
-    [lbk] => (TokenKind::Other('{'), _),
-    [rbk] => (TokenKind::Other('}'), _),
-    [lbc] => (TokenKind::Other('['), _),
-    [rbc] => (TokenKind::Other(']'), _),
-    [eof] => (TokenKind::Eof, _),
+  #[derive(Debug, PartialEq)]
+  macro Token<TokenKind> {
+    [ident] => { kind: TokenKind::Ident(_), prompt: "identifier" },
+    [int] => { kind: TokenKind::Keyword(Keyword::Int) },
+    [void] => { kind: TokenKind::Keyword(Keyword::Void) },
+    [if] => { kind: TokenKind::Keyword(Keyword::If) },
+    [else] => { kind: TokenKind::Keyword(Keyword::Else) },
+    [while] => { kind: TokenKind::Keyword(Keyword::While) },
+    [break] => { kind: TokenKind::Keyword(Keyword::Break) },
+    [continue] => { kind: TokenKind::Keyword(Keyword::Continue) },
+    [return] => { kind: TokenKind::Keyword(Keyword::Return) },
+    [litint] => { kind: TokenKind::Int(_), prompt: "integer literal" },
+    [+] => { kind: TokenKind::Operator(Operator::Add) },
+    [-] => { kind: TokenKind::Operator(Operator::Sub) },
+    [*] => { kind: TokenKind::Operator(Operator::Mul) },
+    [/] => { kind: TokenKind::Operator(Operator::Div) },
+    [%] => { kind: TokenKind::Operator(Operator::Mod) },
+    [<] => { kind: TokenKind::Operator(Operator::Lt) },
+    [>] => { kind: TokenKind::Operator(Operator::Gt) },
+    [<=] => { kind: TokenKind::Operator(Operator::Le) },
+    [>=] => { kind: TokenKind::Operator(Operator::Ge) },
+    [==] => { kind: TokenKind::Operator(Operator::Eq) },
+    [!=] => { kind: TokenKind::Operator(Operator::Ne) },
+    [&&] => { kind: TokenKind::Operator(Operator::And) },
+    [||] => { kind: TokenKind::Operator(Operator::Or) },
+    [!] => { kind: TokenKind::Operator(Operator::Not) },
+    [=] => { kind: TokenKind::Operator(Operator::Assign) },
+    [,] => { kind: TokenKind::Other(',') },
+    [;] => { kind: TokenKind::Other(';') },
+    [lpr] => { kind: TokenKind::Other('(') },
+    [rpr] => { kind: TokenKind::Other(')') },
+    [lbk] => { kind: TokenKind::Other('{') },
+    [rbk] => { kind: TokenKind::Other('}') },
+    [lbc] => { kind: TokenKind::Other('[') },
+    [rbc] => { kind: TokenKind::Other(']') },
+    [eof] => { kind: TokenKind::Eof },
   }
 }
 
@@ -615,7 +533,7 @@ macro_rules! eval_err {
   };
 }
 
-type SymTab<T> = HashMap<Ident, T>;
+type SymTab<T> = HashMap<String, T>;
 type Funcs = SymTab<FuncDef>;
 
 #[derive(Default)]
@@ -626,7 +544,7 @@ struct Scopes {
 
 impl Scopes {
   fn get(&self, ident: &Token![ident]) -> std::result::Result<&Value, EvalError> {
-    let id: &Ident = ident.unwrap_ref();
+    let id: &String = ident.unwrap_ref();
     match self.local.iter().rev().find_map(|st| st.get(id)) {
       Some(value) => Ok(value),
       None => match self.global.get(id) {
@@ -637,7 +555,7 @@ impl Scopes {
   }
 
   fn get_mut(&mut self, ident: &Token![ident]) -> std::result::Result<&mut Value, EvalError> {
-    let id: &Ident = ident.unwrap_ref();
+    let id: &String = ident.unwrap_ref();
     match self.local.iter_mut().rev().find_map(|st| st.get_mut(id)) {
       Some(value) => Ok(value),
       None => match self.global.get_mut(id) {
@@ -678,7 +596,7 @@ impl<'id> Eval for LibFunc<'id> {
         }
       };
     }
-    match self.0.unwrap_ref::<&Ident, _>().as_ref() {
+    match self.0.unwrap_ref::<&String, _>().as_ref() {
       "getint" => {
         assert_args_len!(0);
         let mut line = String::new();
@@ -745,7 +663,7 @@ impl Eval for VarDef {
       None => &mut scopes.global,
     };
     // add definition to scope
-    let ident: &Ident = self.ident.unwrap_ref();
+    let ident: &String = self.ident.unwrap_ref();
     if scope.insert(ident.clone(), init_val).is_some() {
       eval_err!(
         self.ident.span(),
@@ -989,7 +907,7 @@ impl Eval for FuncCall {
       })
       .collect::<std::result::Result<Vec<_>, _>>()?;
     // get function from global
-    let func = match funcs.get(self.ident.unwrap_ref::<&Ident, _>()) {
+    let func = match funcs.get(self.ident.unwrap_ref::<&String, _>()) {
       Some(func) => func,
       None => return LibFunc(&self.ident, args).eval(scopes, funcs),
     };
@@ -1009,7 +927,7 @@ impl Eval for FuncCall {
         .params
         .0
         .iter()
-        .map(|FuncParam { ident, .. }| ident.unwrap_ref::<&Ident, _>().clone())
+        .map(|FuncParam { ident, .. }| ident.unwrap_ref::<&String, _>().clone())
         .zip(args.into_iter().map(Value::Int))
         .collect(),
     );
@@ -1118,9 +1036,9 @@ impl AssignTo for Access {
   }
 }
 
-fn eval<T>(mut tokens: TokenBuffer<Lexer<T>, Token>) -> Result<i32>
+fn eval<I>(mut tokens: TokenBuffer<Lexer<I, TokenKind>, Token>) -> Result<i32>
 where
-  T: Read,
+  I: InputStream<CharType = char>,
 {
   let mut scopes = Scopes::default();
   let mut funcs = Funcs::default();
@@ -1128,7 +1046,7 @@ where
     let decl_def: DeclDef = tokens.parse()?;
     match decl_def {
       DeclDef::FuncDef(func) => {
-        let ident = func.ident.unwrap_ref::<&Ident, _>().clone();
+        let ident = func.ident.unwrap_ref::<&String, _>().clone();
         let span = func.ident.span();
         if funcs.insert(ident.clone(), *func).is_some() {
           return_error!(span, "function `{ident}` has already been defined");
@@ -1148,7 +1066,11 @@ where
       Err(EvalError::Error(e)) => Err(e),
       _ => unreachable!(),
     },
-    None => log_raw_error!(tokens.into_inner().span(), "function `main` not found").into(),
+    None => log_raw_error!(
+      tokens.into_inner().into_input().span(),
+      "function `main` not found"
+    )
+    .into(),
   }
 }
 
@@ -1169,8 +1091,8 @@ fn parse_and_eval<T>(reader: Reader<T>)
 where
   T: Read,
 {
-  let lexer = Lexer(reader);
-  let span = lexer.span().clone();
+  let span = reader.span().clone();
+  let lexer = TokenKind::lexer(reader);
   let tokens = TokenBuffer::new(lexer);
   if let Ok(i) = eval(tokens) {
     process::exit(i);
