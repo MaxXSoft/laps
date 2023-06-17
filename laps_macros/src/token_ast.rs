@@ -176,7 +176,7 @@ fn gen_ast_defs(input: &TokenAst) -> Result<(TokenStream2, Vec<TokenStream2>)> {
           match token.kind {
             #[allow(unused_parens)]
             #pat => std::result::Result::Ok(Self(token)),
-            _ => laps::return_error!(token.span, concat!("expected ", #prompt, ", found {}"), token),
+            _ => laps::return_error!(token.span, std::concat!("expected ", #prompt, ", found {}"), token),
           }
         },
         None => quote!(tokens.expect(#pat).map(Self))
