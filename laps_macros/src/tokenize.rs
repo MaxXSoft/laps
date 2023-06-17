@@ -1,10 +1,9 @@
-use crate::utils::{error, match_attr, parse_doc_comments, return_error};
+use crate::utils::{camel_to_lower, error, match_attr, parse_doc_comments, return_error};
 use laps_regex::re::{Error, RegexBuilder, RegexMatcher};
 use laps_regex::table::StateTransTable;
 use proc_macro::TokenStream;
 use proc_macro2::{Span, TokenStream as TokenStream2};
 use quote::quote;
-use std::collections::HashMap;
 use syn::{
   parse::{Parse, ParseStream},
   spanned::Spanned,
@@ -76,7 +75,7 @@ impl EnumInfo {
       Data::Enum(e) => e
         .variants
         .iter()
-        .map(VariantInfo::new)
+        .map(|v| VariantInfo::new(v, bytes_mode))
         .collect::<Result<_>>()?,
       _ => unreachable!(),
     };
@@ -94,18 +93,18 @@ impl EnumInfo {
 }
 
 struct VariantInfo {
-  doc: Option<String>,
+  err: String,
   attr: Option<VariantAttr>,
   ident: Ident,
   fields: FieldInfo,
 }
 
 impl VariantInfo {
-  fn new(v: &Variant) -> Result<Self> {
+  fn new(v: &Variant, bytes_mode: bool) -> Result<Self> {
     // check fields
     let fields = FieldInfo::new(&v.fields)?;
-    // collect document comments
-    let doc = parse_doc_comments(&v.attrs);
+    // collect error message
+    let err = parse_doc_comments(&v.attrs).unwrap_or_else(|| camel_to_lower(v.ident.to_string()));
     // collect variant attributes
     let mut attr = None;
     for a in &v.attrs {
@@ -128,16 +127,27 @@ impl VariantInfo {
       }
     }
     // check attribute
-    if matches!(attr, Some(VariantAttr::Skip(_)) | Some(VariantAttr::Eof))
-      && matches!(fields, FieldInfo::Unnamed)
-    {
-      return_error!(
-        v.span(),
-        "`#[skip(...)]` and `#[eof]` can not be applied on variants with one unnamed field"
-      );
+    match &attr {
+      None => {}
+      Some(VariantAttr::Regex(RegexAttr { parser, .. })) => {
+        if bytes_mode && matches!(fields, FieldInfo::Unnamed) && parser.is_none() {
+          return_error!(v.span(), "parser must be provided if `char_type` is `u8`");
+        }
+        if !matches!(fields, FieldInfo::Unnamed) && parser.is_some() {
+          return_error!(v.span(), "parser can not be applied to unit variants");
+        }
+      }
+      _ => {
+        if matches!(fields, FieldInfo::Unnamed) {
+          return_error!(
+            v.span(),
+            "`#[skip(...)]` and `#[eof]` can not be applied to non-unit variants"
+          );
+        }
+      }
     }
     Ok(Self {
-      doc,
+      err,
       attr,
       ident: v.ident.clone(),
       fields,
@@ -218,7 +228,7 @@ struct RegexImpls {
   init_id: usize,
   num_states: usize,
   sym_map: Vec<(char, char, usize)>,
-  tags: HashMap<usize, usize>,
+  tags: Vec<(usize, usize)>,
 }
 
 impl RegexImpls {
@@ -231,12 +241,14 @@ impl RegexImpls {
           .iter()
           .map(|(r, (l, id))| (*l as char, *r as char, *id))
           .collect();
+        let mut tags = tt.tags().iter().map(|(k, v)| (*k, *v)).collect::<Vec<_>>();
+        tags.sort_unstable();
         Self {
           table: tt.table().to_vec().into_boxed_slice(),
           init_id: tt.init_id(),
           num_states: tt.num_states(),
           sym_map,
-          tags: tt.tags().clone(),
+          tags,
         }
       }};
     }
@@ -253,6 +265,8 @@ impl RegexImpls {
     let table_def = self.table_def();
     let equiv_id = self.equiv_id(&info);
     let num_states = self.num_states;
+    let token_result = Self::token_result(&info);
+    let is_final = self.is_final();
     let init_id = self.init_id;
     let buf_def = Self::buf_def(&info);
     let eof_token = Self::eof_token(&info);
@@ -279,9 +293,7 @@ impl RegexImpls {
 
       fn table() -> &[usize] { #table_def }
 
-      fn equiv_id(c: SelfTy::CharType) -> Option<usize> {
-        #equiv_id
-      }
+      fn equiv_id(c: SelfTy::CharType) -> Option<usize> { #equiv_id }
 
       fn is_accept(state: &mut usize, c: SelfTy::CharType) -> bool {
         let equiv = match equiv_id(c) {
@@ -292,8 +304,12 @@ impl RegexImpls {
         *state < #num_states
       }
 
+      fn token_result(tag: usize, buf: &#buf_ty, span: &Span) -> Option<TokenResult> {
+        #token_result
+      }
+
       fn is_final(state: usize, buf: &#buf_ty, span: &Span) -> Option<TokenResult> {
-        //
+        #is_final
       }
 
       fn next_token_impl<I>(input: &mut I) -> Result<LexerResult>
@@ -351,7 +367,6 @@ impl RegexImpls {
 
   /// Generates equivalent class ID mapping.
   fn equiv_id(&self, info: &EnumInfo) -> TokenStream2 {
-    let mut iter = self.sym_map.iter();
     let bound = |b: &char| {
       if info.bytes_mode {
         let b = *b as u8;
@@ -360,25 +375,68 @@ impl RegexImpls {
         quote!(#b)
       }
     };
-    // generate the first check
-    let mut tokens = match iter.next() {
-      Some((l, r, id)) => {
-        let l = bound(l);
-        let r = bound(r);
-        quote! {
-          if c < #l { return None }
-          if c >= #l && c <= #r { return Some(#id) }
-        }
-      }
-      None => return quote!(),
-    };
-    // generate the rest
-    tokens.extend(iter.map(|(l, r, id)| {
+    // generate boundary check
+    let l = bound(&self.sym_map.first().unwrap().0);
+    let r = bound(&self.sym_map.last().unwrap().1);
+    // generate equivalent IDs
+    let equivs = self.sym_map.iter().map(|(l, r, id)| {
       let l = bound(l);
       let r = bound(r);
       quote!(if c >= #l && c <= #r { return Some(#id) })
-    }));
-    quote!(#tokens None)
+    });
+    quote! {
+      if c < #l || c > #r { return None }
+      #(#equivs)*
+      None
+    }
+  }
+
+  /// Generates tag to token result mappings.
+  fn token_result(info: &EnumInfo) -> TokenStream2 {
+    let tokens = info
+      .vars
+      .iter()
+      .enumerate()
+      .filter_map(|(i, v)| match &v.attr {
+        Some(VariantAttr::Regex(RegexAttr { parser, .. })) => {
+          let err = &v.err;
+          let field = match parser {
+            Some(e) => quote! {
+              (#e)(buf).ok_or_else(|| return_error!(span, std::concat!("invalid ", #err)))?
+            },
+            None => quote! {
+              buf.parse().map_err(|_| return_error!(span, std::concat!("invalid ", #err)))?
+            },
+          };
+          let ident = &v.ident;
+          let kind = match &v.fields {
+            FieldInfo::Unit => quote!(SelfTy::#ident),
+            FieldInfo::UnnamedUnit => quote!(SelfTy::#ident()),
+            FieldInfo::Unnamed => quote!(SelfTy::#ident(#field)),
+          };
+          Some(quote!(if tag == #i { return Some(Token::new(#kind, span.clone())) }))
+        }
+        Some(VariantAttr::Skip(_)) => Some(quote!(if tag == #i { return Some(TokenResult::Skip) })),
+        _ => None,
+      });
+    quote!(#(#tokens)* None)
+  }
+
+  /// Generates state to token mappings.
+  fn is_final(&self) -> TokenStream2 {
+    // generate boundary check
+    let l = self.tags.first().unwrap().0;
+    let r = self.tags.last().unwrap().0;
+    // generate tokens
+    let tokens = self
+      .tags
+      .iter()
+      .map(|(id, tag)| quote!(if state == #id { return token_result(#tag, buf, span) }));
+    quote! {
+      if state < #l || state > #r { return None }
+      #(#tokens)*
+      None
+    }
   }
 
   /// Generate buffer definition.
