@@ -2,9 +2,8 @@ use laps::ast::SepSeq;
 use laps::prelude::*;
 use laps::reader::Reader;
 use laps::return_error;
-use laps::span::Result;
-use laps::token::{Ident, TokenBuffer};
-use std::{collections::HashMap, env, fmt, io::Read, process};
+use laps::token::TokenBuffer;
+use std::{collections::HashMap, env, fmt, io::Read, process, str::FromStr};
 
 // ==============================
 // Token definitions.
@@ -13,18 +12,27 @@ use std::{collections::HashMap, env, fmt, io::Read, process};
 type Token = laps::token::Token<TokenKind>;
 
 #[token_kind]
+#[derive(Tokenize)]
 enum TokenKind {
+  #[skip(r"[ \r\n\t]+")]
+  _Skip,
   /// Keyword.
+  #[regex(r"true|false|null")]
   Keyword(Keyword),
-  /// Integer.
-  Integer(u64),
-  /// Floating-point.
-  Float(f64),
+  /// Number.
+  #[regex(r"-?([0-9]|[1-9][0-9]+)(\.[0-9]+)?([Ee][+-]?[0-9]+)?")]
+  Number(f64),
   /// String.
+  #[regex(
+    r#""([^\x00-\x1f"\\]|\\(["\\/bfnrt]|u[0-9a-fA-F]{4}))*""#,
+    json_str
+  )]
   String(String),
   /// Other character.
+  #[regex(r".")]
   Other(char),
   /// End-of-file.
+  #[eof]
   Eof,
 }
 
@@ -33,6 +41,19 @@ enum Keyword {
   True,
   False,
   Null,
+}
+
+impl FromStr for Keyword {
+  type Err = ();
+
+  fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+    match s {
+      "true" => Ok(Self::True),
+      "false" => Ok(Self::False),
+      "null" => Ok(Self::Null),
+      _ => Err(()),
+    }
+  }
 }
 
 impl fmt::Display for Keyword {
@@ -45,56 +66,45 @@ impl fmt::Display for Keyword {
   }
 }
 
-// ==============================
-// Lexer.
-// ==============================
-
-struct Lexer<T>(Reader<T>);
-
-impl<T: Read> Tokenizer for Lexer<T> {
-  type Token = Token;
-
-  fn next_token(&mut self) -> Result<Self::Token> {
-    // skip spaces
-    self.0.skip_until(|c| !c.is_ascii_whitespace())?;
-    // check the current character
-    if self.0.maybe_ident()? {
-      // keyword
-      let ident: laps::token::Token<Ident> = self.0.next_ident()?;
-      match ident.kind.as_ref() {
-        "true" => Ok(Token::new(Keyword::True, ident.span)),
-        "false" => Ok(Token::new(Keyword::False, ident.span)),
-        "null" => Ok(Token::new(Keyword::Null, ident.span)),
-        _ => return_error!(ident.span, "unknown keyword '{}'", ident.kind),
-      }
-    } else if self.0.maybe_num()? {
-      // integer or floating-point
-      self.0.next_num()
-    } else if self.0.maybe_str()? {
-      // string
-      self.0.next_str()
-    } else if let Some(c) = self.0.peek()? {
-      if c == '-' {
-        // negative number
-        let (_, span) = self.0.next_char_span()?;
-        let token: Token = self.0.next_num()?;
-        Ok(Token::new(
-          match token.kind {
-            TokenKind::Integer(i) => TokenKind::Integer(i.wrapping_neg()),
-            TokenKind::Float(f) => TokenKind::Float(-f),
-            _ => unreachable!(),
-          },
-          span.into_end_updated(token.span),
-        ))
+fn json_str(s: &str) -> Option<String> {
+  let mut buf = String::new();
+  let mut escape = false;
+  let mut hex_num = 0;
+  let mut hex = 0;
+  for c in s[1..s.len() - 1].chars() {
+    if escape {
+      if hex_num > 0 && c.is_ascii_digit() {
+        hex = hex * 16 + c.to_digit(16)?;
+        hex_num -= 1;
+        if hex_num == 0 {
+          buf.push(char::from_u32(hex)?);
+          hex = 0;
+          escape = false;
+        }
+      } else if c == 'u' {
+        hex_num = 4;
       } else {
-        // other character
-        Ok(Token::new(c, self.0.next_span()?.clone()))
+        match c {
+          '"' => buf.push('"'),
+          '\\' => buf.push('\\'),
+          '/' => buf.push('/'),
+          'b' => buf.push('\x08'),
+          'f' => buf.push('\x0c'),
+          'n' => buf.push('\n'),
+          'r' => buf.push('\r'),
+          't' => buf.push('\t'),
+          _ => return None,
+        }
+        escape = false;
       }
     } else {
-      // end-of-file
-      Ok(Token::new(TokenKind::Eof, self.0.next_span()?.clone()))
+      match c {
+        '\\' => escape = true,
+        c => buf.push(c),
+      }
     }
   }
+  Some(buf)
 }
 
 // ==============================
@@ -102,20 +112,19 @@ impl<T: Read> Tokenizer for Lexer<T> {
 // ==============================
 
 token_ast! {
-  macro Token(mod = crate, Kind = TokenKind) {
-    [true] => (TokenKind::Keyword(Keyword::True), _),
-    [false] => (TokenKind::Keyword(Keyword::False), _),
-    [null] => (TokenKind::Keyword(Keyword::Null), _),
-    [int] => (TokenKind::Integer(_), "integer"),
-    [float] => (TokenKind::Float(_), "floating-point"),
-    [str] => (TokenKind::String(_), "string"),
-    [:] => (TokenKind::Other(':'), _),
-    [,] => (TokenKind::Other(','), _),
-    [lbk] => (TokenKind::Other('{'), _),
-    [rbk] => (TokenKind::Other('}'), _),
-    [lbc] => (TokenKind::Other('['), _),
-    [rbc] => (TokenKind::Other(']'), _),
-    [eof] => (TokenKind::Eof, _),
+  macro Token<TokenKind> {
+    [true] => { kind: TokenKind::Keyword(Keyword::True) },
+    [false] => { kind: TokenKind::Keyword(Keyword::False) },
+    [null] => { kind: TokenKind::Keyword(Keyword::Null) },
+    [num] => { kind: TokenKind::Number(_), prompt: "number" },
+    [str] => { kind: TokenKind::String(_), prompt: "string" },
+    [:] => { kind: TokenKind::Other(':') },
+    [,] => { kind: TokenKind::Other(',') },
+    [lbk] => { kind: TokenKind::Other('{') },
+    [rbk] => { kind: TokenKind::Other('}') },
+    [lbc] => { kind: TokenKind::Other('[') },
+    [rbc] => { kind: TokenKind::Other(']') },
+    [eof] => { kind: TokenKind::Eof },
   }
 }
 
@@ -132,8 +141,7 @@ enum ValueDef {
   ObjectDef(ObjectDef),
   ArrayDef(ArrayDef),
   String(Token![str]),
-  Integer(Token![int]),
-  Float(Token![float]),
+  Number(Token![num]),
   True(Token![true]),
   False(Token![false]),
   Null(Token![null]),
@@ -172,8 +180,7 @@ enum Value {
   Object(HashMap<String, Value>),
   Array(Vec<Value>),
   String(String),
-  Integer(u64),
-  Float(f64),
+  Number(f64),
   Bool(bool),
   Null,
 }
@@ -190,8 +197,7 @@ impl From<ValueDef> for Value {
       ValueDef::ObjectDef(obj) => obj.into(),
       ValueDef::ArrayDef(arr) => arr.into(),
       ValueDef::String(s) => Self::String(s.unwrap()),
-      ValueDef::Integer(i) => Self::Integer(i.unwrap()),
-      ValueDef::Float(f) => Self::Float(f.unwrap()),
+      ValueDef::Number(n) => Self::Number(n.unwrap()),
       ValueDef::True(_) => Self::Bool(true),
       ValueDef::False(_) => Self::Bool(false),
       ValueDef::Null(_) => Self::Null,
@@ -231,7 +237,7 @@ where
   T: Read,
 {
   let span = reader.span().clone();
-  let lexer = Lexer(reader);
+  let lexer = TokenKind::lexer(reader);
   let mut tokens = TokenBuffer::new(lexer);
   if let Ok(json) = tokens.parse::<JsonDef>() {
     let value = Value::from(json);
