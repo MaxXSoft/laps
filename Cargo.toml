@@ -6,7 +6,7 @@ members = [
 
 [package]
 name = "laps"
-version = "0.0.2"
+version = "0.1.0"
 authors = ["MaxXing <x@MaxXSoft.net>"]
 edition = "2021"
 description = "Lexer and parser collections."
@@ -29,7 +29,7 @@ macros = ["dep:laps_macros"]
 
 [dependencies]
 colored = { version = "2.0.0", optional = true }
-laps_macros = { path = "./laps_macros", version = "0.0.2", optional = true }
+laps_macros = { path = "./laps_macros", version = "0.1.0", optional = true }
 unicode-width = "0.1.10"
 
 [[example]]

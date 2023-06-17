@@ -1,6 +1,6 @@
 [package]
 name = "laps_macros"
-version = "0.0.2"
+version = "0.1.0"
 authors = ["MaxXing <x@MaxXSoft.net>"]
 edition = "2021"
 description = "Macros for crate `laps`."
