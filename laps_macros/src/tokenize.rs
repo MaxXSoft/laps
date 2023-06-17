@@ -320,6 +320,7 @@ impl RegexImpls {
 
       fn table() -> &'static [usize] { #table_def }
 
+      #[allow(clippy::manual_is_ascii_check)]
       fn equiv_id(c: #char_type) -> Option<usize> { #equiv_id }
 
       fn is_accept(state: &mut usize, c: #char_type) -> bool {
@@ -331,12 +332,14 @@ impl RegexImpls {
         *state < #num_states
       }
 
+      #[allow(clippy::ptr_arg)]
       fn token_result #impl_generics (
         tag: usize, buf: &#buf_ty, span: &Span
       ) -> Result<TokenResult #ty_generics> #where_clause {
         #token_result
       }
 
+      #[allow(clippy::ptr_arg)]
       fn is_final #impl_generics (
         state: usize, buf: &#buf_ty, span: &Span
       ) -> Result<TokenResult #ty_generics> #where_clause {
@@ -413,10 +416,10 @@ impl RegexImpls {
     let equivs = self.sym_map.iter().map(|(l, r, id)| {
       let l = bound(l);
       let r = bound(r);
-      quote!(if c >= #l && c <= #r { return Some(#id) })
+      quote!(if (#l..=#r).contains(&c) { return Some(#id) })
     });
     quote! {
-      if c < #l || c > #r { return None }
+      if !(#l..=#r).contains(&c) { return None }
       #(#equivs)*
       None
     }
@@ -466,7 +469,7 @@ impl RegexImpls {
       .iter()
       .map(|(id, tag)| quote!(if state == #id { return token_result(#tag, buf, span) }));
     quote! {
-      if state < #l || state > #r { return Ok(TokenResult::Unknown) }
+      if !(#l..=#r).contains(&state) { return Ok(TokenResult::Unknown) }
       #(#tokens)*
       Ok(TokenResult::Unknown)
     }

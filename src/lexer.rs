@@ -275,7 +275,7 @@ where
         }
         // get hex value
         let mut hex = 0u32;
-        while let Some(c) = iter.next() {
+        for c in iter {
           match c.to_digit(16) {
             Some(h) => match hex.checked_mul(16) {
               Some(h16) => hex = h16 + h,
