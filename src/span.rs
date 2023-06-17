@@ -537,7 +537,9 @@ impl AsRef<Self> for Span {
 /// A line-column mark.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Location {
+  /// Line number.
   pub line: u32,
+  /// Column number.
   pub col: u32,
 }
 

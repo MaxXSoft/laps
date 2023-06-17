@@ -1,7 +1,8 @@
 //! Lexer and parser collections.
 //!
-//! With `laps`, you can build parsers by just defining ASTs and deriving
-//! [`Parse`](parse::Parse) trait for them.
+//! With `laps`, you can build lexers/parsers by just defining tokens/ASTs
+//! and deriving [`Tokenize`](lexer::Tokenize)/[`Parse`](parse::Parse)
+//! trait for them.
 //!
 //! # Example
 //!
