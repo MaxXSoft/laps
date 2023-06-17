@@ -39,7 +39,7 @@ where
   /// Builds all regular expressions in the current builder as UTF-8 mode.
   ///
   /// Returns a [`RegexMatcher`], or an error.
-  pub fn build<S>(self) -> Result<RegexMatcher<S, T>, Error>
+  pub fn build<S>(self) -> Result<RegexMatcher<S, T>, Error<T>>
   where
     S: Hash + Eq + Clone + Ord + SymbolOp,
     Mir<S, T>: MirBuilder,
@@ -50,7 +50,7 @@ where
   /// Builds all regular expressions in the current builder as bytes mode.
   ///
   /// Returns a [`RegexMatcher`], or an error.
-  pub fn build_bytes<S>(self) -> Result<RegexMatcher<S, T>, Error>
+  pub fn build_bytes<S>(self) -> Result<RegexMatcher<S, T>, Error<T>>
   where
     S: Hash + Eq + Clone + Ord + SymbolOp,
     Mir<S, T>: MirBuilder,
@@ -59,7 +59,7 @@ where
   }
 
   /// Implementation of all building methods.
-  fn build_impl<R, S>(self, re_parse: R) -> Result<RegexMatcher<S, T>, Error>
+  fn build_impl<R, S>(self, re_parse: R) -> Result<RegexMatcher<S, T>, Error<T>>
   where
     R: Fn(&str) -> Result<Hir, RegexError>,
     S: Hash + Eq + Clone + Ord + SymbolOp,
@@ -74,7 +74,7 @@ where
           .into_iter()
           .map(|(re, tag)| {
             re_parse(&re)
-              .map_err(|e| Error::Regex(Box::new(e)))
+              .map_err(|e| Error::Regex(Box::new(e), tag.clone()))
               .and_then(|hir| Mir::new(hir).map_err(Error::Mir))
               .map(|mir| (mir, Some(tag)))
           })
@@ -93,22 +93,22 @@ impl<T> Default for RegexBuilder<T> {
   }
 }
 
-/// Possible errors in building of regular expressions.
+/// Possible errors in building of regular expressions with tag type `T`.
 #[derive(Debug)]
-pub enum Error {
+pub enum Error<T> {
   /// There is no regular expressions in [`RegexBuilder`].
   EmptyBuilder,
-  /// An error occurred during parsing regular expressions.
-  Regex(Box<RegexError>),
+  /// An error occurred during parsing the regular expression with the tag `T`.
+  Regex(Box<RegexError>, T),
   /// An error occurred during compiling or optimizing regular expressions.
   Mir(MirError),
 }
 
-impl fmt::Display for Error {
+impl<T> fmt::Display for Error<T> {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
     match self {
       Self::EmptyBuilder => write!(f, "no regular expressions in the builder"),
-      Self::Regex(e) => write!(f, "{e}"),
+      Self::Regex(e, _) => write!(f, "{e}"),
       Self::Mir(e) => write!(f, "{e}"),
     }
   }
