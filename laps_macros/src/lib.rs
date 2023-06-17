@@ -204,17 +204,18 @@ pub fn token_kind(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// // All of the generated ASTs are single-field structures, you can access
 /// // the inner token by using `ast.0`.
 /// token_ast! {
-///   // `mod` indicates the path to the module where the `token_ast` is invocated.
-///   // `Kind` indicates the name of the token kind type.
-///   // `derive`, which is optional, indicates traits derived for the AST.
-///   pub(crate) macro Token(mod = crate, Kind = crate::TokenKind, derive = (Debug, PartialEq)) {
-///     [str] => (crate::TokenKind::Str(_), "string literal"),  // pattern, and prompt for error messages
-///     [int] => (crate::TokenKind::Int(_), "integer literal"),
-///     [+] => (crate::TokenKind::Other('+'), _),   // use default prompt of the token kind
-///     [-] => (crate::TokenKind::Other('-'), _),
-///     [*] => (crate::TokenKind::Other('*'), _),
-///     [/] => (crate::TokenKind::Other('/'), _),
-///     [eof] => (crate::TokenKind::Eof, _),
+///   // optional, all derives will be applied to the generated AST structures.
+///   #[derive(Debug, PartialEq)]
+///   pub(crate) macro Token</* specify the token kind type here */ TokenKind> {
+///     // pattern, and prompt for error messages
+///     [str] => { kind: TokenKind::Str(_), prompt: "string literal" },
+///     [int] => { kind: TokenKind::Int(_), prompt: "integer literal" },
+///     // use default prompt of the token kind
+///     [+] => { kind: TokenKind::Other('+') },
+///     [-] => { kind: TokenKind::Other('-') },
+///     [*] => { kind: TokenKind::Other('*') },
+///     [/] => { kind: TokenKind::Other('/') },
+///     [eof] => { kind: TokenKind::Eof },
 ///   }
 /// }
 /// ```
