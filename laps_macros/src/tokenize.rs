@@ -9,6 +9,7 @@ use syn::{
   spanned::Spanned,
   Data, DeriveInput, Expr, Fields, Ident, LitStr, Meta, Result, Token, Type, Variant,
 };
+use syn::{ImplGenerics, TypeGenerics, WhereClause};
 
 /// Entry function of `#[derive(Tokenize)]`.
 pub fn derive_tokenize(item: TokenStream) -> Result<TokenStream> {
@@ -29,7 +30,14 @@ pub fn derive_tokenize(item: TokenStream) -> Result<TokenStream> {
   } else {
     quote!(char)
   };
-  let body = impls.into_body(info)?;
+  let body = impls.into_body(
+    info,
+    &name,
+    &impl_generics,
+    &ty_generics,
+    where_clause,
+    &char_type,
+  )?;
   Ok(TokenStream::from(quote! {
     impl #impl_generics laps::lexer::Tokenize
     for #name #ty_generics #where_clause {
@@ -37,9 +45,8 @@ pub fn derive_tokenize(item: TokenStream) -> Result<TokenStream> {
 
       fn next_token<I>(input: &mut I) -> laps::span::Result<laps::token::Token<Self>>
       where
-        I: laps::input::InputStream<CharType = Self::CharType>,
+        I: laps::input::InputStream<CharType = #char_type>,
       {
-        type SelfTy = Self;
         #body
       }
     }
@@ -104,7 +111,16 @@ impl VariantInfo {
     // check fields
     let fields = FieldInfo::new(&v.fields)?;
     // collect error message
-    let err = parse_doc_comments(&v.attrs).unwrap_or_else(|| camel_to_lower(v.ident.to_string()));
+    let err = parse_doc_comments(&v.attrs).map_or_else(
+      || camel_to_lower(v.ident.to_string()),
+      |mut p| {
+        p.make_ascii_lowercase();
+        if p.ends_with('.') {
+          p.pop();
+        }
+        p
+      },
+    );
     // collect variant attributes
     let mut attr = None;
     for a in &v.attrs {
@@ -260,7 +276,15 @@ impl RegexImpls {
   }
 
   /// Converts into the body of method `next_token`.
-  fn into_body(self, info: EnumInfo) -> Result<TokenStream2> {
+  fn into_body(
+    self,
+    info: EnumInfo,
+    name: &Ident,
+    impl_generics: &ImplGenerics,
+    ty_generics: &TypeGenerics,
+    where_clause: Option<&WhereClause>,
+    char_type: &TokenStream2,
+  ) -> Result<TokenStream2> {
     let buf_ty = Self::buf_ty(&info);
     let table_def = self.table_def();
     let equiv_id = self.equiv_id(&info);
@@ -277,7 +301,9 @@ impl RegexImpls {
       use laps::input::InputStream;
       use laps::return_error;
       use laps::span::{Result, Span};
-      use laps::token::Token;
+
+      type Kind #impl_generics = #name #ty_generics;
+      type Token #impl_generics = laps::token::Token<Kind #ty_generics>;
 
       struct LexerResult {
         last_state: usize,
@@ -286,35 +312,40 @@ impl RegexImpls {
         is_eof: bool,
       }
 
-      enum TokenResult {
-        Token(Token<SelfTy>),
+      enum TokenResult #impl_generics #where_clause {
+        Token(Token #ty_generics),
         Skip,
+        Unknown,
       }
 
-      fn table() -> &[usize] { #table_def }
+      fn table() -> &'static [usize] { #table_def }
 
-      fn equiv_id(c: SelfTy::CharType) -> Option<usize> { #equiv_id }
+      fn equiv_id(c: #char_type) -> Option<usize> { #equiv_id }
 
-      fn is_accept(state: &mut usize, c: SelfTy::CharType) -> bool {
+      fn is_accept(state: &mut usize, c: #char_type) -> bool {
         let equiv = match equiv_id(c) {
           Some(id) => id,
-          None => return false;
+          None => return false,
         };
         *state = table()[equiv * #num_states + *state];
         *state < #num_states
       }
 
-      fn token_result(tag: usize, buf: &#buf_ty, span: &Span) -> Option<TokenResult> {
+      fn token_result #impl_generics (
+        tag: usize, buf: &#buf_ty, span: &Span
+      ) -> Result<TokenResult #ty_generics> #where_clause {
         #token_result
       }
 
-      fn is_final(state: usize, buf: &#buf_ty, span: &Span) -> Option<TokenResult> {
+      fn is_final #impl_generics (
+        state: usize, buf: &#buf_ty, span: &Span
+      ) -> Result<TokenResult #ty_generics> #where_clause {
         #is_final
       }
 
       fn next_token_impl<I>(input: &mut I) -> Result<LexerResult>
       where
-        I: InputStream<CharType = SelfTy::CharType>,
+        I: InputStream<CharType = #char_type>,
       {
         let mut state = #init_id;
         let mut last_state;
@@ -325,7 +356,7 @@ impl RegexImpls {
           last_state = state;
           if let Some(c) = c {
             if !is_accept(&mut state, c) {
-              input.unread((Some(c), loc))
+              input.unread((Some(c), loc));
               break false;
             }
             buf.push(c);
@@ -339,12 +370,12 @@ impl RegexImpls {
 
       loop {
         let LexerResult { last_state, buf, span, is_eof } = next_token_impl(input)?;
-        match is_final(last_state, &buf, &span) {
-          Some(TokenResult::Token(t)) => return Ok(t),
-          Some(TokenResult::Skip) => continue,
-          None if is_eof && buf_empty => #eof_token,
-          None if is_eof => return_error!(span, "unexpected end-of-file"),
-          None => return_error!(span, "unrecognized token"),
+        match is_final(last_state, &buf, &span)? {
+          TokenResult::Token(t) => return Ok(t),
+          TokenResult::Skip => continue,
+          TokenResult::Unknown if is_eof && buf.is_empty() => #eof_token,
+          TokenResult::Unknown if is_eof => return_error!(span, "unexpected end-of-file"),
+          TokenResult::Unknown => return_error!(span, "unrecognized token"),
         }
       }
     })
@@ -410,16 +441,18 @@ impl RegexImpls {
           };
           let ident = &v.ident;
           let kind = match &v.fields {
-            FieldInfo::Unit => quote!(SelfTy::#ident),
-            FieldInfo::UnnamedUnit => quote!(SelfTy::#ident()),
-            FieldInfo::Unnamed => quote!(SelfTy::#ident(#field)),
+            FieldInfo::Unit => quote!(Kind::#ident),
+            FieldInfo::UnnamedUnit => quote!(Kind::#ident()),
+            FieldInfo::Unnamed => quote!(Kind::#ident(#field)),
           };
-          Some(quote!(if tag == #i { return Some(Token::new(#kind, span.clone())) }))
+          Some(
+            quote!(if tag == #i { return Ok(TokenResult::Token(Token::new(#kind, span.clone()))) }),
+          )
         }
-        Some(VariantAttr::Skip(_)) => Some(quote!(if tag == #i { return Some(TokenResult::Skip) })),
+        Some(VariantAttr::Skip(_)) => Some(quote!(if tag == #i { return Ok(TokenResult::Skip) })),
         _ => None,
       });
-    quote!(#(#tokens)* None)
+    quote!(#(#tokens)* Ok(TokenResult::Unknown))
   }
 
   /// Generates state to token mappings.
@@ -433,9 +466,9 @@ impl RegexImpls {
       .iter()
       .map(|(id, tag)| quote!(if state == #id { return token_result(#tag, buf, span) }));
     quote! {
-      if state < #l || state > #r { return None }
+      if state < #l || state > #r { return Ok(TokenResult::Unknown) }
       #(#tokens)*
-      None
+      Ok(TokenResult::Unknown)
     }
   }
 
@@ -455,8 +488,8 @@ impl RegexImpls {
       Some(VariantAttr::Eof) => {
         let ident = &v.ident;
         match v.fields {
-          FieldInfo::Unit => Some(quote!(SelfTy::#ident)),
-          FieldInfo::UnnamedUnit => Some(quote!(SelfTy::#ident())),
+          FieldInfo::Unit => Some(quote!(Kind::#ident)),
+          FieldInfo::UnnamedUnit => Some(quote!(Kind::#ident())),
           _ => unreachable!(),
         }
       }
