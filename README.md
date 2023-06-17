@@ -25,52 +25,34 @@ Implement a lexer for [S-expression](https://en.wikipedia.org/wiki/S-expression)
 use laps::prelude::*;
 
 #[token_kind]
+#[derive(Debug, Tokenize)]
 enum TokenKind {
-  /// Atom.
-  Atom(String),
+  // This token will be skipped.
+  #[skip(r"\s+")]
+  _Skip,
   /// Parentheses.
+  #[regex(r"[()]")]
   Paren(char),
+  /// Atom.
+  #[regex(r"[^\s()]+")]
+  Atom(String),
   /// End-of-file.
+  #[eof]
   Eof,
-}
-
-type Token = laps::token::Token<TokenKind>;
-
-struct Lexer<T>(laps::reader::Reader<T>);
-
-impl<T: std::io::Read> Tokenizer for Lexer<T> {
-  type Token = Token;
-
-  fn next_token(&mut self) -> laps::span::Result<Self::Token> {
-    // skip spaces
-    self.0.skip_until(|c| !c.is_whitespace())?;
-    // check the current character
-    Ok(match self.0.peek()? {
-      // parentheses
-      Some(c) if c == '(' || c == ')' => Token::new(c, self.0.next_span()?.clone()),
-      // atom
-      Some(_) => {
-        let (atom, span) = self
-          .0
-          .collect_with_span_until(|c| c.is_whitespace() || c == '(' || c == ')')?;
-        Token::new(atom, span)
-      }
-      // end-of-file
-      None => Token::new(TokenKind::Eof, self.0.next_span()?.clone()),
-    })
-  }
 }
 ```
 
 And the parser and [ASTs](https://en.wikipedia.org/wiki/Abstract_syntax_tree) (or actually [CSTs](https://en.wikipedia.org/wiki/Parse_tree)):
 
 ```rust
+type Token = laps::token::Token<TokenKind>;
+
 token_ast! {
-  macro Token(mod = crate, Kind = TokenKind) {
-    [atom] => (TokenKind::Atom(_), "atom"),
-    [lpr] => (TokenKind::Paren('('), _),
-    [rpr] => (TokenKind::Paren(')'), _),
-    [eof] => (TokenKind::Eof, _),
+  macro Token<TokenKind> {
+    [atom] => { kind: TokenKind::Atom(_), prompt: "atom" },
+    [lpr] => { kind: TokenKind::Paren('(') },
+    [rpr] => { kind: TokenKind::Paren(')') },
+    [eof] => { kind: TokenKind::Eof },
   }
 }
 
