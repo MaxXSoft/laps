@@ -17,7 +17,7 @@ use utils::result_to_tokens;
 ///
 /// * `#[token(type)]`: implements `Parse` trait for token streams that
 ///   produce tokens of the given type.
-/// * `#[starts_with(token_ast0, token_ast1, ...)]`: specifies which token
+/// * `#[starts_with(token_ast0, token_ast1, ...)]`: specifies which tokens
 ///   the current AST may start with. This will affect the implementation of
 ///   method `maybe` of the `Parse` trait.
 #[proc_macro_derive(Parse, attributes(token, starts_with))]
