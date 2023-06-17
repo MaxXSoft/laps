@@ -47,7 +47,3 @@ required-features = ["macros"]
 [[example]]
 name = "clike"
 required-features = ["macros"]
-
-[[example]]
-name = "re"
-required-features = ["macros"]
