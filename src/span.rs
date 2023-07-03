@@ -31,7 +31,7 @@
 use std::cell::Cell;
 use std::fmt::{self, Arguments};
 use std::path::Path;
-use std::rc::Rc;
+use std::sync::Arc;
 
 #[cfg(feature = "logger")]
 use colored::{Color, Colorize};
@@ -93,7 +93,7 @@ impl<T> From<Error> for Result<T> {
 /// Used to print error messages.
 #[derive(Clone)]
 pub struct Span {
-  status: Rc<LoggerStatus>,
+  status: Arc<LoggerStatus>,
   start: Location,
   end: Location,
 }
@@ -153,7 +153,7 @@ impl Span {
   /// Creates a new span.
   pub fn new(file_type: FileType) -> Self {
     Self {
-      status: Rc::new(LoggerStatus {
+      status: Arc::new(LoggerStatus {
         file_type,
         errors: Cell::new(0),
         warnings: Cell::new(0),
@@ -522,7 +522,7 @@ impl fmt::Debug for Span {
 
 impl PartialEq for Span {
   fn eq(&self, other: &Self) -> bool {
-    Rc::ptr_eq(&self.status, &other.status) && self.start == other.start && self.end == other.end
+    Arc::ptr_eq(&self.status, &other.status) && self.start == other.start && self.end == other.end
   }
 }
 
