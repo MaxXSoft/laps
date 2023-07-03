@@ -18,7 +18,8 @@ readme = "README.md"
 license = "MIT OR Apache-2.0"
 
 [package.metadata.docs.rs]
-features = ["macros"]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
 default = ["logger"]

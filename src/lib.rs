@@ -1,3 +1,5 @@
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+
 //! Lexer and parser collections.
 //!
 //! With `laps`, you can build lexers/parsers by just defining tokens/ASTs
