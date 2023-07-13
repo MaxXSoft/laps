@@ -286,6 +286,7 @@ impl RegexImpls {
     char_type: &TokenStream2,
   ) -> Result<TokenStream2> {
     let buf_ty = Self::buf_ty(&info);
+    let table_ty = self.table_ty();
     let table_def = self.table_def();
     let equiv_id = self.equiv_id(&info);
     let num_states = self.num_states;
@@ -318,7 +319,7 @@ impl RegexImpls {
         Unknown,
       }
 
-      fn table() -> &'static [usize] { #table_def }
+      fn table() -> &'static [#table_ty] { #table_def }
 
       #[allow(clippy::manual_is_ascii_check)]
       fn equiv_id(c: #char_type) -> Option<usize> { #equiv_id }
@@ -328,7 +329,7 @@ impl RegexImpls {
           Some(id) => id,
           None => return false,
         };
-        *state = table()[equiv * #num_states + *state];
+        *state = table()[equiv * #num_states + *state] as usize;
         *state < #num_states
       }
 
@@ -393,9 +394,29 @@ impl RegexImpls {
     }
   }
 
+  /// Generates table type.
+  fn table_ty(&self) -> TokenStream2 {
+    if self.num_states <= 1 {
+      quote!(u8)
+    } else {
+      match (self.num_states - 1).ilog2() + 1 {
+        ..=8 => quote!(u8),
+        ..=16 => quote!(u16),
+        ..=32 => quote!(u32),
+        ..=64 => quote!(u64),
+        _ => quote!(u128),
+      }
+    }
+  }
+
   /// Generates table definition.
   fn table_def(&self) -> TokenStream2 {
-    let tokens: TokenStream2 = self.table.iter().map(|id| quote!(#id,)).collect();
+    let table_ty = self.table_ty();
+    let tokens: TokenStream2 = self
+      .table
+      .iter()
+      .map(|id| quote!(#id as #table_ty,))
+      .collect();
     quote!(&[#tokens])
   }
 
