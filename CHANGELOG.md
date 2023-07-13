@@ -2,6 +2,12 @@
 
 All notable changes to the `laps` will be documented in this file.
 
+## 0.1.2 - 2023-07-13
+
+### Changed
+
+* Made `Span` fully thread-safe (embarrassed).
+
 ## 0.1.1 - 2023-07-13
 
 ### Changed
