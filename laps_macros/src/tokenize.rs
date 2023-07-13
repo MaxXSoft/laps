@@ -399,12 +399,17 @@ impl RegexImpls {
     if self.num_states <= 1 {
       quote!(u8)
     } else {
-      match (self.num_states - 1).ilog2() + 1 {
-        ..=8 => quote!(u8),
-        ..=16 => quote!(u16),
-        ..=32 => quote!(u32),
-        ..=64 => quote!(u64),
-        _ => quote!(u128),
+      let table_size_bits = (self.num_states - 1).ilog2() + 1;
+      if table_size_bits <= 8 {
+        quote!(u8)
+      } else if table_size_bits <= 16 {
+        quote!(u16)
+      } else if table_size_bits <= 32 {
+        quote!(u32)
+      } else if table_size_bits <= 64 {
+        quote!(u64)
+      } else {
+        quote!(u128)
       }
     }
   }
