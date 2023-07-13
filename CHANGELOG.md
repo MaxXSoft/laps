@@ -8,6 +8,7 @@ All notable changes to the `laps` will be documented in this file.
 
 * Made `Span` thread-safe.
 * Enabled LTO for release mode.
+* Supported transition table compression.
 
 ## 0.1.0 - 2023-06-17
 
