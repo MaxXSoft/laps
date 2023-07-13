@@ -28,9 +28,9 @@
 //! ^^^^^^^^^^
 //! ```
 
-use std::cell::Cell;
 use std::fmt::{self, Arguments};
 use std::path::Path;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
 #[cfg(feature = "logger")]
@@ -155,8 +155,8 @@ impl Span {
     Self {
       status: Arc::new(LoggerStatus {
         file_type,
-        errors: Cell::new(0),
-        warnings: Cell::new(0),
+        errors: AtomicUsize::new(0),
+        warnings: AtomicUsize::new(0),
       }),
       start: Location::new(),
       end: Location::new(),
@@ -175,7 +175,7 @@ impl Span {
   #[cfg(feature = "logger")]
   pub fn log_raw_error(&self, args: Arguments) -> Error {
     // update error number
-    self.status.errors.set(self.status.errors.get() + 1);
+    self.status.errors.fetch_add(1, Ordering::Relaxed);
     // print message to stderr
     eprintln!("{}: {args}", "error".bright_red());
     Error::Normal
@@ -193,7 +193,7 @@ impl Span {
   #[cfg(feature = "logger")]
   pub fn log_raw_fatal_error(&self, args: Arguments) -> Error {
     // update error number
-    self.status.errors.set(self.status.errors.get() + 1);
+    self.status.errors.fetch_add(1, Ordering::Relaxed);
     // print message to stderr
     eprintln!("{}: {args}", "error".bright_red());
     Error::Fatal
@@ -210,7 +210,7 @@ impl Span {
   #[cfg(feature = "logger")]
   pub fn log_raw_warning(&self, args: Arguments) {
     // update warning number
-    self.status.warnings.set(self.status.warnings.get() + 1);
+    self.status.warnings.fetch_add(1, Ordering::Relaxed);
     // print message to stderr
     eprintln!("{}: {args}", "warning".yellow());
   }
@@ -223,8 +223,8 @@ impl Span {
   #[cfg(feature = "logger")]
   pub fn log_summary(&self) {
     let mut msg = String::new();
-    let errors = self.status.errors.get();
-    let warnings = self.status.warnings.get();
+    let errors = self.status.errors.load(Ordering::Relaxed);
+    let warnings = self.status.warnings.load(Ordering::Relaxed);
     // error info
     if errors != 0 {
       let _ = write!(msg, "{errors} error");
@@ -250,12 +250,12 @@ impl Span {
 
   /// Gets the number of errors.
   pub fn error_num(&self) -> usize {
-    self.status.errors.get()
+    self.status.errors.load(Ordering::Relaxed)
   }
 
   /// Gets the number of warnings.
   pub fn warning_num(&self) -> usize {
-    self.status.warnings.get()
+    self.status.warnings.load(Ordering::Relaxed)
   }
 
   /// Logs normal error message.
@@ -573,8 +573,8 @@ impl fmt::Debug for Location {
 /// Logger status for `Span`.
 struct LoggerStatus {
   file_type: FileType,
-  errors: Cell<usize>,
-  warnings: Cell<usize>,
+  errors: AtomicUsize,
+  warnings: AtomicUsize,
 }
 
 /// Type of input file.
