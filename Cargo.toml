@@ -6,7 +6,7 @@ members = [
 
 [package]
 name = "laps"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["MaxXing <x@MaxXSoft.net>"]
 edition = "2021"
 description = "Lexer and parser collections."
