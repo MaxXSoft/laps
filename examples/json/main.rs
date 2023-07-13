@@ -23,10 +23,7 @@ enum TokenKind {
   #[regex(r"-?([0-9]|[1-9][0-9]+)(\.[0-9]+)?([Ee][+-]?[0-9]+)?")]
   Number(f64),
   /// String.
-  #[regex(
-    r#""([^\x00-\x1f"\\]|\\(["\\/bfnrt]|u[0-9a-fA-F]{4}))*""#,
-    json_str
-  )]
+  #[regex(r#""([^\x00-\x1f"\\]|\\(["\\/bfnrt]|u[0-9a-fA-F]{4}))*""#, json_str)]
   String(String),
   /// Other character.
   #[regex(r".")]
