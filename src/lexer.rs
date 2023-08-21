@@ -112,6 +112,39 @@ where
   T::from_str_radix(&s[starts_from..], radix).ok()
 }
 
+/// Parses integer literals with an optional sign from the given string.
+/// Supports decimal, binary, hexadecimal and octal.
+///
+/// Returns the integer if successful, otherwise returns [`None`].
+///
+/// # Examples
+///
+/// ```
+/// use laps::lexer::signed_int_literal;
+///
+/// assert_eq!(signed_int_literal("0"), Some(0));
+/// assert_eq!(signed_int_literal("+00"), Some(0));
+/// assert_eq!(signed_int_literal("-42"), Some(-42));
+/// assert_eq!(signed_int_literal("-0x1a"), Some(-26));
+/// assert_eq!(signed_int_literal("0b0110"), Some(6));
+/// assert_eq!(signed_int_literal("+0o777"), Some(511));
+/// assert_eq!(signed_int_literal::<u32>("-1"), Some(u32::MAX));
+/// assert_eq!(signed_int_literal::<i32>("+"), None);
+/// assert_eq!(signed_int_literal::<i32>("--1"), None);
+/// assert_eq!(signed_int_literal::<i32>("-0b777"), None);
+/// ```
+pub fn signed_int_literal<T>(s: &str) -> Option<T>
+where
+  T: IntLiteral,
+{
+  let first = s.chars().next()?;
+  if first == '+' || first == '-' {
+    int_literal(&s[1..]).map(|n: T| if first == '-' { n.wrapping_neg() } else { n })
+  } else {
+    int_literal(s)
+  }
+}
+
 /// A helper trait for function [`int_literal`].
 ///
 /// Users are not allowed to implement this trait for other types.
@@ -121,6 +154,9 @@ pub trait IntLiteral: Sized + sealed_traits::SealedIntLiteral {
   /// This is identical to `from_str_radix` method of primitive integer types,
   /// such as [`i32::from_str_radix`](i32#method.from_str_radix).
   fn from_str_radix(s: &str, radix: u32) -> Result<Self, ParseIntError>;
+
+  /// Wrapping negates the current number.
+  fn wrapping_neg(self) -> Self;
 }
 
 /// Helper macro for implementing `IntLiteral` for integers.
@@ -129,6 +165,10 @@ macro_rules! impl_int_literal {
     impl IntLiteral for $ty {
       fn from_str_radix(s: &str, radix: u32) -> Result<Self, ParseIntError> {
         <$ty>::from_str_radix(s, radix)
+      }
+
+      fn wrapping_neg(self) -> Self {
+        self.wrapping_neg()
       }
     }
   };
