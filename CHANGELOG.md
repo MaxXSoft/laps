@@ -2,6 +2,12 @@
 
 All notable changes to the `laps` will be documented in this file.
 
+## Unreleased
+
+### Added
+
+* `laps::lexer::signed_int_literal` for parsing integer literal with an optional sign.
+
 ## 0.1.2 - 2023-07-13
 
 ### Changed
