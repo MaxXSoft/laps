@@ -7,8 +7,8 @@ use syn::{
   parse::{Parse, ParseStream},
   punctuated::{Pair, Punctuated},
   spanned::Spanned,
-  Attribute, GenericArgument, LitStr, Meta, Pat, Path, PathArguments, PathSegment, Result, Token,
-  Type, Visibility,
+  Attribute, Expr, GenericArgument, LitStr, Meta, Pat, Path, PathArguments, PathSegment, Result,
+  Token, Type, Visibility,
 };
 
 struct TokenAst {
@@ -62,6 +62,7 @@ impl Parse for TokenAst {
 struct TokenAstArm {
   token: TokenStream2,
   pat: Pat,
+  guard: Option<Expr>,
   prompt: Option<LitStr>,
 }
 
@@ -83,6 +84,13 @@ impl Parse for TokenAstArm {
     brace_content.parse::<Token![:]>()?;
     // parse pattern
     let pat = Pat::parse_multi_with_leading_vert(&brace_content)?;
+    // parse if guard
+    let guard = if brace_content.peek(Token![if]) {
+      brace_content.parse::<Token![if]>()?;
+      Some(input.parse()?)
+    } else {
+      None
+    };
     // parse the optional prompt part
     let prompt = if brace_content.peek(Token![,]) && brace_content.peek2(syn::Ident) {
       brace_content.parse::<Token![,]>()?;
@@ -102,7 +110,12 @@ impl Parse for TokenAstArm {
     } else {
       None
     };
-    Ok(Self { token, pat, prompt })
+    Ok(Self {
+      token,
+      pat,
+      guard,
+      prompt,
+    })
   }
 }
 
@@ -151,22 +164,26 @@ fn gen_ast_defs(input: &TokenAst) -> Result<(TokenStream2, Vec<TokenStream2>)> {
     let derives = &input.derives;
     quote!(#(#derives)*)
   };
-  let defs = names
+  let defs: Vec<_> = names
     .clone()
     .zip(&input.arms)
-    .map(|(name, TokenAstArm { pat, prompt, .. })| {
+    .map(|(name, TokenAstArm { pat, guard, prompt, .. })| {
+      let if_guard = guard.as_ref().map(|e| quote!(if #e));
       let parse_body = match prompt {
         Some(prompt) => quote! {
           let token = tokens.next_token()?;
           match token.kind {
             #[allow(unused_parens)]
-            #pat => std::result::Result::Ok(Self(token)),
+            #pat #if_guard => std::result::Result::Ok(Self(token)),
             _ => laps::return_error!(token.span, std::concat!("expected ", #prompt, ", found {}"), token),
           }
         },
-        None => quote!(tokens.expect(#pat).map(Self))
+        None => match if_guard {
+          Some(e) => return_error!(e.span(), "if-guard must be used with `prompt`"),
+          None => quote!(tokens.expect(#pat).map(Self)),
+        },
       };
-      quote! {
+      Ok(quote! {
         #derive
         pub struct #name(#field_vis #token);
         impl #name {
@@ -215,8 +232,9 @@ fn gen_ast_defs(input: &TokenAst) -> Result<(TokenStream2, Vec<TokenStream2>)> {
             self.0.span()
           }
         }
-      }
-    });
+      })
+    })
+    .collect::<Result<_>>()?;
   let vis = &input.vis;
   let mod_name = ident(&format!("__token_ast_{}", input.name));
   let ast_defs = quote! {
