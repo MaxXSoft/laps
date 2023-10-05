@@ -7,6 +7,7 @@ All notable changes to the `laps` will be documented in this file.
 ### Added
 
 * `laps::lexer::signed_int_literal` for parsing integer literal with an optional sign.
+* If-guard support in `kind` pattern of `token_ast` macro.
 
 ## 0.1.2 - 2023-07-13
 
