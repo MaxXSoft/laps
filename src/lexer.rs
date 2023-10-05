@@ -417,15 +417,15 @@ mod test {
   fn parse_char() {
     assert_eq!(char_literal("'a'"), Some('a'));
     assert_eq!(char_literal("'🤔'"), Some('🤔'));
-    assert_eq!(char_literal(r#"'\t'"#), Some('\t'));
-    assert_eq!(char_literal(r#"'\n'"#), Some('\n'));
-    assert_eq!(char_literal(r#"'\r'"#), Some('\r'));
-    assert_eq!(char_literal(r#"'\\'"#), Some('\\'));
-    assert_eq!(char_literal(r#"'\''"#), Some('\''));
+    assert_eq!(char_literal(r"'\t'"), Some('\t'));
+    assert_eq!(char_literal(r"'\n'"), Some('\n'));
+    assert_eq!(char_literal(r"'\r'"), Some('\r'));
+    assert_eq!(char_literal(r"'\\'"), Some('\\'));
+    assert_eq!(char_literal(r"'\''"), Some('\''));
     assert_eq!(char_literal(r#"'\"'"#), Some('\"'));
-    assert_eq!(char_literal(r#"'\x4a'"#), Some('\x4a'));
-    assert_eq!(char_literal(r#"'\u{1234}'"#), Some('\u{1234}'));
-    assert_eq!(char_literal(r#"'\u{10ffff}'"#), Some('\u{10ffff}'));
+    assert_eq!(char_literal(r"'\x4a'"), Some('\x4a'));
+    assert_eq!(char_literal(r"'\u{1234}'"), Some('\u{1234}'));
+    assert_eq!(char_literal(r"'\u{10ffff}'"), Some('\u{10ffff}'));
     assert_eq!(char_literal(r#"'"'"#), Some('"'));
     assert_eq!(char_literal("?"), None);
     assert_eq!(char_literal("'"), None);
@@ -447,15 +447,15 @@ mod test {
       ),
       None,
     );
-    assert_eq!(char_literal(r#"'\'"#), None);
-    assert_eq!(char_literal(r#"'\?'"#), None);
-    assert_eq!(char_literal(r#"'\x'"#), None);
-    assert_eq!(char_literal(r#"'\x4'"#), None);
-    assert_eq!(char_literal(r#"'\u'"#), None);
-    assert_eq!(char_literal(r#"'\u{'"#), None);
-    assert_eq!(char_literal(r#"'\u{111111111'"#), None);
-    assert_eq!(char_literal(r#"'\u{111111111}'"#), None);
-    assert_eq!(str_literal(r#"'\u{d800}'"#), None);
-    assert_eq!(str_literal(r#"'\u{dfff}'"#), None);
+    assert_eq!(char_literal(r"'\'"), None);
+    assert_eq!(char_literal(r"'\?'"), None);
+    assert_eq!(char_literal(r"'\x'"), None);
+    assert_eq!(char_literal(r"'\x4'"), None);
+    assert_eq!(char_literal(r"'\u'"), None);
+    assert_eq!(char_literal(r"'\u{'"), None);
+    assert_eq!(char_literal(r"'\u{111111111'"), None);
+    assert_eq!(char_literal(r"'\u{111111111}'"), None);
+    assert_eq!(str_literal(r"'\u{d800}'"), None);
+    assert_eq!(str_literal(r"'\u{dfff}'"), None);
   }
 }
