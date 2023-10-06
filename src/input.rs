@@ -30,6 +30,17 @@ pub trait InputStream {
   /// Returns a reference to the current span in the lexer.
   fn span(&self) -> &Span;
 
+  /// Sets the line and column of the current span.
+  ///
+  /// This could be useful if something like the C preprocessor
+  /// is to be supported:
+  ///
+  /// ```text
+  /// # 37 "<stdin>"
+  /// ...
+  /// ```
+  fn set_line_col(&mut self, line: u32, col: u32);
+
   /// Reads the next character from the input stream.
   ///
   /// Returns the character if successful,
