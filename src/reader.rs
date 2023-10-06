@@ -42,8 +42,8 @@ pub struct Reader<T, const BUFFER_SIZE: usize = BYTE_BUFFER_SIZE> {
 }
 
 impl<T, const BUFFER_SIZE: usize> Reader<T, BUFFER_SIZE> {
-  /// Creates a new reader.
-  fn new(reader: T, file_type: FileType) -> Self {
+  /// Creates a new reader with the given inner reader and file type.
+  pub fn new(reader: T, file_type: FileType) -> Self {
     Self {
       reader,
       span: Span::new(file_type),
@@ -112,8 +112,8 @@ pub struct ByteReader<T, const BUFFER_SIZE: usize = BYTE_BUFFER_SIZE> {
 }
 
 impl<T, const BUFFER_SIZE: usize> ByteReader<T, BUFFER_SIZE> {
-  /// Creates a new reader.
-  fn new(reader: T, file_type: FileType) -> Self {
+  /// Creates a new reader with the given inner reader and file type.
+  pub fn new(reader: T, file_type: FileType) -> Self {
     Self {
       reader,
       span: Span::new(file_type),
