@@ -229,6 +229,10 @@ macro_rules! impl_reader {
         &self.span
       }
 
+      fn set_line_col(&mut self, line: u32, col: u32) {
+        self.span.update_loc(Location { line, col });
+      }
+
       fn peek(&mut self) -> Result<Option<$char>> {
         if let Some(c) = self.char_buf.last() {
           Ok(Some(*c))
