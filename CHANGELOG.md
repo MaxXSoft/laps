@@ -8,6 +8,16 @@ All notable changes to the `laps` will be documented in this file.
 
 * `laps::lexer::signed_int_literal` for parsing integer literal with an optional sign.
 * If-guard support in `kind` pattern of `token_ast` macro.
+* Method `new` for `Reader` and `ByteReader`.
+* Method `set_line_col` for trait `InputStream`, for supporting C preprocessor.
+
+### Changed
+
+* Some document comments.
+
+### Fixed
+
+* Issues about printing line information in `Span`.
 
 ## 0.1.2 - 2023-07-13
 
