@@ -10,6 +10,7 @@ All notable changes to the `laps` will be documented in this file.
 * If-guard support in `kind` pattern of `token_ast` macro.
 * Method `new` for `Reader` and `ByteReader`.
 * Method `set_line_col` for trait `InputStream`, for supporting C preprocessor.
+* Method `input` and `input_mut` for `Lexer`.
 
 ### Changed
 
