@@ -115,7 +115,7 @@ macro_rules! get_line_str {
         '\t' => Span::TAB_WIDTH,
         _ => c.width().unwrap_or(0),
       })
-      .fold(0, |x, y| x + y);
+      .sum();
     (
       line.replace('\t', &format!("{:w$}", "", w = Span::TAB_WIDTH)),
       count,
@@ -131,11 +131,17 @@ macro_rules! get_line_str {
     });
     let mut count1 = 0;
     for _ in 0..col1 {
-      count1 += iter.next().unwrap();
+      count1 += match iter.next() {
+        Some(n) => n,
+        None => break,
+      };
     }
     let mut count2 = count1;
     for _ in col1..col2 {
-      count2 += iter.next().unwrap();
+      count2 += match iter.next() {
+        Some(n) => n,
+        None => break,
+      };
     }
     (
       line.replace('\t', &format!("{:w$}", "", w = Span::TAB_WIDTH)),
@@ -467,6 +473,7 @@ impl Span {
     let mut buf = String::new();
     // get some parameters
     let width = ((self.end.line + 1) as f32).log10().ceil() as usize;
+    let width = std::cmp::max(width, 2);
     // write the first line to buffer
     let line_num = self.start.line as usize;
     let mut lines = lines.skip(line_num - 1);
@@ -490,7 +497,7 @@ impl Span {
         write!(buf, "{} ", format!("{:width$}", line_num + i + 1).blue())?;
         writeln!(buf, "{} {} {line}", "|".blue(), "|".color(color))?;
       }
-      write!(buf, "{:.>width$} {} {}", "", "|".blue(), "|".color(color))?;
+      writeln!(buf, "{:.>width$} {} {}", "", "|".blue(), "|".color(color))?;
       let line = get_line_str!(lines.nth(mid_lines - 3));
       write!(buf, "{} ", format!("{:width$}", self.end.line - 1).blue())?;
       writeln!(buf, "{} {} {line}", "|".blue(), "|".color(color))?;
@@ -500,7 +507,12 @@ impl Span {
     let (line, end) = get_line_str!(lines.next(), self.end.col);
     write!(buf, "{} ", format!("{:width$}", line_num).blue())?;
     writeln!(buf, "{} {} {line}", "|".blue(), "|".color(color))?;
-    write!(buf, "{:width$} {} {}", "", "|".blue(), "|".color(color))?;
+    write!(buf, "{:width$} {} ", "", "|".blue())?;
+    if end == 0 {
+      write!(buf, " ")?;
+    } else {
+      write!(buf, "{}", "|".color(color))?;
+    }
     writeln!(buf, "{}", format!("{:_>end$}^", "").color(color))?;
     // print buffer to stderr
     eprint!("{buf}");
