@@ -7,8 +7,7 @@
 //! [`ByteReader`](crate::reader::ByteReader).
 //!
 //! The [`InputStream`] trait provides many useful utility methods for
-//! reading characters, integers, floating-point numbers, identifiers,
-//! strings, etc. from the input stream.
+//! reading characters and the corresponding [`Span`]s from the input stream.
 
 use crate::span::{Location, Result, Span};
 
