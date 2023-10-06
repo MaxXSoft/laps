@@ -51,6 +51,16 @@ impl<I, K> Lexer<I, K> {
   pub fn into_input(self) -> I {
     self.input
   }
+
+  /// Returns a reference to the inner input stream.
+  pub fn input(&self) -> &I {
+    &self.input
+  }
+
+  /// Returns a mutable reference to the inner input stream.
+  pub fn input_mut(&mut self) -> &I {
+    &mut self.input
+  }
 }
 
 impl<I, K, C> Tokenizer for Lexer<I, K>
