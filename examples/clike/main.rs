@@ -739,7 +739,7 @@ impl Eval for If {
   fn eval(&self, scopes: &mut Scopes, funcs: &Funcs) -> EvalResult {
     Ok(match self.cond.eval(scopes, funcs)? {
       EvalValue::Value(Value::Int(v)) if v != 0 => self.then.eval(scopes, funcs)?,
-      EvalValue::Value(Value::Int(v)) if v == 0 => {
+      EvalValue::Value(Value::Int(0)) => {
         if let Some(Else { body, .. }) = &self.else_then {
           body.eval(scopes, funcs)?;
         }
@@ -756,7 +756,7 @@ impl Eval for While {
       // check condition
       match self.cond.eval(scopes, funcs)? {
         EvalValue::Value(Value::Int(v)) if v != 0 => {}
-        EvalValue::Value(Value::Int(v)) if v == 0 => break EvalValue::Unit,
+        EvalValue::Value(Value::Int(0)) => break EvalValue::Unit,
         _ => eval_err!(self.cond.span()),
       }
       // evaluate body
@@ -786,7 +786,7 @@ impl Eval for Exp {
       Self::One(e) => e.eval(scopes, funcs),
       Self::More(l, _, r) => match l.eval(scopes, funcs)? {
         EvalValue::Value(Value::Int(l)) if l != 0 => Ok(EvalValue::Value(Value::Int(1))),
-        EvalValue::Value(Value::Int(l)) if l == 0 => r.eval(scopes, funcs),
+        EvalValue::Value(Value::Int(0)) => r.eval(scopes, funcs),
         _ => eval_err!(l.span()),
       },
     }
@@ -799,7 +799,7 @@ impl Eval for AndExp {
       Self::One(e) => e.eval(scopes, funcs),
       Self::More(l, _, r) => match l.eval(scopes, funcs)? {
         EvalValue::Value(Value::Int(l)) if l != 0 => r.eval(scopes, funcs),
-        EvalValue::Value(Value::Int(l)) if l == 0 => Ok(EvalValue::Value(Value::Int(0))),
+        EvalValue::Value(Value::Int(0)) => Ok(EvalValue::Value(Value::Int(0))),
         _ => eval_err!(l.span()),
       },
     }
