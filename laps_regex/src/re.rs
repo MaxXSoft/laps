@@ -295,9 +295,9 @@ mod test {
       .build_bytes()
       .unwrap();
     assert_eq!(matcher.is_str_match("hello"), Some(&0));
-    assert_eq!(matcher.is_match("hello".as_bytes()), Some(&0));
-    assert_eq!(matcher.is_match("hi".as_bytes()), Some(&0));
-    assert_eq!(matcher.is_match("goodbye".as_bytes()), Some(&1));
+    assert_eq!(matcher.is_match(b"hello"), Some(&0));
+    assert_eq!(matcher.is_match(b"hi"), Some(&0));
+    assert_eq!(matcher.is_match(b"goodbye"), Some(&1));
     assert_eq!(matcher.is_match(&[0x62, 0x79, 0x65]), Some(&1));
   }
 

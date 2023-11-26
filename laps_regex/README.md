@@ -40,7 +40,7 @@ let matcher: BytesMatcher<_> = RegexBuilder::new()
   .build_bytes()
   .unwrap();
 
-assert_eq!(matcher.is_match("hello".as_bytes()), Some(&0));
+assert_eq!(matcher.is_match(b"hello"), Some(&0));
 assert_eq!(matcher.is_match(&[0x62, 0x79, 0x65]), Some(&1));
 ```
 
