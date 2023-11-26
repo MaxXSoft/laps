@@ -52,7 +52,7 @@ impl<S, T> DFA<S, T> {
     }
     // create DFA, update the initial state
     let mut fa = FiniteAutomaton::new();
-    let init = nfa.epsilon_closure(nfa.init_id());
+    let init = nfa.epsilon_closure([nfa.init_id()]);
     if let Some(tag) = first_tag!(init) {
       fa.set_final_state(fa.init_id());
       tags.insert(fa.init_id(), tag);

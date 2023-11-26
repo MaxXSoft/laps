@@ -225,9 +225,12 @@ impl<S> FiniteAutomaton<Option<S>> {
   }
 
   /// Returns the epsilon closure of the given state.
-  pub fn epsilon_closure(&self, id: usize) -> BTreeSet<usize> {
-    let mut closure = BTreeSet::from([id]);
-    let mut ids = vec![id];
+  pub fn epsilon_closure<I>(&self, ids: I) -> BTreeSet<usize>
+  where
+    I: IntoIterator<Item = usize>,
+  {
+    let mut closure: BTreeSet<_> = ids.into_iter().collect();
+    let mut ids: Vec<_> = closure.iter().copied().collect();
     while let Some(id) = ids.pop() {
       for (s, id) in self.states[&id].outs() {
         if s.is_none() && closure.insert(*id) {
@@ -253,10 +256,7 @@ impl<S> FiniteAutomaton<Option<S>> {
           .filter_map(|(e, id)| (e.as_ref() == Some(s)).then_some(*id))
       })
       .collect();
-    next_states
-      .into_iter()
-      .flat_map(|id| self.epsilon_closure(id))
-      .collect()
+    self.epsilon_closure(next_states)
   }
 }
 
