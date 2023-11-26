@@ -15,6 +15,7 @@ All notable changes to the `laps` will be documented in this file.
 ### Changed
 
 * Some document comments.
+* Improve performance of compiling regular expressions.
 
 ### Fixed
 
