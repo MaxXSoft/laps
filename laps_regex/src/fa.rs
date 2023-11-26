@@ -28,6 +28,15 @@ fn get_and_update_state_id() -> usize {
   cur
 }
 
+/// Trait for state of finite automaton.
+pub trait State<S>: Default {
+  /// Dumps the current state to the given writer as Graphviz.
+  fn dump<W>(&self, writer: &mut W, id: usize) -> io::Result<()>
+  where
+    S: fmt::Debug,
+    W: io::Write;
+}
+
 /// A state of the finite automaton with symbol type `S`.
 ///
 /// This state uses [`Vec`] to store edges internally.
@@ -64,6 +73,25 @@ impl<S> DenseState<S> {
   /// Adds a new edge to the current state.
   pub fn add(&mut self, sym: S, state: usize) {
     self.outs.push((sym, state));
+  }
+}
+
+impl<S> Default for DenseState<S> {
+  fn default() -> Self {
+    Self::new()
+  }
+}
+
+impl<S> State<S> for DenseState<S> {
+  fn dump<W>(&self, writer: &mut W, id: usize) -> io::Result<()>
+  where
+    S: fmt::Debug,
+    W: io::Write,
+  {
+    for (s, to) in self.outs() {
+      writeln!(writer, "  {id} -> {to} [label = \"{s:?}\"]")?;
+    }
+    Ok(())
   }
 }
 
