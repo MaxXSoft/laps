@@ -2,7 +2,7 @@
 //!
 //! An NFA can be built from a mid-level intermediate represention ([`Mir`]).
 
-use crate::fa::FiniteAutomaton;
+use crate::fa::{FiniteAutomaton, State};
 use crate::mir::Mir;
 use std::collections::HashMap;
 use std::{fmt, io};

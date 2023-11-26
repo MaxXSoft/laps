@@ -29,7 +29,13 @@ fn get_and_update_state_id() -> usize {
 }
 
 /// Trait for state of finite automaton.
-pub trait State<S>: Default {
+pub trait State<S> {
+  /// Creates a new empty state.
+  fn new() -> Self;
+
+  /// Adds a new edge to the current state.
+  fn add(&mut self, sym: S, state: usize);
+
   /// Dumps the current state to the given writer as Graphviz.
   fn dump<W>(&self, writer: &mut W, id: usize) -> io::Result<()>
   where
@@ -64,25 +70,17 @@ impl<S> DenseState<S> {
       .iter()
       .find_map(|(s, id)| (s == sym).then_some(*id))
   }
+}
 
-  /// Creates a new normal state.
+impl<S> State<S> for DenseState<S> {
   fn new() -> Self {
     Self { outs: Vec::new() }
   }
 
-  /// Adds a new edge to the current state.
-  pub fn add(&mut self, sym: S, state: usize) {
+  fn add(&mut self, sym: S, state: usize) {
     self.outs.push((sym, state));
   }
-}
 
-impl<S> Default for DenseState<S> {
-  fn default() -> Self {
-    Self::new()
-  }
-}
-
-impl<S> State<S> for DenseState<S> {
   fn dump<W>(&self, writer: &mut W, id: usize) -> io::Result<()>
   where
     S: fmt::Debug,
