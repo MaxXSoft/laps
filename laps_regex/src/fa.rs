@@ -29,12 +29,14 @@ fn get_and_update_state_id() -> usize {
 }
 
 /// A state of the finite automaton with symbol type `S`.
+///
+/// This state uses [`Vec`] to store edges internally.
 #[derive(Debug)]
-pub struct State<S> {
+pub struct DenseState<S> {
   outs: Vec<(S, usize)>,
 }
 
-impl<S> State<S> {
+impl<S> DenseState<S> {
   /// Returns the output edges.
   pub fn outs(&self) -> &[(S, usize)] {
     &self.outs
@@ -68,7 +70,7 @@ impl<S> State<S> {
 /// A finite automaton with symbol type `S`.
 #[derive(Debug)]
 pub struct FiniteAutomaton<S> {
-  states: HashMap<usize, State<S>>,
+  states: HashMap<usize, DenseState<S>>,
   init: usize,
   finals: HashSet<usize>,
 }
@@ -78,7 +80,7 @@ impl<S> FiniteAutomaton<S> {
   pub fn new() -> Self {
     let init = get_and_update_state_id();
     Self {
-      states: [(init, State::new())].into(),
+      states: [(init, DenseState::new())].into(),
       init,
       finals: HashSet::new(),
     }
@@ -89,7 +91,7 @@ impl<S> FiniteAutomaton<S> {
   /// Returns the state ID.
   pub fn add_state(&mut self) -> usize {
     let id = get_and_update_state_id();
-    self.states.insert(id, State::new());
+    self.states.insert(id, DenseState::new());
     id
   }
 
@@ -137,31 +139,31 @@ impl<S> FiniteAutomaton<S> {
   }
 
   /// Returns a reference to the state map.
-  pub fn states(&self) -> &HashMap<usize, State<S>> {
+  pub fn states(&self) -> &HashMap<usize, DenseState<S>> {
     &self.states
   }
 
   /// Returns a reference to the given state.
   ///
   /// Returns [`None`] if the given state does not exist.
-  pub fn state(&self, id: usize) -> Option<&State<S>> {
+  pub fn state(&self, id: usize) -> Option<&DenseState<S>> {
     self.states.get(&id)
   }
 
   /// Returns a mutable reference to the given state.
   ///
   /// Returns [`None`] if the given state does not exist.
-  pub fn state_mut(&mut self, id: usize) -> Option<&mut State<S>> {
+  pub fn state_mut(&mut self, id: usize) -> Option<&mut DenseState<S>> {
     self.states.get_mut(&id)
   }
 
   /// Returns a reference to the initial state.
-  pub fn init(&self) -> &State<S> {
+  pub fn init(&self) -> &DenseState<S> {
     self.states.get(&self.init).unwrap()
   }
 
   /// Returns a mutable reference to the given initial state.
-  pub fn init_mut(&mut self) -> &mut State<S> {
+  pub fn init_mut(&mut self) -> &mut DenseState<S> {
     self.states.get_mut(&self.init).unwrap()
   }
 
