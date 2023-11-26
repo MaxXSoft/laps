@@ -86,8 +86,45 @@ impl<S> State<S> for DenseState<S> {
     S: fmt::Debug,
     W: io::Write,
   {
-    for (s, to) in self.outs() {
+    for (s, to) in &self.outs {
       writeln!(writer, "  {id} -> {to} [label = \"{s:?}\"]")?;
+    }
+    Ok(())
+  }
+}
+
+/// A state of the finite automaton with symbol type `S`.
+///
+/// This state uses [`HashMap<S, Vec<_>>`] to store edges
+/// and all their output states.
+#[derive(Debug)]
+pub struct MultiState<S> {
+  outs: HashMap<S, Vec<usize>>,
+}
+
+impl<S> State<S> for MultiState<S>
+where
+  S: Eq + Hash,
+{
+  fn new() -> Self {
+    Self {
+      outs: HashMap::new(),
+    }
+  }
+
+  fn add(&mut self, sym: S, state: usize) {
+    self.outs.entry(sym).or_default().push(state);
+  }
+
+  fn dump<W>(&self, writer: &mut W, id: usize) -> io::Result<()>
+  where
+    S: fmt::Debug,
+    W: io::Write,
+  {
+    for (s, to_ids) in &self.outs {
+      for to in to_ids {
+        writeln!(writer, "  {id} -> {to} [label = \"{s:?}\"]")?;
+      }
     }
     Ok(())
   }
