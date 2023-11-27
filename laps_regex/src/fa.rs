@@ -345,11 +345,11 @@ impl<S> ClosureBuilder<S> {
 
   // TODO: optimize (maybe the return value)
   /// Returns the epsilon closure of the given state.
-  pub fn epsilon_closure<I>(&mut self, ids: I) -> BTreeSet<usize>
+  pub fn epsilon_closure<Ids>(&mut self, ids: Ids) -> BTreeSet<usize>
   where
-    I: IntoIterator<Item = usize>,
+    Ids: Into<BTreeSet<usize>>,
   {
-    let ids: BTreeSet<_> = ids.into_iter().collect();
+    let ids = ids.into();
     if let Some(ec) = self.cached_epsilons.get(&ids) {
       ec.clone()
     } else {
@@ -375,7 +375,7 @@ impl<S> ClosureBuilder<S> {
   where
     S: Eq + Hash,
   {
-    let next_states: HashSet<_> = states
+    let next_states: BTreeSet<_> = states
       .iter()
       .flat_map(|id| {
         self.normal_edges.get(id).into_iter().flat_map(|st| {
