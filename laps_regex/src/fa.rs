@@ -284,19 +284,66 @@ impl<Sym, State: self::State<Sym>> FiniteAutomaton<Sym, State> {
   }
 }
 
-impl<S> FiniteAutomaton<Option<S>> {
+impl<Sym, State: self::State<Sym>> Default for FiniteAutomaton<Sym, State> {
+  fn default() -> Self {
+    Self::new()
+  }
+}
+
+/// Finite automaton which state type is [`DenseState`].
+pub type DenseFA<S> = FiniteAutomaton<S, DenseState<S>>;
+
+/// Finite automaton which state type is [`MultiState`].
+pub type MultiFA<S> = FiniteAutomaton<S, MultiState<S>>;
+
+/// Builder for calculating closures from a finite automation.
+pub struct ClosureBuilder<S> {
+  empty_edges: HashMap<usize, Vec<usize>>,
+  normal_edges: HashMap<usize, MultiState<S>>,
+}
+
+impl<S> From<MultiFA<Option<S>>> for ClosureBuilder<S>
+where
+  S: Eq + Hash,
+{
+  fn from(fa: MultiFA<Option<S>>) -> Self {
+    let mut empty_edges = HashMap::new();
+    let mut normal_edges: HashMap<_, MultiState<S>> = HashMap::new();
+    for (id, s) in fa.states {
+      for (s, to) in s.outs {
+        match s {
+          Some(s) => normal_edges
+            .entry(id)
+            .or_insert_with(|| State::new())
+            .outs
+            .insert(s, to),
+          None => empty_edges.insert(id, to),
+        };
+      }
+    }
+    Self {
+      empty_edges,
+      normal_edges,
+    }
+  }
+}
+
+impl<S> ClosureBuilder<S> {
   /// Returns the symbol set of the current finite automaton.
   pub fn symbol_set(&self) -> HashSet<S>
   where
-    S: Clone + Hash + Eq,
+    S: Clone + Eq + Hash,
   {
     self
-      .states()
+      .normal_edges
       .values()
-      .flat_map(|s| s.outs().iter().filter_map(|(s, _)| s.clone()))
+      .flat_map(|s| s.outs().keys().cloned())
       .collect()
   }
 
+  // TODO: optimize (query on edge map)
+  // TODO: optimize (maybe the return value)
+  // TODO: optimize (memorize)
   /// Returns the epsilon closure of the given state.
   pub fn epsilon_closure<I>(&self, ids: I) -> BTreeSet<usize>
   where
@@ -305,9 +352,11 @@ impl<S> FiniteAutomaton<Option<S>> {
     let mut closure: BTreeSet<_> = ids.into_iter().collect();
     let mut ids: Vec<_> = closure.iter().copied().collect();
     while let Some(id) = ids.pop() {
-      for (s, id) in self.states[&id].outs() {
-        if s.is_none() && closure.insert(*id) {
-          ids.push(*id);
+      if let Some(to_ids) = self.empty_edges.get(&id) {
+        for id in to_ids {
+          if closure.insert(*id) {
+            ids.push(*id);
+          }
         }
       }
     }
@@ -318,23 +367,20 @@ impl<S> FiniteAutomaton<Option<S>> {
   /// after accepting symbol `s` on the given states.
   pub fn state_closure(&self, states: &BTreeSet<usize>, s: &S) -> BTreeSet<usize>
   where
-    S: PartialEq,
+    S: Eq + Hash,
   {
+    // TODO: optimize (query on edge map)
     let next_states: HashSet<_> = states
       .iter()
       .flat_map(|id| {
-        self.states[id]
-          .outs()
-          .iter()
-          .filter_map(|(e, id)| (e.as_ref() == Some(s)).then_some(*id))
+        self.normal_edges.get(id).into_iter().flat_map(|st| {
+          st.outs()
+            .get(s)
+            .into_iter()
+            .flat_map(|ids| ids.iter().copied())
+        })
       })
       .collect();
     self.epsilon_closure(next_states)
-  }
-}
-
-impl<S> Default for FiniteAutomaton<S> {
-  fn default() -> Self {
-    Self::new()
   }
 }
