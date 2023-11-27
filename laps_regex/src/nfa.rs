@@ -2,20 +2,27 @@
 //!
 //! An NFA can be built from a mid-level intermediate represention ([`Mir`]).
 
-use crate::fa::{FiniteAutomaton, State};
+use crate::fa::{MultiFA, State};
 use crate::mir::Mir;
 use std::collections::HashMap;
+use std::hash::Hash;
 use std::{fmt, io};
 
 /// A nondeterministic finite automaton (NFA)
 /// with symbol type `S` and tag type `T`.
 #[derive(Debug)]
-pub struct NFA<S, T> {
-  fa: FiniteAutomaton<Option<(S, S)>>,
+pub struct NFA<S, T>
+where
+  S: Eq + Hash,
+{
+  fa: MultiFA<Option<(S, S)>>,
   tags: HashMap<usize, T>,
 }
 
-impl<S, T> NFA<S, T> {
+impl<S, T> NFA<S, T>
+where
+  S: Eq + Hash,
+{
   /// Creates a new NFA from [`Mir`].
   pub fn new(mir: Mir<S, T>) -> Self {
     match mir {
@@ -56,7 +63,7 @@ impl<S, T> NFA<S, T> {
 
   /// Creates a new NFA which matches the given symbol.
   fn new_nfa_with_symbol(sym: Option<(S, S)>) -> Self {
-    let mut fa = FiniteAutomaton::new();
+    let mut fa = MultiFA::new();
     let fs = fa.add_final_state();
     fa.init_mut().add(sym, fs);
     Self {
@@ -147,7 +154,10 @@ impl<S, T> NFA<S, T> {
   }
 }
 
-impl<S, T> From<Mir<S, T>> for NFA<S, T> {
+impl<S, T> From<Mir<S, T>> for NFA<S, T>
+where
+  S: Eq + Hash,
+{
   fn from(mir: Mir<S, T>) -> Self {
     Self::new(mir)
   }
@@ -156,4 +166,4 @@ impl<S, T> From<Mir<S, T>> for NFA<S, T> {
 /// A pair of [`NFA`]'s internal finite automaton and the tag map.
 ///
 /// Used by method [`into_fa_tags`](NFA#method.into_fa_tags) of [`NFA`].
-pub type FATags<S, T> = (FiniteAutomaton<Option<(S, S)>>, HashMap<usize, T>);
+pub type FATags<S, T> = (MultiFA<Option<(S, S)>>, HashMap<usize, T>);

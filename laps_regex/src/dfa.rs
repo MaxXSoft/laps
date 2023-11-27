@@ -2,7 +2,7 @@
 //!
 //! A DFA can be built from a nondeterministic finite automaton ([`NFA`]).
 
-use crate::fa::{FiniteAutomaton, State};
+use crate::fa::{ClosureBuilder, DenseFA, State};
 use crate::nfa::NFA;
 use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 use std::hash::Hash;
@@ -12,7 +12,7 @@ use std::{fmt, io};
 /// with symbol type `S` and tag type `T`.
 #[derive(Debug)]
 pub struct DFA<S, T> {
-  fa: FiniteAutomaton<(S, S)>,
+  fa: DenseFA<(S, S)>,
   tags: HashMap<usize, T>,
 }
 
@@ -38,7 +38,9 @@ impl<S, T> DFA<S, T> {
     T: Clone + Ord,
   {
     let (nfa, nfa_tags) = nfa.into_fa_tags();
-    let syms = nfa.symbol_set();
+    let init_id = nfa.init_id();
+    let cb = ClosureBuilder::from(nfa);
+    let syms = cb.symbol_set();
     // stuffs for maintaining tags mappings between NFA and DFA
     let mut nfa_tags: Vec<_> = nfa_tags.into_iter().map(|(id, tag)| (tag, id)).collect();
     nfa_tags.sort_unstable();
@@ -51,8 +53,8 @@ impl<S, T> DFA<S, T> {
       };
     }
     // create DFA, update the initial state
-    let mut fa = FiniteAutomaton::new();
-    let init = nfa.epsilon_closure([nfa.init_id()]);
+    let mut fa = DenseFA::new();
+    let init = cb.epsilon_closure([init_id]);
     if let Some(tag) = first_tag!(init) {
       fa.set_final_state(fa.init_id());
       tags.insert(fa.init_id(), tag);
@@ -63,7 +65,7 @@ impl<S, T> DFA<S, T> {
     while let Some(cur) = states.pop() {
       for s in &syms {
         // get the next state of the current state
-        let next = nfa.state_closure(&cur, s);
+        let next = cb.state_closure(&cur, s);
         if next.is_empty() {
           continue;
         }
@@ -175,7 +177,7 @@ impl<S, T> DFA<S, T> {
       fa: dfa,
       tags: dfa_tags,
     } = dfa;
-    let mut fa = FiniteAutomaton::new();
+    let mut fa = DenseFA::new();
     // rebuild mapping of states
     let mut tags = HashMap::new();
     let partition: Vec<_> = partition
@@ -249,4 +251,4 @@ where
 /// A pair of [`DFA`]'s internal finite automaton and the tag map.
 ///
 /// Used by method [`into_fa_tags`](DFA#method.into_fa_tags) of [`DFA`].
-pub type FATags<S, T> = (FiniteAutomaton<(S, S)>, HashMap<usize, T>);
+pub type FATags<S, T> = (DenseFA<(S, S)>, HashMap<usize, T>);
