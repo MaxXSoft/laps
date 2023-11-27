@@ -6,6 +6,7 @@
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::hash::Hash;
+use std::marker::PhantomData;
 use std::sync::{Mutex, MutexGuard, OnceLock};
 use std::{fmt, io};
 
@@ -102,6 +103,13 @@ pub struct MultiState<S> {
   outs: HashMap<S, Vec<usize>>,
 }
 
+impl<S> MultiState<S> {
+  /// Returns the map of output edges.
+  pub fn outs(&self) -> &HashMap<S, Vec<usize>> {
+    &self.outs
+  }
+}
+
 impl<S> State<S> for MultiState<S>
 where
   S: Eq + Hash,
@@ -132,20 +140,22 @@ where
 
 /// A finite automaton with symbol type `S`.
 #[derive(Debug)]
-pub struct FiniteAutomaton<S> {
-  states: HashMap<usize, DenseState<S>>,
+pub struct FiniteAutomaton<Sym, State: self::State<Sym>> {
+  states: HashMap<usize, State>,
   init: usize,
   finals: HashSet<usize>,
+  sym: PhantomData<Sym>,
 }
 
-impl<S> FiniteAutomaton<S> {
+impl<Sym, State: self::State<Sym>> FiniteAutomaton<Sym, State> {
   /// Creates an empty finite automaton.
   pub fn new() -> Self {
     let init = get_and_update_state_id();
     Self {
-      states: [(init, DenseState::new())].into(),
+      states: [(init, State::new())].into(),
       init,
       finals: HashSet::new(),
+      sym: PhantomData,
     }
   }
 
@@ -154,7 +164,7 @@ impl<S> FiniteAutomaton<S> {
   /// Returns the state ID.
   pub fn add_state(&mut self) -> usize {
     let id = get_and_update_state_id();
-    self.states.insert(id, DenseState::new());
+    self.states.insert(id, State::new());
     id
   }
 
@@ -202,31 +212,31 @@ impl<S> FiniteAutomaton<S> {
   }
 
   /// Returns a reference to the state map.
-  pub fn states(&self) -> &HashMap<usize, DenseState<S>> {
+  pub fn states(&self) -> &HashMap<usize, State> {
     &self.states
   }
 
   /// Returns a reference to the given state.
   ///
   /// Returns [`None`] if the given state does not exist.
-  pub fn state(&self, id: usize) -> Option<&DenseState<S>> {
+  pub fn state(&self, id: usize) -> Option<&State> {
     self.states.get(&id)
   }
 
   /// Returns a mutable reference to the given state.
   ///
   /// Returns [`None`] if the given state does not exist.
-  pub fn state_mut(&mut self, id: usize) -> Option<&mut DenseState<S>> {
+  pub fn state_mut(&mut self, id: usize) -> Option<&mut State> {
     self.states.get_mut(&id)
   }
 
   /// Returns a reference to the initial state.
-  pub fn init(&self) -> &DenseState<S> {
+  pub fn init(&self) -> &State {
     self.states.get(&self.init).unwrap()
   }
 
   /// Returns a mutable reference to the given initial state.
-  pub fn init_mut(&mut self) -> &mut DenseState<S> {
+  pub fn init_mut(&mut self) -> &mut State {
     self.states.get_mut(&self.init).unwrap()
   }
 
@@ -254,7 +264,7 @@ impl<S> FiniteAutomaton<S> {
   /// Dumps the current finite automaton to the given writer as Graphviz.
   pub fn dump<W>(&self, writer: &mut W) -> io::Result<()>
   where
-    S: fmt::Debug,
+    Sym: fmt::Debug,
     W: io::Write,
   {
     writeln!(writer, "digraph finite_automaton {{")?;
@@ -267,9 +277,7 @@ impl<S> FiniteAutomaton<S> {
     writeln!(writer, ";")?;
     writeln!(writer, "  node [shape = circle];")?;
     for (id, state) in &self.states {
-      for (s, to) in state.outs() {
-        writeln!(writer, "  {id} -> {to} [label = \"{s:?}\"]")?;
-      }
+      state.dump(writer, *id)?;
     }
     writeln!(writer, "}}")?;
     Ok(())
