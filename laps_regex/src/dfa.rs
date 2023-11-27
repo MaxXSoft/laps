@@ -39,7 +39,7 @@ impl<S, T> DFA<S, T> {
   {
     let (nfa, nfa_tags) = nfa.into_fa_tags();
     let init_id = nfa.init_id();
-    let cb = ClosureBuilder::from(nfa);
+    let mut cb = ClosureBuilder::from(nfa);
     let syms = cb.symbol_set();
     // stuffs for maintaining tags mappings between NFA and DFA
     let mut nfa_tags: Vec<_> = nfa_tags.into_iter().map(|(id, tag)| (tag, id)).collect();

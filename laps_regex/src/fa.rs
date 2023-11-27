@@ -300,6 +300,7 @@ pub type MultiFA<S> = FiniteAutomaton<S, MultiState<S>>;
 pub struct ClosureBuilder<S> {
   empty_edges: HashMap<usize, HashSet<usize>>,
   normal_edges: HashMap<usize, MultiState<S>>,
+  cached_epsilons: HashMap<BTreeSet<usize>, BTreeSet<usize>>,
 }
 
 impl<S> From<MultiFA<Option<S>>> for ClosureBuilder<S>
@@ -324,6 +325,7 @@ where
     Self {
       empty_edges,
       normal_edges,
+      cached_epsilons: HashMap::new(),
     }
   }
 }
@@ -342,29 +344,34 @@ impl<S> ClosureBuilder<S> {
   }
 
   // TODO: optimize (maybe the return value)
-  // TODO: optimize (memorize)
   /// Returns the epsilon closure of the given state.
-  pub fn epsilon_closure<I>(&self, ids: I) -> BTreeSet<usize>
+  pub fn epsilon_closure<I>(&mut self, ids: I) -> BTreeSet<usize>
   where
     I: IntoIterator<Item = usize>,
   {
-    let mut closure: BTreeSet<_> = ids.into_iter().collect();
-    let mut ids: Vec<_> = closure.iter().copied().collect();
-    while let Some(id) = ids.pop() {
-      if let Some(to_ids) = self.empty_edges.get(&id) {
-        for id in to_ids {
-          if closure.insert(*id) {
-            ids.push(*id);
+    let ids: BTreeSet<_> = ids.into_iter().collect();
+    if let Some(ec) = self.cached_epsilons.get(&ids) {
+      ec.clone()
+    } else {
+      let mut closure = ids.clone();
+      let mut next_ids: Vec<_> = ids.iter().copied().collect();
+      while let Some(id) = next_ids.pop() {
+        if let Some(to_ids) = self.empty_edges.get(&id) {
+          for id in to_ids {
+            if closure.insert(*id) {
+              next_ids.push(*id);
+            }
           }
         }
       }
+      self.cached_epsilons.insert(ids, closure.clone());
+      closure
     }
-    closure
   }
 
   /// Returns a set of all possible states that can be reached
   /// after accepting symbol `s` on the given states.
-  pub fn state_closure(&self, states: &BTreeSet<usize>, s: &S) -> BTreeSet<usize>
+  pub fn state_closure(&mut self, states: &BTreeSet<usize>, s: &S) -> BTreeSet<usize>
   where
     S: Eq + Hash,
   {
