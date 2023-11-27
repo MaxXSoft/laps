@@ -96,16 +96,16 @@ impl<S> State<S> for DenseState<S> {
 
 /// A state of the finite automaton with symbol type `S`.
 ///
-/// This state uses [`HashMap<S, Vec<_>>`] to store edges
+/// This state uses [`HashMap<S, HashSet<_>>`] to store edges
 /// and all their output states.
 #[derive(Debug)]
 pub struct MultiState<S> {
-  outs: HashMap<S, Vec<usize>>,
+  outs: HashMap<S, HashSet<usize>>,
 }
 
 impl<S> MultiState<S> {
   /// Returns the map of output edges.
-  pub fn outs(&self) -> &HashMap<S, Vec<usize>> {
+  pub fn outs(&self) -> &HashMap<S, HashSet<usize>> {
     &self.outs
   }
 }
@@ -121,7 +121,7 @@ where
   }
 
   fn add(&mut self, sym: S, state: usize) {
-    self.outs.entry(sym).or_default().push(state);
+    self.outs.entry(sym).or_default().insert(state);
   }
 
   fn dump<W>(&self, writer: &mut W, id: usize) -> io::Result<()>
@@ -298,7 +298,7 @@ pub type MultiFA<S> = FiniteAutomaton<S, MultiState<S>>;
 
 /// Builder for calculating closures from a finite automation.
 pub struct ClosureBuilder<S> {
-  empty_edges: HashMap<usize, Vec<usize>>,
+  empty_edges: HashMap<usize, HashSet<usize>>,
   normal_edges: HashMap<usize, MultiState<S>>,
 }
 
@@ -341,7 +341,6 @@ impl<S> ClosureBuilder<S> {
       .collect()
   }
 
-  // TODO: optimize (query on edge map)
   // TODO: optimize (maybe the return value)
   // TODO: optimize (memorize)
   /// Returns the epsilon closure of the given state.
@@ -369,7 +368,6 @@ impl<S> ClosureBuilder<S> {
   where
     S: Eq + Hash,
   {
-    // TODO: optimize (query on edge map)
     let next_states: HashSet<_> = states
       .iter()
       .flat_map(|id| {
