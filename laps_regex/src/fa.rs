@@ -378,12 +378,12 @@ impl<S> ClosureBuilder<S> {
     let next_states: BTreeSet<_> = states
       .iter()
       .flat_map(|id| {
-        self.normal_edges.get(id).into_iter().flat_map(|st| {
-          st.outs()
-            .get(s)
-            .into_iter()
-            .flat_map(|ids| ids.iter().copied())
-        })
+        self
+          .normal_edges
+          .get(id)
+          .and_then(|st| st.outs().get(s))
+          .into_iter()
+          .flat_map(|ids| ids.iter().copied())
       })
       .collect();
     self.epsilon_closure(next_states)
