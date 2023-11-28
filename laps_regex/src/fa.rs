@@ -375,17 +375,12 @@ impl<S> ClosureBuilder<S> {
   where
     S: Eq + Hash,
   {
-    let next_states: BTreeSet<_> = states
-      .iter()
-      .flat_map(|id| {
-        self
-          .normal_edges
-          .get(id)
-          .and_then(|st| st.outs().get(s))
-          .into_iter()
-          .flat_map(|ids| ids.iter().copied())
-      })
-      .collect();
+    let mut next_states = BTreeSet::new();
+    for id in states {
+      if let Some(ids) = self.normal_edges.get(id).and_then(|st| st.outs().get(s)) {
+        next_states.extend(ids);
+      }
+    }
     self.epsilon_closure(next_states)
   }
 }
