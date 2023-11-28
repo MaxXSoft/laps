@@ -63,6 +63,7 @@ impl<S, T> DFA<S, T> {
     let mut states = vec![init.clone()];
     let mut ids = HashMap::from([(init, fa.init_id())]);
     while let Some(cur) = states.pop() {
+      let cur_id = ids[&cur];
       for s in &syms {
         // get the next state of the current state
         let next = cb.state_closure(&cur, s);
@@ -87,7 +88,7 @@ impl<S, T> DFA<S, T> {
           id
         };
         // add an edge to the next state
-        fa.state_mut(ids[&cur]).unwrap().add(s.clone(), id);
+        fa.state_mut(cur_id).unwrap().add(s.clone(), id);
       }
     }
     (Self { fa, tags }, syms)
