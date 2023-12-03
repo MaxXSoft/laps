@@ -2,7 +2,7 @@
 //!
 //! A DFA can be built from a nondeterministic finite automaton ([`NFA`]).
 
-use crate::fa::{ClosureBuilder, DenseFA, State};
+use crate::fa::{CachedClosures, ClosureBuilder, DenseFA, State};
 use crate::nfa::NFA;
 use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 use std::hash::Hash;
@@ -54,7 +54,8 @@ impl<S, T> DFA<S, T> {
     }
     // create DFA, update the initial state
     let mut fa = DenseFA::new();
-    let init = cb.epsilon_closure([init_id]);
+    let mut init_cached = CachedClosures::new();
+    let init = cb.epsilon_closure(&mut init_cached, [init_id]);
     if let Some(tag) = first_tag!(init) {
       fa.set_final_state(fa.init_id());
       tags.insert(fa.init_id(), tag);
@@ -63,13 +64,15 @@ impl<S, T> DFA<S, T> {
     let mut states = vec![init.clone()];
     let mut ids = HashMap::from([(init, fa.init_id())]);
     let mut nexts = Vec::new();
+    let mut cached_epsilons = vec![init_cached; syms.len()];
     while let Some(cur) = states.pop() {
       let cur_id = ids[&cur];
       // get next states in parallel
       use rayon::prelude::*;
       syms
         .par_iter()
-        .map(|s| cb.state_closure(&cur, s))
+        .zip(&mut cached_epsilons)
+        .map(|(s, c)| cb.state_closure(c, &cur, s))
         .collect_into_vec(&mut nexts);
       // add to the finite automanton
       for (s, next) in syms.iter().zip(&nexts) {
