@@ -12,4 +12,5 @@ readme = "README.md"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
+rayon = "1.8.0"
 regex-syntax = "0.7.2"
