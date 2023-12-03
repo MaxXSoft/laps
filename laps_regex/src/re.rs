@@ -41,7 +41,7 @@ where
   /// Returns a [`RegexMatcher`], or an error.
   pub fn build<S>(self) -> Result<RegexMatcher<S, T>, Error<T>>
   where
-    S: Hash + Eq + Clone + Ord + SymbolOp,
+    S: Hash + Eq + Clone + Ord + SymbolOp + Sync + Send,
     Mir<S, T>: MirBuilder,
   {
     self.build_impl(parse)
@@ -52,7 +52,7 @@ where
   /// Returns a [`RegexMatcher`], or an error.
   pub fn build_bytes<S>(self) -> Result<RegexMatcher<S, T>, Error<T>>
   where
-    S: Hash + Eq + Clone + Ord + SymbolOp,
+    S: Hash + Eq + Clone + Ord + SymbolOp + Sync + Send,
     Mir<S, T>: MirBuilder,
   {
     self.build_impl(|re| ParserBuilder::new().utf8(false).build().parse(re))
@@ -62,7 +62,7 @@ where
   fn build_impl<R, S>(self, re_parse: R) -> Result<RegexMatcher<S, T>, Error<T>>
   where
     R: Fn(&str) -> Result<Hir, RegexError>,
-    S: Hash + Eq + Clone + Ord + SymbolOp,
+    S: Hash + Eq + Clone + Ord + SymbolOp + Sync + Send,
     Mir<S, T>: MirBuilder,
   {
     if self.re_tags.is_empty() {

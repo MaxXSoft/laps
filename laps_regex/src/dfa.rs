@@ -20,7 +20,7 @@ impl<S, T> DFA<S, T> {
   /// Creates a new DFA from the given [`NFA`].
   pub fn new(nfa: NFA<S, T>) -> Self
   where
-    S: Clone + Hash + Eq + Ord,
+    S: Clone + Hash + Eq + Ord + Sync + Send,
     T: Clone + Hash + Eq + Ord,
   {
     let (dfa, syms) = Self::new_from_nfa(nfa);
@@ -34,13 +34,13 @@ impl<S, T> DFA<S, T> {
   /// The created DFA is not minimal.
   fn new_from_nfa(nfa: NFA<S, T>) -> (Self, Vec<(S, S)>)
   where
-    S: Clone + Hash + Eq,
+    S: Clone + Hash + Eq + Sync + Send,
     T: Clone + Ord,
   {
     let (nfa, nfa_tags) = nfa.into_fa_tags();
     let init_id = nfa.init_id();
-    let mut cb = ClosureBuilder::from(nfa);
-    let syms = cb.symbol_set().into_iter().collect();
+    let cb = ClosureBuilder::from(nfa);
+    let syms: Vec<_> = cb.symbol_set().into_iter().collect();
     // stuffs for maintaining tags mappings between NFA and DFA
     let mut nfa_tags: Vec<_> = nfa_tags.into_iter().map(|(id, tag)| (tag, id)).collect();
     nfa_tags.sort_unstable();
@@ -62,16 +62,22 @@ impl<S, T> DFA<S, T> {
     // create other states
     let mut states = vec![init.clone()];
     let mut ids = HashMap::from([(init, fa.init_id())]);
+    let mut nexts = Vec::new();
     while let Some(cur) = states.pop() {
       let cur_id = ids[&cur];
-      for s in &syms {
-        // get the next state of the current state
-        let next = cb.state_closure(&cur, s);
+      // get next states in parallel
+      use rayon::prelude::*;
+      syms
+        .par_iter()
+        .map(|s| cb.state_closure(&cur, s))
+        .collect_into_vec(&mut nexts);
+      // add to the finite automanton
+      for (s, next) in syms.iter().zip(&nexts) {
         if next.is_empty() {
           continue;
         }
         // get the ID of the next state
-        let id = if let Some(id) = ids.get(&next) {
+        let id = if let Some(id) = ids.get(next) {
           *id
         } else {
           // add a new state
@@ -84,7 +90,7 @@ impl<S, T> DFA<S, T> {
           };
           // update states and ID map
           states.push(next.clone());
-          ids.insert(next, id);
+          ids.insert(next.clone(), id);
           id
         };
         // add an edge to the next state
@@ -241,7 +247,7 @@ impl<S, T> DFA<S, T> {
 
 impl<S, T> From<NFA<S, T>> for DFA<S, T>
 where
-  S: Clone + Hash + Eq + Ord,
+  S: Clone + Hash + Eq + Ord + Sync + Send,
   T: Clone + Hash + Eq + Ord,
 {
   fn from(nfa: NFA<S, T>) -> Self {
