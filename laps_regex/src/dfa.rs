@@ -2,11 +2,20 @@
 //!
 //! A DFA can be built from a nondeterministic finite automaton ([`NFA`]).
 
-use crate::fa::{CachedClosures, ClosureBuilder, DenseFA, State};
+use crate::fa::{CachedClosures, Closure, ClosureBuilder, DenseFA, State};
 use crate::nfa::NFA;
 use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 use std::hash::Hash;
 use std::{fmt, io};
+
+/// Helper macro for finding the first matching tag of the given states.
+macro_rules! first_tag {
+  ($nfa_tags:expr, $states:expr) => {
+    $nfa_tags
+      .iter()
+      .find_map(|(tag, id)| $states.contains(id).then(|| tag.clone()))
+  };
+}
 
 /// A deterministic finite automaton (DFA)
 /// with symbol type `S` and tag type `T`.
@@ -38,69 +47,31 @@ impl<S, T> DFA<S, T> {
     T: Clone + Ord,
   {
     let (nfa, nfa_tags) = nfa.into_fa_tags();
-    let init_id = nfa.init_id();
-    let cb = ClosureBuilder::from(nfa);
-    let syms: Vec<_> = cb.symbol_set().into_iter().collect();
     // stuffs for maintaining tags mappings between NFA and DFA
     let mut nfa_tags: Vec<_> = nfa_tags.into_iter().map(|(id, tag)| (tag, id)).collect();
     nfa_tags.sort_unstable();
-    let mut tags = HashMap::new();
-    macro_rules! first_tag {
-      ($states:expr) => {
-        nfa_tags
-          .iter()
-          .find_map(|(tag, id)| $states.contains(id).then(|| tag.clone()))
-      };
-    }
     // create DFA, update the initial state
-    let mut fa = DenseFA::new();
     let mut init_cached = CachedClosures::new();
+    let init_id = nfa.init_id();
+    let cb = ClosureBuilder::from(nfa);
     let init = cb.epsilon_closure(&mut init_cached, [init_id]);
-    if let Some(tag) = first_tag!(init) {
+    let mut fa = DenseFA::new();
+    let mut tags = HashMap::new();
+    if let Some(tag) = first_tag!(nfa_tags, init) {
       fa.set_final_state(fa.init_id());
       tags.insert(fa.init_id(), tag);
     }
     // create other states
-    let mut states = vec![init.clone()];
-    let mut ids = HashMap::from([(init, fa.init_id())]);
-    let mut nexts = Vec::new();
-    let mut cached_epsilons = vec![init_cached; syms.len()];
-    while let Some(cur) = states.pop() {
-      let cur_id = ids[&cur];
-      // get next states in parallel
-      use rayon::prelude::*;
-      syms
-        .par_iter()
-        .zip(&mut cached_epsilons)
-        .map(|(s, c)| cb.state_closure(c, &cur, s))
-        .collect_into_vec(&mut nexts);
-      // add to the finite automanton
-      for (s, next) in syms.iter().zip(&nexts) {
-        if next.is_empty() {
-          continue;
-        }
-        // get the ID of the next state
-        let id = if let Some(id) = ids.get(next) {
-          *id
-        } else {
-          // add a new state
-          let id = if let Some(tag) = first_tag!(next) {
-            let id = fa.add_final_state();
-            tags.insert(id, tag);
-            id
-          } else {
-            fa.add_state()
-          };
-          // update states and ID map
-          states.push(next.clone());
-          ids.insert(next.clone(), id);
-          id
-        };
-        // add an edge to the next state
-        fa.state_mut(cur_id).unwrap().add(s.clone(), id);
-      }
-    }
-    (Self { fa, tags }, syms)
+    let syms: Vec<_> = cb.symbol_set().into_iter().collect();
+    let constructor = Constructor {
+      nfa_tags,
+      cb,
+      tags,
+      states: vec![init.clone()],
+      ids: HashMap::from([(init, fa.init_id())]),
+      fa,
+    };
+    (constructor.construct(init_cached, &syms).into_dfa(), syms)
   }
 
   /// Creates a minimal DFA by the given DFA and symbol set.
@@ -263,3 +234,108 @@ where
 ///
 /// Used by method [`into_fa_tags`](DFA#method.into_fa_tags) of [`DFA`].
 pub type FATags<S, T> = (DenseFA<(S, S)>, HashMap<usize, T>);
+
+/// A [`NFA`] to [`DFA`] constructor.
+struct Constructor<S, T> {
+  nfa_tags: Vec<(T, usize)>,
+  cb: ClosureBuilder<(S, S)>,
+  fa: DenseFA<(S, S)>,
+  tags: HashMap<usize, T>,
+  states: Vec<Closure>,
+  ids: HashMap<Closure, usize>,
+}
+
+impl<S, T> Constructor<S, T>
+where
+  S: Clone + Hash + Eq + Sync + Send,
+  T: Clone,
+{
+  /// Consumes the current constructor, constructs a [`DFA`] using
+  /// the powerset construction algorithm.
+  fn construct(self, cached: CachedClosures, syms: &[(S, S)]) -> Self {
+    let parallelism = std::thread::available_parallelism()
+      .map(Into::into)
+      .unwrap_or(1);
+    if parallelism > 1 && syms.len() > parallelism * 8 {
+      self.construct_par(cached, syms)
+    } else {
+      self.construct_normal(cached, syms)
+    }
+  }
+
+  /// Consumes the current constructor, constructs a [`DFA`] using
+  /// the powerset construction algorithm.
+  ///
+  /// This method runs serially.
+  fn construct_normal(mut self, mut cached: CachedClosures, syms: &[(S, S)]) -> Self {
+    while let Some(cur) = self.states.pop() {
+      let cur_id = self.ids[&cur];
+      for s in syms {
+        // get next states in parallel
+        let next = self.cb.state_closure(&mut cached, &cur, s);
+        if next.is_empty() {
+          continue;
+        }
+        self.add_to_fa(cur_id, s.clone(), next);
+      }
+    }
+    self
+  }
+
+  /// Consumes the current constructor, constructs a [`DFA`] using
+  /// the powerset construction algorithm.
+  ///
+  /// This method runs in parallel.
+  fn construct_par(mut self, cached: CachedClosures, syms: &[(S, S)]) -> Self {
+    use rayon::prelude::*;
+    let mut nexts = Vec::new();
+    let mut cached_epsilons = vec![cached; syms.len()];
+    while let Some(cur) = self.states.pop() {
+      let cur_id = self.ids[&cur];
+      // get next states in parallel
+      syms
+        .par_iter()
+        .zip(&mut cached_epsilons)
+        .map(|(s, c)| self.cb.state_closure(c, &cur, s))
+        .collect_into_vec(&mut nexts);
+      // add to the finite automanton
+      for (s, next) in syms.iter().zip(nexts.drain(..)) {
+        if next.is_empty() {
+          continue;
+        }
+        self.add_to_fa(cur_id, s.clone(), next);
+      }
+    }
+    self
+  }
+
+  fn add_to_fa(&mut self, cur_id: usize, s: (S, S), next: Closure) {
+    // get the ID of the next state
+    let id = if let Some(id) = self.ids.get(&next) {
+      *id
+    } else {
+      // add a new state
+      let id = if let Some(tag) = first_tag!(self.nfa_tags, next) {
+        let id = self.fa.add_final_state();
+        self.tags.insert(id, tag);
+        id
+      } else {
+        self.fa.add_state()
+      };
+      // update states and ID map
+      self.states.push(next.clone());
+      self.ids.insert(next, id);
+      id
+    };
+    // add an edge to the next state
+    self.fa.state_mut(cur_id).unwrap().add(s, id);
+  }
+
+  /// Converts the current constructor into a [`DFA`].
+  fn into_dfa(self) -> DFA<S, T> {
+    DFA {
+      fa: self.fa,
+      tags: self.tags,
+    }
+  }
+}
