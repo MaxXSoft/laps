@@ -139,7 +139,8 @@ where
     target
   }
 
-  /// Converts the current NFA into a [`FiniteAutomaton`] and a tag set.
+  /// Converts the current NFA into a
+  /// [`FiniteAutomaton`](crate::fa::FiniteAutomaton) and a tag set.
   pub fn into_fa_tags(self) -> FATags<S, T> {
     (self.fa, self.tags)
   }
