@@ -32,7 +32,7 @@ impl<S, T> DFA<S, T> {
   /// and its symbol set.
   ///
   /// The created DFA is not minimal.
-  fn new_from_nfa(nfa: NFA<S, T>) -> (Self, HashSet<(S, S)>)
+  fn new_from_nfa(nfa: NFA<S, T>) -> (Self, Vec<(S, S)>)
   where
     S: Clone + Hash + Eq,
     T: Clone + Ord,
@@ -40,7 +40,7 @@ impl<S, T> DFA<S, T> {
     let (nfa, nfa_tags) = nfa.into_fa_tags();
     let init_id = nfa.init_id();
     let mut cb = ClosureBuilder::from(nfa);
-    let syms = cb.symbol_set();
+    let syms = cb.symbol_set().into_iter().collect();
     // stuffs for maintaining tags mappings between NFA and DFA
     let mut nfa_tags: Vec<_> = nfa_tags.into_iter().map(|(id, tag)| (tag, id)).collect();
     nfa_tags.sort_unstable();
@@ -95,7 +95,7 @@ impl<S, T> DFA<S, T> {
   }
 
   /// Creates a minimal DFA by the given DFA and symbol set.
-  fn minimize(dfa: &Self, syms: &HashSet<(S, S)>) -> VecDeque<HashSet<usize>>
+  fn minimize(dfa: &Self, syms: &[(S, S)]) -> VecDeque<HashSet<usize>>
   where
     S: Ord + Hash,
     T: Hash + Eq,
@@ -169,7 +169,7 @@ impl<S, T> DFA<S, T> {
   }
 
   /// Rebuilds a DFA by the given partition.
-  fn rebuild(dfa: Self, syms: HashSet<(S, S)>, partition: VecDeque<HashSet<usize>>) -> Self
+  fn rebuild(dfa: Self, syms: Vec<(S, S)>, partition: VecDeque<HashSet<usize>>) -> Self
   where
     S: Clone + Eq + Hash,
     T: Clone,
