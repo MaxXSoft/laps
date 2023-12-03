@@ -341,14 +341,18 @@ impl<S> ClosureBuilder<S> {
       .collect()
   }
 
-  // TODO: optimize (maybe the return value)
   /// Returns the epsilon closure of the given state.
-  pub fn epsilon_closure<Ids>(&self, ids: Ids) -> BTreeSet<usize>
+  pub fn epsilon_closure<Ids>(&self, cached: &mut CachedClosures, ids: Ids) -> Closure
   where
-    Ids: Into<BTreeSet<usize>>,
+    Ids: Into<Closure>,
   {
     let mut closure = ids.into();
-    if !closure.is_empty() {
+    if closure.is_empty() {
+      closure
+    } else if let Some(c) = cached.get(&closure) {
+      c.clone()
+    } else {
+      let ids = closure.clone();
       let mut next_ids: Vec<_> = closure.iter().copied().collect();
       while let Some(id) = next_ids.pop() {
         if let Some(to_ids) = self.empty_edges.get(&id) {
@@ -359,22 +363,29 @@ impl<S> ClosureBuilder<S> {
           }
         }
       }
+      cached.insert(ids, closure.clone());
+      closure
     }
-    closure
   }
 
   /// Returns a set of all possible states that can be reached
   /// after accepting symbol `s` on the given states.
-  pub fn state_closure(&self, states: &BTreeSet<usize>, s: &S) -> BTreeSet<usize>
+  pub fn state_closure(&self, cached: &mut CachedClosures, states: &Closure, s: &S) -> Closure
   where
     S: Eq + Hash,
   {
-    let mut next_states = BTreeSet::new();
+    let mut next_states = Closure::new();
     for id in states {
       if let Some(ids) = self.normal_edges.get(id).and_then(|st| st.outs().get(s)) {
         next_states.extend(ids);
       }
     }
-    self.epsilon_closure(next_states)
+    self.epsilon_closure(cached, next_states)
   }
 }
+
+/// Closure of a state of finite automaton.
+pub type Closure = BTreeSet<usize>;
+
+/// Cached closures.
+pub type CachedClosures = HashMap<Closure, Closure>;
