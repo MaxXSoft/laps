@@ -31,7 +31,7 @@ fn gen_from_impls(input: &ItemEnum) -> TokenStream2 {
     // check if is unnamed, and has only one field
     match &variant.fields {
       Fields::Unnamed(f) if f.unnamed.len() == 1 => {
-        let ty = unsafe { &f.unnamed.first().unwrap_unchecked().ty };
+        let ty = &f.unnamed.first().unwrap().ty;
         impls.extend(quote! {
           impl std::convert::From<#ty> for #ident {
             fn from(v: #ty) -> Self {
