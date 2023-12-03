@@ -300,7 +300,6 @@ pub type MultiFA<S> = FiniteAutomaton<S, MultiState<S>>;
 pub struct ClosureBuilder<S> {
   empty_edges: HashMap<usize, HashSet<usize>>,
   normal_edges: HashMap<usize, MultiState<S>>,
-  cached_epsilons: HashMap<BTreeSet<usize>, BTreeSet<usize>>,
 }
 
 impl<S> From<MultiFA<Option<S>>> for ClosureBuilder<S>
@@ -325,7 +324,6 @@ where
     Self {
       empty_edges,
       normal_edges,
-      cached_epsilons: HashMap::new(),
     }
   }
 }
@@ -345,16 +343,13 @@ impl<S> ClosureBuilder<S> {
 
   // TODO: optimize (maybe the return value)
   /// Returns the epsilon closure of the given state.
-  pub fn epsilon_closure<Ids>(&mut self, ids: Ids) -> BTreeSet<usize>
+  pub fn epsilon_closure<Ids>(&self, ids: Ids) -> BTreeSet<usize>
   where
     Ids: Into<BTreeSet<usize>>,
   {
-    let ids = ids.into();
-    if let Some(ec) = self.cached_epsilons.get(&ids) {
-      ec.clone()
-    } else {
-      let mut closure = ids.clone();
-      let mut next_ids: Vec<_> = ids.iter().copied().collect();
+    let mut closure = ids.into();
+    if !closure.is_empty() {
+      let mut next_ids: Vec<_> = closure.iter().copied().collect();
       while let Some(id) = next_ids.pop() {
         if let Some(to_ids) = self.empty_edges.get(&id) {
           for id in to_ids {
@@ -364,14 +359,13 @@ impl<S> ClosureBuilder<S> {
           }
         }
       }
-      self.cached_epsilons.insert(ids, closure.clone());
-      closure
     }
+    closure
   }
 
   /// Returns a set of all possible states that can be reached
   /// after accepting symbol `s` on the given states.
-  pub fn state_closure(&mut self, states: &BTreeSet<usize>, s: &S) -> BTreeSet<usize>
+  pub fn state_closure(&self, states: &BTreeSet<usize>, s: &S) -> BTreeSet<usize>
   where
     S: Eq + Hash,
   {
