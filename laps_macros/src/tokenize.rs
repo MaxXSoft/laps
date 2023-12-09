@@ -7,9 +7,9 @@ use quote::quote;
 use syn::{
   parse::{Parse, ParseStream},
   spanned::Spanned,
-  Data, DeriveInput, Expr, Fields, Ident, LitStr, Meta, Result, Token, Type, Variant,
+  Data, DeriveInput, Expr, Fields, Ident, ImplGenerics, LitBool, LitStr, Meta, Result, Token, Type,
+  TypeGenerics, Variant, WhereClause,
 };
-use syn::{ImplGenerics, TypeGenerics, WhereClause};
 
 /// Entry function of `#[derive(Tokenize)]`.
 pub fn derive_tokenize(item: TokenStream) -> Result<TokenStream> {
@@ -55,6 +55,7 @@ pub fn derive_tokenize(item: TokenStream) -> Result<TokenStream> {
 
 struct EnumInfo {
   bytes_mode: bool,
+  enable_par: Option<bool>,
   vars: Vec<VariantInfo>,
 }
 
@@ -77,6 +78,13 @@ impl EnumInfo {
       },
       None => false,
     };
+    // get parallelization flag
+    let mut enable_par: Option<LitBool> = None;
+    match_attr! {
+      for meta in attrs if "enable_par" && enable_par.is_none() => {
+        enable_par = Some(syn::parse2(meta.tokens.clone())?);
+      }
+    }
     // get information of variants
     let vars: Vec<_> = match &input.data {
       Data::Enum(e) => e
@@ -91,11 +99,14 @@ impl EnumInfo {
       .iter()
       .filter(|v| matches!(v.attr, Some(VariantAttr::Eof)))
       .count();
-    if eof_count <= 1 {
-      Ok(Self { bytes_mode, vars })
-    } else {
+    if eof_count > 1 {
       return_error!("`#[eof]` can only appear once")
     }
+    Ok(Self {
+      bytes_mode,
+      vars,
+      enable_par: enable_par.map(|e| e.value),
+    })
   }
 }
 
@@ -547,7 +558,8 @@ where
       VariantAttr::Regex(r) => b.add(&r.regex.value(), i),
       VariantAttr::Skip(s) => b.add(&s.regex.value(), i),
       VariantAttr::Eof => b,
-    });
+    })
+    .enable_par(info.enable_par);
   // build regular expressions
   b(builder).map(StateTransTable::from).map_err(|e| {
     // try to get a precise span

@@ -38,6 +38,9 @@ pub fn derive_spanned(item: TokenStream) -> TokenStream {
 ///
 /// * `#[char_type(type)]`: optional, specifies `CharType` of `Tokenize` trait.
 ///   Defaults to [`char`], and can only be [`char`] or [`u8`].
+/// * `#[enable_par(true/false)]`: optional, set to `true` to generate lexer in
+///   parallel, `false` to disable parallelization. Defaults to automatic
+///   selection.
 /// * `#[regex(regex [, parser])]`: marks a enum variant can be matched by the
 ///   given regular expression. The `parser` parameter is optional, which is a
 ///   function that converts a <code>&[str]</code> (`char_type` = [`char`]) or
@@ -52,7 +55,7 @@ pub fn derive_spanned(item: TokenStream) -> TokenStream {
 /// # Notes
 ///
 /// The variants that appear first will be matched first.
-#[proc_macro_derive(Tokenize, attributes(char_type, regex, skip, eof))]
+#[proc_macro_derive(Tokenize, attributes(char_type, enable_par, regex, skip, eof))]
 pub fn derive_tokenize(item: TokenStream) -> TokenStream {
   result_to_tokens!(tokenize::derive_tokenize(item))
 }
