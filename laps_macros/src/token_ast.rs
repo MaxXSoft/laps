@@ -239,6 +239,7 @@ fn gen_ast_defs(input: &TokenAst) -> Result<(TokenStream2, Vec<TokenStream2>)> {
   let mod_name = ident(&format!("__token_ast_{}", input.name));
   let ast_defs = quote! {
     #[doc(hidden)]
+    #[allow(non_snake_case)]
     #vis mod #mod_name {
       use super::*;
       #(#defs)*
