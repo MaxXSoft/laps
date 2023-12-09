@@ -27,12 +27,16 @@ pub struct DFA<S, T> {
 
 impl<S, T> DFA<S, T> {
   /// Creates a new DFA from the given [`NFA`].
-  pub fn new(nfa: NFA<S, T>) -> Self
+  ///
+  /// Set `enable_par` to [`Some(true)`] to construct the DFA in parallel,
+  /// [`Some(false)`] to disable parallelization, and [`None`] to choose
+  /// automatically.
+  pub fn new(nfa: NFA<S, T>, enable_par: Option<bool>) -> Self
   where
     S: Clone + Hash + Eq + Ord + Sync + Send,
     T: Clone + Hash + Eq + Ord,
   {
-    let (dfa, syms) = Self::new_from_nfa(nfa);
+    let (dfa, syms) = Self::new_from_nfa(nfa, enable_par);
     let partition = Self::minimize(&dfa, &syms);
     Self::rebuild(dfa, syms, partition)
   }
@@ -41,7 +45,7 @@ impl<S, T> DFA<S, T> {
   /// and its symbol set.
   ///
   /// The created DFA is not minimal.
-  fn new_from_nfa(nfa: NFA<S, T>) -> (Self, Vec<(S, S)>)
+  fn new_from_nfa(nfa: NFA<S, T>, enable_par: Option<bool>) -> (Self, Vec<(S, S)>)
   where
     S: Clone + Hash + Eq + Sync + Send,
     T: Clone + Ord,
@@ -70,6 +74,7 @@ impl<S, T> DFA<S, T> {
       states: vec![init.clone()],
       ids: HashMap::from([(init, fa.init_id())]),
       fa,
+      enable_par,
     };
     (constructor.construct(init_cached, &syms).into_dfa(), syms)
   }
@@ -226,7 +231,7 @@ where
   T: Clone + Hash + Eq + Ord,
 {
   fn from(nfa: NFA<S, T>) -> Self {
-    Self::new(nfa)
+    Self::new(nfa, None)
   }
 }
 
@@ -243,6 +248,7 @@ struct Constructor<S, T> {
   tags: HashMap<usize, T>,
   states: Vec<Closure>,
   ids: HashMap<Closure, usize>,
+  enable_par: Option<bool>,
 }
 
 impl<S, T> Constructor<S, T>
@@ -253,10 +259,13 @@ where
   /// Consumes the current constructor, constructs a [`DFA`] using
   /// the powerset construction algorithm.
   fn construct(self, cached: CachedClosures, syms: &[(S, S)]) -> Self {
-    let parallelism = std::thread::available_parallelism()
-      .map(Into::into)
-      .unwrap_or(1);
-    if parallelism > 1 && syms.len() > parallelism * 8 {
+    let enable_par = self.enable_par.unwrap_or_else(|| {
+      let parallelism = std::thread::available_parallelism()
+        .map(Into::into)
+        .unwrap_or(1);
+      parallelism > 1 && syms.len() > parallelism * 8
+    });
+    if enable_par {
       self.construct_par(cached, syms)
     } else {
       self.construct_normal(cached, syms)
