@@ -15,6 +15,7 @@ use std::hash::Hash;
 /// A builder for regular expressions with tag type `T`.
 pub struct RegexBuilder<T> {
   re_tags: Vec<(String, T)>,
+  enable_par: Option<bool>,
 }
 
 impl<T> RegexBuilder<T> {
@@ -22,12 +23,23 @@ impl<T> RegexBuilder<T> {
   pub fn new() -> Self {
     Self {
       re_tags: Vec::new(),
+      enable_par: None,
     }
   }
 
   /// Adds a new regular expression to the builder, with the given tag.
   pub fn add(mut self, re: &str, tag: T) -> Self {
     self.re_tags.push((re.into(), tag));
+    self
+  }
+
+  /// Sets to [`Some(true)`] to construct the DFA in parallel,
+  /// [`Some(false)`] to disable parallelization, and [`None`] to
+  /// choose automatically.
+  ///
+  /// Defaults to [`None`].
+  pub fn enable_par(mut self, enable_par: Option<bool>) -> Self {
+    self.enable_par = enable_par;
     self
   }
 }
@@ -81,7 +93,12 @@ where
           .collect::<Result<_, _>>()?,
       )
       .optimize()
-      .map(|mir| RegexMatcher::new(StateTransTable::new(DFA::new(NFA::new(mir)))))
+      .map(|mir| {
+        RegexMatcher::new(StateTransTable::new(DFA::new(
+          NFA::new(mir),
+          self.enable_par,
+        )))
+      })
       .map_err(Error::Mir)
     }
   }
