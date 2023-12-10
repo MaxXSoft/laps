@@ -16,6 +16,7 @@ All notable changes to the `laps` will be documented in this file.
 
 * Some document comments.
 * Improve performance of compiling regular expressions.
+* Bumped dependency `colored` to version 2.1.0.
 
 ### Fixed
 
