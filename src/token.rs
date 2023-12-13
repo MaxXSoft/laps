@@ -322,6 +322,16 @@ impl<TN, T> TokenBuffer<TN, T> {
     self.tokenizer
   }
 
+  /// Returns a reference to the inner tokenizer.
+  pub fn inner(&self) -> &TN {
+    &self.tokenizer
+  }
+
+  /// Returns a mutable reference to the inner tokenizer.
+  pub fn inner_mut(&mut self) -> &mut TN {
+    &mut self.tokenizer
+  }
+
   /// Extends the token buffer by `n` new tokens.
   fn extend_by(&mut self, n: usize) -> Result<()>
   where
