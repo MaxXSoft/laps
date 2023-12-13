@@ -2,6 +2,12 @@
 
 All notable changes to the `laps` will be documented in this file.
 
+## Unreleased
+
+### Added
+
+* Method `file_type` for `Span`.
+
 ## 0.1.4 - 2023-12-13
 
 ### Added
