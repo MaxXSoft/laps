@@ -2,6 +2,16 @@
 
 All notable changes to the `laps` will be documented in this file.
 
+## 0.1.4 - 2023-12-13
+
+### Added
+
+* Method `inner` and `inner_mut` for `TokenBuffer`.
+
+### Fixed
+
+* Return type of method `Lexer::input_mut`.
+
 ## 0.1.3 - 2023-12-10
 
 ### Added
