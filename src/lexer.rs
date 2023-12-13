@@ -58,7 +58,7 @@ impl<I, K> Lexer<I, K> {
   }
 
   /// Returns a mutable reference to the inner input stream.
-  pub fn input_mut(&mut self) -> &I {
+  pub fn input_mut(&mut self) -> &mut I {
     &mut self.input
   }
 }
