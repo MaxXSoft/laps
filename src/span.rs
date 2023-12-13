@@ -254,6 +254,11 @@ impl Span {
     eprintln!("{}", msg.bold());
   }
 
+  /// Returns a reference to the file type.
+  pub fn file_type(&self) -> &FileType {
+    &self.status.file_type
+  }
+
   /// Gets the number of errors.
   pub fn error_num(&self) -> usize {
     self.status.errors.load(Ordering::Relaxed)
@@ -590,6 +595,7 @@ struct LoggerStatus {
 }
 
 /// Type of input file.
+#[derive(Clone)]
 pub enum FileType {
   /// File with a path.
   File(Box<Path>),
