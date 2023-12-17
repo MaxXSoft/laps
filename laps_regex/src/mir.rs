@@ -4,7 +4,8 @@
 //! ([`regex_syntax::hir::Hir`]).
 
 use regex_syntax::hir::{Class, Hir, HirKind, Literal, Repetition};
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::cmp::Reverse;
+use std::collections::{BTreeMap, BinaryHeap, HashMap, HashSet};
 use std::hash::Hash;
 use std::iter::{once, repeat};
 use std::str::from_utf8;
@@ -153,12 +154,12 @@ where
   /// Returns the symbol set of the current MIR.
   fn symbol_set(&self) -> BTreeMap<S, (S, Vec<(S, S)>)> {
     // collect symbols
-    let mut symbols: Vec<_> = self.collect_symbols().into_iter().collect();
+    let mut symbols: BinaryHeap<_> = self.collect_symbols().into_iter().map(Reverse).collect();
     // divide ranges
     let mut ranges = BTreeMap::new();
-    while let Some(cur_rs) = symbols.pop() {
+    while let Some(Reverse(cur_rs)) = symbols.pop() {
       let (left, right) = Self::endpoints_of(&cur_rs);
-      // find left endpoint in range map
+      // find left in range map
       match ranges.range_mut(..=left).next_back() {
         None => {}
         Some((_, (r, _))) if &*r < left => {}
@@ -174,7 +175,7 @@ where
           let (l, r) = Self::endpoints_of(&rights);
           ranges.insert(l.clone(), (r.clone(), rights));
           // push `cur_rs` to the worklist
-          symbols.push(cur_rs);
+          symbols.push(Reverse(cur_rs));
           continue;
         }
         Some((_, (r, rs))) if /* l == left && */ r == right && rs != &cur_rs => {
@@ -186,7 +187,7 @@ where
           *rs = vec![first];
           ranges.extend(iter.map(|r| (r.0.clone(), (r.1.clone(), vec![r]))));
           // push all the ranges of `cur_rs` to the worklist
-          symbols.extend(cur_rs.into_iter().map(|r| vec![r]));
+          symbols.extend(cur_rs.into_iter().map(|r| Reverse(vec![r])));
           continue;
         }
         Some((_, (r, _))) if /* l == left && */ r == right => continue,
@@ -194,26 +195,26 @@ where
           // divide `cur_rs`
           let (lefts, rights) = Self::split_ranges(cur_rs, &r.next().unwrap());
           // push the divided ranges to the worklist
-          symbols.push(lefts);
+          symbols.push(Reverse(lefts));
           if !rights.is_empty() {
-            symbols.push(rights);
+            symbols.push(Reverse(rights));
           }
           continue;
         }
         _ => unreachable!(),
       }
-      // find right endpoint in range map
-      match ranges.range(..=right).next_back() {
-        None => {}
-        Some((_, (r, _))) if r < left => {}
-        Some((l, _)) => {
-          // divide `cur_rs`
-          let left = left.clone();
-          let (lefts, rights) = Self::split_ranges(cur_rs, l);
-          // insert the left part to range map, and the right to worklist
-          ranges.insert(left, (Self::endpoints_of(&lefts).1.clone(), lefts));
-          symbols.push(rights);
-          continue;
+      // find right in range map
+      if let Some(left_next) = left.next() {
+        if let Some((l, _)) = ranges.range(&left_next..).next() {
+          if l <= right {
+            // divide `cur_rs`
+            let left = left.clone();
+            let (lefts, rights) = Self::split_ranges(cur_rs, l);
+            // insert the left part to range map, and the right to worklist
+            ranges.insert(left, (Self::endpoints_of(&lefts).1.clone(), lefts));
+            symbols.push(Reverse(rights));
+            continue;
+          }
         }
       }
       // just insert to range map
