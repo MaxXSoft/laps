@@ -1,6 +1,6 @@
 [package]
 name = "laps_regex"
-version = "0.0.2"
+version = "0.1.0"
 authors = ["MaxXing <x@MaxXSoft.net>"]
 edition = "2021"
 description = "Tools for generating NFAs, DFAs and state-transition tables from regular expressions."
