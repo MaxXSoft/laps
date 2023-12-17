@@ -252,7 +252,7 @@ where
   /// Splits the given ranges at the given point.
   ///
   /// Returns ranges `[..at]` and `[at..]` (may be empty).
-  fn split_ranges(mut ranges: Vec<(S, S)>, at: &S) -> (Vec<(S, S)>, Vec<(S, S)>) {
+  fn split_ranges(mut ranges: Vec<(S, S)>, at: &S) -> SplitRanges<S> {
     let right = match ranges.binary_search_by_key(&at, |(l, _)| l) {
       Ok(i) => ranges.drain(i..).collect(),
       Err(0) => mem::take(&mut ranges),
@@ -286,10 +286,8 @@ where
         Self::Alter(
           syms[lmap[l]..=rmap[r]]
             .iter()
-            .filter_map(|s| {
-              Self::ranges_contains(&rs, &Self::endpoints_of(s).0)
-                .then(|| (Self::Ranges(s.clone()), None))
-            })
+            .filter(|&s| Self::ranges_contains(&rs, Self::endpoints_of(s).0))
+            .map(|s| (Self::Ranges(s.clone()), None))
             .collect(),
         )
       }
@@ -533,8 +531,12 @@ impl fmt::Display for Error {
   }
 }
 
-/// A triple of symbol set, left bound index map and right bound index map.
+/// A triple of symbol set (range list), left bound index map
+/// and right bound index map.
 type SymbolSetTriple<S> = (Vec<Vec<(S, S)>>, HashMap<S, usize>, HashMap<S, usize>);
+
+/// Tuple of the left part and the right part of split ranges.
+type SplitRanges<S> = (Vec<(S, S)>, Vec<(S, S)>);
 
 /// Trait for getting the previous or next symbol of a given symbol.
 pub trait SymbolOp: Sized {
