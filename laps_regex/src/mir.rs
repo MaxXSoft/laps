@@ -203,7 +203,9 @@ where
         _ => unreachable!(),
       }
       // find right endpoint in range map
-      match ranges.range_mut(..=right).next_back() {
+      match ranges.range(..=right).next_back() {
+        None => {}
+        Some((_, (r, _))) if r < left => {}
         Some((l, _)) => {
           // divide `cur_rs`
           let left = left.clone();
@@ -213,11 +215,9 @@ where
           symbols.push(rights);
           continue;
         }
-        None => {
-          // just insert to range map
-          ranges.insert(left.clone(), (right.clone(), cur_rs));
-        }
       }
+      // just insert to range map
+      ranges.insert(left.clone(), (right.clone(), cur_rs));
     }
     ranges
   }
