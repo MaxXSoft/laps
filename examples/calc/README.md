@@ -9,7 +9,7 @@ Supporting addition, subtraction, multiplication, division, modulo and brackets.
 Run in the repository root:
 
 ```
-echo '-10 * (2 + 5) * 2 - 5.3' | cargo run --example calc --features=macros 
+echo '-10 * (2 + 5) * 2 - 5.3' | cargo run --example calc --features=macros
 ```
 
 The output will be:
