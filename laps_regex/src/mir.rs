@@ -284,8 +284,12 @@ where
       Self::Ranges(rs) => {
         let (l, r) = Self::endpoints_of(&rs);
         Self::Alter(
-          (lmap[l]..=rmap[r])
-            .map(|i| (Self::Ranges(syms[i].clone()), None))
+          syms[lmap[l]..=rmap[r]]
+            .iter()
+            .filter_map(|s| {
+              Self::ranges_contains(&rs, &Self::endpoints_of(s).0)
+                .then(|| (Self::Ranges(s.clone()), None))
+            })
             .collect(),
         )
       }
@@ -296,6 +300,15 @@ where
           .collect(),
       ),
       Self::Kleene(k) => Self::Kleene(Box::new(k.rebuild(syms, lmap, rmap))),
+    }
+  }
+
+  /// Returns `true` if the given ranges contains the given left endpoint.
+  fn ranges_contains(ranges: &[(S, S)], left: &S) -> bool {
+    match ranges.binary_search_by_key(&left, |(l, _)| l) {
+      Ok(_) => true,
+      Err(0) => false,
+      Err(i) => left <= &ranges.get(i - 1).unwrap().1,
     }
   }
 
