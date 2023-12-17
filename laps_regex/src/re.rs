@@ -436,4 +436,13 @@ mod test {
     assert_eq!(lexer.next_token(), Some((Other, "}".into())));
     assert_eq!(lexer.next_token(), None);
   }
+
+  #[test]
+  fn match_word() {
+    let matcher: CharsMatcher<_> = RegexBuilder::new().add(r"\w+", 0).build().unwrap();
+    assert_eq!(matcher.is_str_match("if"), Some(&0));
+    assert_eq!(matcher.is_str_match("hello"), Some(&0));
+    assert_eq!(matcher.is_str_match(".hello"), None);
+    assert_eq!(matcher.is_str_match("??"), None);
+  }
 }
