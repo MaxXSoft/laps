@@ -4,11 +4,11 @@
 //! ([`regex_syntax::hir::Hir`]).
 
 use regex_syntax::hir::{Class, Hir, HirKind, Literal, Repetition};
-use std::collections::{HashMap, HashSet};
-use std::fmt;
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::hash::Hash;
 use std::iter::{once, repeat};
 use std::str::from_utf8;
+use std::{fmt, mem};
 
 /// Mid-level intermediate representation of regular expressions
 /// with symbol type `S` and tag type `T`.
@@ -16,11 +16,11 @@ use std::str::from_utf8;
 pub enum Mir<S, T> {
   /// The empty regular expression.
   Empty,
-  /// A range of symbols.
+  /// Ranges of symbols, the ranges list can not be empty.
   ///
-  /// The range is closed. That is, the start and end of the range
+  /// All ranges are closed. That is, the start and end of the range
   /// are included in the range.
-  Range(S, S),
+  Ranges(Vec<(S, S)>),
   /// A concatenation of expressions.
   Concat(Vec<Self>),
   /// An alternation of expressions and their tags.
@@ -107,110 +107,187 @@ where
   T: Hash + Eq + Clone,
 {
   /// Optimizes the current MIR into a new one.
-  pub fn optimize(self) -> Result<Self, Error> {
-    let (syms, lmap, rmap) = self.symbol_set()?;
+  pub fn optimize(mut self) -> Result<Self, Error> {
+    self.normalize_ranges()?;
+    let symbols = self.symbol_set();
+    let (syms, lmap, rmap) = Self::into_triple(symbols);
     self.rebuild(&syms, &lmap, &rmap).opt_without_rebuild()
   }
 
-  /// Returns the symbol set of the current MIR.
-  fn symbol_set(&self) -> Result<SymbolSetTriple<S>, Error> {
-    // collect all endpoints
-    let mut ends = self.collect_endpoints();
-    ends.sort_unstable();
-    // get symbol set
-    let mut syms = Vec::new();
-    let mut unmatched = Vec::new();
-    for Endpoint { sym, dir } in ends {
-      match dir {
-        Dir::Left => {
-          if let Some(s) = unmatched.pop() {
-            if s != sym {
-              syms.push((s, sym.prev().ok_or(Error::FailedToBuildSymbolSet)?));
-            }
-            unmatched.push(sym.clone());
+  /// Normalizes all ranges in [`Ranges`](Mir::Ranges).
+  ///
+  /// Returns error if empty range exists.
+  fn normalize_ranges(&mut self) -> Result<(), Error> {
+    match self {
+      Self::Empty => Ok(()),
+      Self::Ranges(rs) if rs.is_empty() => Err(Error::MatchesNothing),
+      Self::Ranges(rs) => {
+        rs.sort_unstable();
+        let new_rs = mem::take(rs);
+        *rs = new_rs.into_iter().fold(Vec::new(), |mut rs, (cl, cr)| {
+          match rs.last_mut() {
+            Some((_, lr)) if &cr <= lr => {}
+            Some((_, lr)) if cl.prev().as_ref() <= Some(lr) => *lr = cr,
+            _ => rs.push((cl, cr)),
           }
-          unmatched.push(sym);
+          rs
+        });
+        Ok(())
+      }
+      Self::Concat(c) => {
+        for e in c {
+          e.normalize_ranges()?;
         }
-        Dir::Right => {
-          let s = unmatched.pop().ok_or(Error::FailedToBuildSymbolSet)?;
-          if s <= sym {
-            syms.push((s, sym.clone()));
+        Ok(())
+      }
+      Self::Alter(a) => {
+        for (e, _) in a {
+          e.normalize_ranges()?;
+        }
+        Ok(())
+      }
+      Self::Kleene(k) => k.normalize_ranges(),
+    }
+  }
+
+  /// Returns the symbol set of the current MIR.
+  fn symbol_set(&self) -> BTreeMap<S, (S, Vec<(S, S)>)> {
+    // collect symbols
+    let mut symbols: Vec<_> = self.collect_symbols().into_iter().collect();
+    // divide ranges
+    let mut ranges = BTreeMap::new();
+    while let Some(cur_rs) = symbols.pop() {
+      let (left, right) = Self::endpoints_of(&cur_rs);
+      // find left endpoint in range map
+      match ranges.range_mut(..=left).next_back() {
+        None => {}
+        Some((_, (r, _))) if &*r < left => {}
+        Some((l, (r, rs))) if l < left || /* l == left && */ &*r > right => {
+          // divide `rs`
+          let (lefts, rights) = if l < left {
+            Self::split_ranges(mem::take(rs), left)
+          } else {
+            Self::split_ranges(mem::take(rs), &right.next().unwrap())
+          };
+          *r = Self::endpoints_of(&lefts).1.clone();
+          *rs = lefts;
+          let (l, r) = Self::endpoints_of(&rights);
+          ranges.insert(l.clone(), (r.clone(), rights));
+          // push `cur_rs` to the worklist
+          symbols.push(cur_rs);
+          continue;
+        }
+        Some((_, (r, rs))) if /* l == left && */ r == right && rs != &cur_rs => {
+          // left and right endpoint found in range map, but the ranges
+          // are different, so divide `rs` into individual ranges
+          let mut iter = mem::take(rs).into_iter();
+          let first = iter.next().unwrap();
+          *r = first.1.clone();
+          *rs = vec![first];
+          ranges.extend(iter.map(|r| (r.0.clone(), (r.1.clone(), vec![r]))));
+          // push all the ranges of `cur_rs` to the worklist
+          symbols.extend(cur_rs.into_iter().map(|r| vec![r]));
+          continue;
+        }
+        Some((_, (r, _))) if /* l == left && */ r == right => continue,
+        Some((_, (r, _))) if /* l == left && */ &*r < right => {
+          // divide `cur_rs`
+          let (lefts, rights) = Self::split_ranges(cur_rs, &r.next().unwrap());
+          // push the divided ranges to the worklist
+          symbols.push(lefts);
+          if !rights.is_empty() {
+            symbols.push(rights);
           }
-          if let Some(last) = unmatched.last_mut() {
-            if *last > sym {
-              return Err(Error::FailedToBuildSymbolSet);
-            }
-            if let Some(next) = sym.next() {
-              *last = next;
-            } else {
-              unmatched.clear();
-              break;
-            }
-          }
+          continue;
+        }
+        _ => unreachable!(),
+      }
+      // find right endpoint in range map
+      match ranges.range_mut(..=right).next_back() {
+        Some((l, _)) => {
+          // divide `cur_rs`
+          let left = left.clone();
+          let (lefts, rights) = Self::split_ranges(cur_rs, l);
+          // insert the left part to range map, and the right to worklist
+          ranges.insert(left, (Self::endpoints_of(&lefts).1.clone(), lefts));
+          symbols.push(rights);
+          continue;
+        }
+        None => {
+          // just insert to range map
+          ranges.insert(left.clone(), (right.clone(), cur_rs));
         }
       }
     }
-    // check if all endpoints are matched
-    if !unmatched.is_empty() {
-      return Err(Error::FailedToBuildSymbolSet);
-    }
-    // get mapping of range endpoints to indices
-    let (lmap, rmap) = syms
-      .iter()
-      .cloned()
-      .enumerate()
-      .map(|(i, (l, r))| ((l, i), (r, i)))
-      .unzip();
-    Ok((syms, lmap, rmap))
+    ranges
   }
 
-  /// Collects all symbols (ranges) in the current MIR as endpoints.
-  fn collect_endpoints(&self) -> Vec<Endpoint<S>> {
-    self
-      .collect_symbols()
+  /// Returns the [`SymbolSetTriple`] of the given symbol set.
+  fn into_triple(symbols: BTreeMap<S, (S, Vec<(S, S)>)>) -> SymbolSetTriple<S> {
+    let (syms, (lmap, rmap)) = symbols
       .into_iter()
-      .flat_map(|(l, r)| {
-        once(Endpoint {
-          sym: l,
-          dir: Dir::Left,
-        })
-        .chain(once(Endpoint {
-          sym: r,
-          dir: Dir::Right,
-        }))
-      })
-      .collect()
+      .enumerate()
+      .map(|(i, (l, (r, rs)))| (rs, ((l, i), (r, i))))
+      .unzip();
+    (syms, lmap, rmap)
   }
 
   /// Collects all symbols in the current MIR.
-  fn collect_symbols(&self) -> HashSet<(S, S)> {
+  fn collect_symbols(&self) -> HashSet<Vec<(S, S)>> {
     match self {
       Self::Empty => HashSet::new(),
-      Self::Range(l, r) => HashSet::from([(l.clone(), r.clone())]),
-      Self::Concat(c) => c
-        .iter()
-        .flat_map(|e| e.collect_symbols().into_iter())
-        .collect(),
-      Self::Alter(a) => a
-        .iter()
-        .flat_map(|(e, _)| e.collect_symbols().into_iter())
-        .collect(),
+      Self::Ranges(rs) => [rs.clone()].into(),
+      Self::Concat(c) => c.iter().flat_map(|e| e.collect_symbols()).collect(),
+      Self::Alter(a) => a.iter().flat_map(|(e, _)| e.collect_symbols()).collect(),
       Self::Kleene(k) => k.collect_symbols(),
     }
   }
 
+  /// Returns the left and right endpoint of the given ranges.
+  fn endpoints_of(ranges: &[(S, S)]) -> (&S, &S) {
+    (&ranges.first().unwrap().0, &ranges.last().unwrap().1)
+  }
+
+  /// Splits the given ranges at the given point.
+  ///
+  /// Returns ranges `[..at]` and `[at..]` (may be empty).
+  fn split_ranges(mut ranges: Vec<(S, S)>, at: &S) -> (Vec<(S, S)>, Vec<(S, S)>) {
+    let right = match ranges.binary_search_by_key(&at, |(l, _)| l) {
+      Ok(i) => ranges.drain(i..).collect(),
+      Err(0) => mem::take(&mut ranges),
+      Err(i) => {
+        let (_, r) = ranges.get_mut(i - 1).unwrap();
+        if at > r {
+          ranges.drain(i..).collect()
+        } else {
+          let last_r = r.clone();
+          *r = at.prev().unwrap();
+          let mut right = vec![(at.clone(), last_r)];
+          right.extend(ranges.drain(i..));
+          right
+        }
+      }
+    };
+    (ranges, right)
+  }
+
   /// Rebuilds the current MIR by the given symbol set and mappings.
-  fn rebuild(self, syms: &[(S, S)], lmap: &HashMap<S, usize>, rmap: &HashMap<S, usize>) -> Self {
+  fn rebuild(
+    self,
+    syms: &[Vec<(S, S)>],
+    lmap: &HashMap<S, usize>,
+    rmap: &HashMap<S, usize>,
+  ) -> Self {
     match self {
       Self::Empty => self,
-      Self::Range(l, r) => Self::Alter(
-        (lmap[&l]..=rmap[&r])
-          .map(|i| {
-            let (l, r) = syms[i].clone();
-            (Self::Range(l, r), None)
-          })
-          .collect(),
-      ),
+      Self::Ranges(rs) => {
+        let (l, r) = Self::endpoints_of(&rs);
+        Self::Alter(
+          (lmap[l]..=rmap[r])
+            .map(|i| (Self::Ranges(syms[i].clone()), None))
+            .collect(),
+        )
+      }
       Self::Concat(c) => Self::Concat(c.into_iter().map(|e| e.rebuild(syms, lmap, rmap)).collect()),
       Self::Alter(a) => Self::Alter(
         a.into_iter()
@@ -382,23 +459,20 @@ pub trait MirBuilder: Sized {
 impl<T> MirBuilder for Mir<char, T> {
   fn new_from_literal(Literal(bs): Literal) -> Result<Self, Error> {
     from_utf8(&bs)
-      .map(|s| Self::Concat(s.chars().map(|c| Self::Range(c, c)).collect()))
+      .map(|s| Self::Concat(s.chars().map(|c| Self::Ranges(vec![(c, c)])).collect()))
       .map_err(|_| Error::InvalidUtf8)
   }
 
   fn new_from_class(c: Class) -> Result<Self, Error> {
     match c {
-      Class::Bytes(b) => Ok(Self::Alter(
+      Class::Bytes(b) => Ok(Self::Ranges(
         b.ranges()
           .iter()
-          .map(|r| (Self::Range(r.start() as char, r.end() as char), None))
+          .map(|r| (r.start() as char, r.end() as char))
           .collect(),
       )),
-      Class::Unicode(u) => Ok(Self::Alter(
-        u.ranges()
-          .iter()
-          .map(|r| (Self::Range(r.start(), r.end()), None))
-          .collect(),
+      Class::Unicode(u) => Ok(Self::Ranges(
+        u.ranges().iter().map(|r| (r.start(), r.end())).collect(),
       )),
     }
   }
@@ -407,17 +481,14 @@ impl<T> MirBuilder for Mir<char, T> {
 impl<T> MirBuilder for Mir<u8, T> {
   fn new_from_literal(Literal(bs): Literal) -> Result<Self, Error> {
     Ok(Self::Concat(
-      bs.iter().map(|b| Self::Range(*b, *b)).collect(),
+      bs.iter().map(|b| Self::Ranges(vec![(*b, *b)])).collect(),
     ))
   }
 
   fn new_from_class(c: Class) -> Result<Self, Error> {
     match c {
-      Class::Bytes(b) => Ok(Self::Alter(
-        b.ranges()
-          .iter()
-          .map(|r| (Self::Range(r.start(), r.end()), None))
-          .collect(),
+      Class::Bytes(b) => Ok(Self::Ranges(
+        b.ranges().iter().map(|r| (r.start(), r.end())).collect(),
       )),
       Class::Unicode(_) => Err(Error::UnsupportedOp("Unicode in byte mode")),
     }
@@ -449,21 +520,7 @@ impl fmt::Display for Error {
 }
 
 /// A triple of symbol set, left bound index map and right bound index map.
-type SymbolSetTriple<S> = (Vec<(S, S)>, HashMap<S, usize>, HashMap<S, usize>);
-
-/// Endpoint of symbol ranges
-#[derive(PartialEq, Eq, PartialOrd, Ord)]
-struct Endpoint<S> {
-  sym: S,
-  dir: Dir,
-}
-
-/// Direction of endpoint.
-#[derive(PartialEq, Eq, PartialOrd, Ord)]
-enum Dir {
-  Left,
-  Right,
-}
+type SymbolSetTriple<S> = (Vec<Vec<(S, S)>>, HashMap<S, usize>, HashMap<S, usize>);
 
 /// Trait for getting the previous or next symbol of a given symbol.
 pub trait SymbolOp: Sized {
