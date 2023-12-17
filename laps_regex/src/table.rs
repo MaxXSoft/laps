@@ -136,7 +136,7 @@ where
 /// This structure will be constructed during the creation of
 /// [`StateTransTable`].
 struct TempTable<S, T> {
-  table: HashMap<(S, S), Vec<usize>>,
+  table: HashMap<Vec<(S, S)>, Vec<usize>>,
   tags: HashMap<usize, T>,
   init_id: usize,
 }
@@ -198,17 +198,22 @@ impl<S, T> TempTable<S, T> {
         Some(t) if t == &states => {
           // get the last equivalence classes
           let equiv = equivs.last_mut().unwrap();
-          // check if the current symbol can be merged into the last one
+          // get the last symbol of the last equivalence classes
+          // and the first symbol of the current range
           let (_, last_r) = equiv.last_mut().unwrap();
-          if last_r.next().as_ref() == Some(&sym.0) {
-            *last_r = sym.1;
+          let mut iter = sym.into_iter();
+          let first_sym = iter.next().unwrap();
+          // check if the current symbol can be merged into the last one
+          if last_r.next().as_ref() == Some(&first_sym.0) {
+            *last_r = first_sym.1;
           } else {
-            // can not be merged, add as a new symbol
-            equiv.push(sym);
+            equiv.push(first_sym);
           }
+          // add the rest symbols
+          equiv.extend(iter);
         }
         _ => {
-          equivs.push(vec![sym]);
+          equivs.push(sym);
           trans_table.push(states);
         }
       }

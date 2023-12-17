@@ -21,7 +21,7 @@ macro_rules! first_tag {
 /// with symbol type `S` and tag type `T`.
 #[derive(Debug)]
 pub struct DFA<S, T> {
-  fa: DenseFA<(S, S)>,
+  fa: DenseFA<Vec<(S, S)>>,
   tags: HashMap<usize, T>,
 }
 
@@ -45,7 +45,7 @@ impl<S, T> DFA<S, T> {
   /// and its symbol set.
   ///
   /// The created DFA is not minimal.
-  fn new_from_nfa(nfa: NFA<S, T>, enable_par: Option<bool>) -> (Self, Vec<(S, S)>)
+  fn new_from_nfa(nfa: NFA<S, T>, enable_par: Option<bool>) -> (Self, Vec<Vec<(S, S)>>)
   where
     S: Clone + Hash + Eq + Sync + Send,
     T: Clone + Ord,
@@ -80,7 +80,7 @@ impl<S, T> DFA<S, T> {
   }
 
   /// Creates a minimal DFA by the given DFA and symbol set.
-  fn minimize(dfa: &Self, syms: &[(S, S)]) -> VecDeque<HashSet<usize>>
+  fn minimize(dfa: &Self, syms: &[Vec<(S, S)>]) -> VecDeque<HashSet<usize>>
   where
     S: Ord + Hash,
     T: Hash + Eq,
@@ -154,7 +154,7 @@ impl<S, T> DFA<S, T> {
   }
 
   /// Rebuilds a DFA by the given partition.
-  fn rebuild(dfa: Self, syms: Vec<(S, S)>, partition: VecDeque<HashSet<usize>>) -> Self
+  fn rebuild(dfa: Self, syms: Vec<Vec<(S, S)>>, partition: VecDeque<HashSet<usize>>) -> Self
   where
     S: Clone + Eq + Hash,
     T: Clone,
@@ -238,13 +238,13 @@ where
 /// A pair of [`DFA`]'s internal finite automaton and the tag map.
 ///
 /// Used by method [`into_fa_tags`](DFA#method.into_fa_tags) of [`DFA`].
-pub type FATags<S, T> = (DenseFA<(S, S)>, HashMap<usize, T>);
+pub type FATags<S, T> = (DenseFA<Vec<(S, S)>>, HashMap<usize, T>);
 
 /// A [`NFA`] to [`DFA`] constructor.
 struct Constructor<S, T> {
   nfa_tags: Vec<(T, usize)>,
-  cb: ClosureBuilder<(S, S)>,
-  fa: DenseFA<(S, S)>,
+  cb: ClosureBuilder<Vec<(S, S)>>,
+  fa: DenseFA<Vec<(S, S)>>,
   tags: HashMap<usize, T>,
   states: Vec<Closure>,
   ids: HashMap<Closure, usize>,
@@ -258,7 +258,7 @@ where
 {
   /// Consumes the current constructor, constructs a [`DFA`] using
   /// the powerset construction algorithm.
-  fn construct(self, cached: CachedClosures, syms: &[(S, S)]) -> Self {
+  fn construct(self, cached: CachedClosures, syms: &[Vec<(S, S)>]) -> Self {
     let enable_par = self.enable_par.unwrap_or_else(|| {
       let parallelism = std::thread::available_parallelism()
         .map(Into::into)
@@ -276,7 +276,7 @@ where
   /// the powerset construction algorithm.
   ///
   /// This method runs serially.
-  fn construct_normal(mut self, mut cached: CachedClosures, syms: &[(S, S)]) -> Self {
+  fn construct_normal(mut self, mut cached: CachedClosures, syms: &[Vec<(S, S)>]) -> Self {
     while let Some(cur) = self.states.pop() {
       let cur_id = self.ids[&cur];
       for s in syms {
@@ -295,7 +295,7 @@ where
   /// the powerset construction algorithm.
   ///
   /// This method runs in parallel.
-  fn construct_par(mut self, cached: CachedClosures, syms: &[(S, S)]) -> Self {
+  fn construct_par(mut self, cached: CachedClosures, syms: &[Vec<(S, S)>]) -> Self {
     use rayon::prelude::*;
     let mut nexts = Vec::new();
     let mut cached_epsilons = vec![cached; syms.len()];
@@ -318,7 +318,7 @@ where
     self
   }
 
-  fn add_to_fa(&mut self, cur_id: usize, s: (S, S), next: Closure) {
+  fn add_to_fa(&mut self, cur_id: usize, s: Vec<(S, S)>, next: Closure) {
     // get the ID of the next state
     let id = if let Some(id) = self.ids.get(&next) {
       *id

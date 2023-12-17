@@ -15,7 +15,7 @@ pub struct NFA<S, T>
 where
   S: Eq + Hash,
 {
-  fa: MultiFA<Option<(S, S)>>,
+  fa: MultiFA<Option<Vec<(S, S)>>>,
   tags: HashMap<usize, T>,
 }
 
@@ -27,7 +27,7 @@ where
   pub fn new(mir: Mir<S, T>) -> Self {
     match mir {
       Mir::Empty => Self::new_nfa_with_symbol(None),
-      Mir::Range(l, r) => Self::new_nfa_with_symbol(Some((l, r))),
+      Mir::Ranges(rs) => Self::new_nfa_with_symbol(Some(rs)),
       Mir::Concat(c) => c.into_iter().map(Self::new).reduce(Self::concat).unwrap(),
       Mir::Alter(mut a) => {
         if a.len() == 1 {
@@ -62,7 +62,7 @@ where
   }
 
   /// Creates a new NFA which matches the given symbol.
-  fn new_nfa_with_symbol(sym: Option<(S, S)>) -> Self {
+  fn new_nfa_with_symbol(sym: Option<Vec<(S, S)>>) -> Self {
     let mut fa = MultiFA::new();
     let fs = fa.add_final_state();
     fa.init_mut().add(sym, fs);
@@ -167,4 +167,4 @@ where
 /// A pair of [`NFA`]'s internal finite automaton and the tag map.
 ///
 /// Used by method [`into_fa_tags`](NFA#method.into_fa_tags) of [`NFA`].
-pub type FATags<S, T> = (MultiFA<Option<(S, S)>>, HashMap<usize, T>);
+pub type FATags<S, T> = (MultiFA<Option<Vec<(S, S)>>>, HashMap<usize, T>);
