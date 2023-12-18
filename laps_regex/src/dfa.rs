@@ -33,7 +33,7 @@ impl<S, T> DFA<S, T> {
   /// automatically.
   pub fn new(nfa: NFA<S, T>, enable_par: Option<bool>) -> Self
   where
-    S: Clone + Hash + Eq + Ord + Sync + Send,
+    S: Clone + Hash + Eq + Ord + Sync,
     T: Clone + Hash + Eq + Ord,
   {
     let (dfa, syms) = Self::new_from_nfa(nfa, enable_par);
@@ -47,7 +47,7 @@ impl<S, T> DFA<S, T> {
   /// The created DFA is not minimal.
   fn new_from_nfa(nfa: NFA<S, T>, enable_par: Option<bool>) -> (Self, Vec<Vec<(S, S)>>)
   where
-    S: Clone + Hash + Eq + Sync + Send,
+    S: Clone + Hash + Eq + Sync,
     T: Clone + Ord,
   {
     let (nfa, nfa_tags) = nfa.into_fa_tags();
@@ -224,7 +224,7 @@ impl<S, T> DFA<S, T> {
 
 impl<S, T> From<NFA<S, T>> for DFA<S, T>
 where
-  S: Clone + Hash + Eq + Ord + Sync + Send,
+  S: Clone + Hash + Eq + Ord + Sync,
   T: Clone + Hash + Eq + Ord,
 {
   fn from(nfa: NFA<S, T>) -> Self {
@@ -250,7 +250,7 @@ struct Constructor<S, T> {
 
 impl<S, T> Constructor<S, T>
 where
-  S: Clone + Hash + Eq + Sync + Send,
+  S: Clone + Hash + Eq + Sync,
   T: Clone,
 {
   /// Consumes the current constructor, constructs a [`DFA`] using
