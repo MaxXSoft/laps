@@ -109,11 +109,16 @@ impl<S, T> DFA<S, T> {
     // get new partition until there are no changes
     let mut num_states = partition.len();
     loop {
+      // create mapping from state IDs to partition index
+      let index_map: HashMap<_, _> = partition
+        .iter()
+        .enumerate()
+        .flat_map(|(i, ids)| ids.iter().map(move |id| (*id, i)))
+        .collect();
       for _ in 0..num_states {
-        let states = partition.front().unwrap();
+        let states = partition.pop_front().unwrap();
         // check if can be divided
         if states.len() <= 1 {
-          let states = partition.pop_front().unwrap();
           partition.push_back(states);
           continue;
         }
@@ -123,28 +128,20 @@ impl<S, T> DFA<S, T> {
           let mut div_id = BTreeSet::new();
           for s in syms {
             // get the next state after accepting symbol `s`
-            let next = fa.state(*id).unwrap().next_state(s);
-            if let Some(next) = next {
-              // get partition index corresponding to the next state
-              let index = partition
-                .iter()
-                .take(num_states)
-                .enumerate()
-                .find_map(|(i, ids)| ids.contains(&next).then_some(i));
-              // add the index to division ID set
-              if let Some(index) = index {
-                div_id.insert((s, index));
-              }
+            let next = fa.state(id).unwrap().next_state(s);
+            // add partition index of the next state to division ID set
+            let index = next.and_then(|next| index_map.get(&next).copied());
+            if let Some(index) = index {
+              div_id.insert((s, index));
             }
           }
           // update division
-          division.entry(div_id).or_default().insert(*id);
+          division.entry(div_id).or_default().insert(id);
         }
         // add to the partition
         for (_, states) in division {
           partition.push_back(states);
         }
-        partition.pop_front();
       }
       // check and update the number of states
       if partition.len() == num_states {
