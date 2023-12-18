@@ -139,9 +139,7 @@ impl<S, T> DFA<S, T> {
           division.entry(div_id).or_default().insert(id);
         }
         // add to the partition
-        for (_, states) in division {
-          partition.push_back(states);
-        }
+        partition.extend(division.into_values());
       }
       // check and update the number of states
       if partition.len() == num_states {
