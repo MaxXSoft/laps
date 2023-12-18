@@ -103,7 +103,9 @@ impl<S, T> DFA<S, T> {
       .keys()
       .filter_map(|id| (!fa.finals().contains(id)).then_some(*id))
       .collect();
-    partition.push_back(others);
+    if !others.is_empty() {
+      partition.push_back(others);
+    }
     // get new partition until there are no changes
     let mut num_states = partition.len();
     loop {
