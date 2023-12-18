@@ -125,16 +125,17 @@ impl<S, T> DFA<S, T> {
         // get a new division
         let mut division: HashMap<_, HashSet<usize>> = HashMap::new();
         for id in states {
-          let mut div_id = BTreeSet::new();
-          for s in syms {
-            // get the next state after accepting symbol `s`
-            let next = fa.state(id).unwrap().next_state(s);
-            // add partition index of the next state to division ID set
-            let index = next.and_then(|next| index_map.get(&next).copied());
-            if let Some(index) = index {
-              div_id.insert((s, index));
-            }
-          }
+          // get division ID set
+          let div_id: BTreeSet<_> = syms
+            .iter()
+            .filter_map(|s| {
+              // get the next state after accepting symbol `s`
+              let next = fa.state(id).unwrap().next_state(s);
+              // get partition index of the next state
+              let index = next.and_then(|next| index_map.get(&next).copied());
+              index.map(|i| (s, i))
+            })
+            .collect();
           // update division
           division.entry(div_id).or_default().insert(id);
         }
