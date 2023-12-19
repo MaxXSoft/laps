@@ -110,6 +110,34 @@
 //!   a simple JSON parser.
 //! * [`clike`](https://github.com/MaxXSoft/laps/tree/master/examples/clike):
 //!   interpreter for a C-like programming language.
+//!
+//! # Accelerating Code Completion for IDEs
+//!
+//! By default, Cargo does not enable optimizations for procedural macros,
+//! which may result in slower code completion if you are using `laps` to
+//! generate lexers. To avoid this, you can add the following configuration
+//! to `Cargo.toml`:
+//!
+//! ```toml
+//! [profile.dev.build-override]
+//! opt-level = 3
+//! ```
+//!
+//! You can also try to manually enable/disable parallelization for lexer
+//! generation by adding:
+//!
+#![cfg_attr(not(feature = "macros"), doc = " ```ignore")]
+#![cfg_attr(feature = "macros", doc = " ```")]
+//! # fn main() {}
+//! # use laps::prelude::*;
+//! #[derive(Tokenize)]
+//! #[enable_par(true)] // or #[enable_par(false)]
+//! enum TokenKind {
+//!   // ...
+//! # #[eof]
+//! # Eof,
+//! }
+//! ```
 
 pub mod ast;
 pub mod input;
