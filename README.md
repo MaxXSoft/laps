@@ -92,6 +92,27 @@ See the [`examples` directory](examples), which contains the following examples:
 * [`json`](examples/json): a simple JSON parser.
 * [`clike`](examples/clike): interpreter for a C-like programming language.
 
+## Accelerating Code Completion for IDEs
+
+By default, Cargo does not enable optimizations for procedural macros, which may result in slower code completion if you are using `laps` to generate lexers. To avoid this, you can add the following configuration to `Cargo.toml`:
+
+```toml
+[profile.dev.build-override]
+opt-level = 3
+```
+
+You can also try to manually enable/disable parallelization for lexer generation by adding:
+
+```rust
+#[derive(Tokenize)]
+#[enable_par(true)] // or #[enable_par(false)]
+enum TokenKind {
+  // ...
+}
+```
+
+The parallelization setting only affects compilation speed and has no effect at runtime, it's set automatically by `laps` by default.
+
 ## Changelog
 
 See [CHANGELOG.md](CHANGELOG.md).
