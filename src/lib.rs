@@ -134,6 +134,8 @@
 //! #[enable_par(true)] // or #[enable_par(false)]
 //! enum TokenKind {
 //!   // ...
+//! # #[regex(r"[^\s()]+")]
+//! # Atom(String),
 //! # #[eof]
 //! # Eof,
 //! }
