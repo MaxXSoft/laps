@@ -4,9 +4,16 @@ All notable changes to the `laps` will be documented in this file.
 
 ## Unreleased
 
+### Added
+
+* Implement `Parse` trait for tuples.
+* Add AST type `OptPrefix` and `OptTokenPrefix`.
+
 ### Changed
 
 * Improve performance of minimizing DFA.
+* Mark AST `Quoted` as deprecated.
+* Derived `PartialOrd` and `Ord` trait for AST types (except `Quoted`).
 
 ### Fixed
 
