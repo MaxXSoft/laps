@@ -243,3 +243,140 @@ where
     self.0.span().into_end_updated(self.2.span())
   }
 }
+
+/// An AST `T` with an optional prefix `P`, like `T` or `P T`.
+///
+/// The `maybe` method of AST returns `true` when either `P::maybe` returns
+/// `true` or `T::maybe` returns `true`. This may not work in the following
+/// example:
+///
+/// ```
+/// # use laps::{prelude::*, span::Result, ast::OptPrefix, token::{Tokenizer, TokenBuffer}};
+/// # struct Prefix;
+/// # impl<TS> Parse<TS> for Prefix
+/// # where
+/// #   TS: TokenStream,
+/// # {
+/// #   fn parse(_: &mut TS) -> Result<Self> { Ok(Self) }
+/// #   fn maybe(_: &mut TS) -> Result<bool> { Ok(true) }
+/// # }
+/// # struct Item1;
+/// # impl<TS> Parse<TS> for Item1
+/// # where
+/// #   TS: TokenStream,
+/// # {
+/// #   fn parse(_: &mut TS) -> Result<Self> { Ok(Self) }
+/// #   fn maybe(_: &mut TS) -> Result<bool> { Ok(true) }
+/// # }
+/// # struct Item2;
+/// # impl<TS> Parse<TS> for Item2
+/// # where
+/// #   TS: TokenStream,
+/// # {
+/// #   fn parse(_: &mut TS) -> Result<Self> { Ok(Self) }
+/// #   fn maybe(_: &mut TS) -> Result<bool> { Ok(true) }
+/// # }
+/// # struct Lexer;
+/// # impl Tokenizer for Lexer {
+/// #   type Token = ();
+/// #   fn next_token(&mut self) -> Result<()> { Ok(()) }
+/// # }
+/// # let mut tokens = TokenBuffer::new(Lexer);
+/// # impl<TS> Parse<TS> for Items
+/// # where
+/// #   TS: TokenStream,
+/// # {
+/// #   fn parse(_: &mut TS) -> Result<Self> { Ok(Self::Item1(OptPrefix(None, Item1))) }
+/// #   fn maybe(_: &mut TS) -> Result<bool> { Ok(true) }
+/// # }
+/// enum Items {
+///   Item1(OptPrefix<Prefix, Item1>),
+///   Item2(OptPrefix<Prefix, Item2>),
+/// }
+///
+/// let items: Items = tokens.parse().unwrap();
+/// ```
+///
+/// The `items` may always be `Items::Item1` whether the input is
+/// `Prefix Item1` or `Prefix Item2` with a naive implementation of trait
+/// `Parse` for `Items` (like `#[derive(Parse)]`).
+///
+/// For more precise implementation of `maybe` method, please use
+/// [`OptTokenPrefix`] if possible.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct OptPrefix<P, T>(pub Option<P>, pub T);
+
+impl<TS, P, T> Parse<TS> for OptPrefix<P, T>
+where
+  TS: TokenStream,
+  P: Parse<TS>,
+  T: Parse<TS>,
+{
+  fn parse(tokens: &mut TS) -> Result<Self> {
+    Ok(Self(tokens.parse()?, tokens.parse()?))
+  }
+
+  fn maybe(tokens: &mut TS) -> Result<bool> {
+    Ok(P::maybe(tokens)? || T::maybe(tokens)?)
+  }
+}
+
+impl<P, T> Spanned for OptPrefix<P, T>
+where
+  P: Spanned,
+  T: Spanned,
+{
+  fn span(&self) -> Span {
+    match &self.0 {
+      Some(p) => p.span().into_end_updated(self.1.span()),
+      None => self.1.span(),
+    }
+  }
+}
+
+/// An AST `T` with an optional prefix `P`, like `T` or `P T`.
+///
+/// The `maybe` method of AST treats `P` as a single token, and returns
+/// `true` if both `P::maybe` returns `true` and `T::maybe` returns `true`,
+/// otherwise returns the result of `T::maybe`.
+///
+/// # Notes
+///
+/// Do not use this AST type if `P` is not a single token.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct OptTokenPrefix<P, T>(pub Option<P>, pub T);
+
+impl<TS, P, T> Parse<TS> for OptTokenPrefix<P, T>
+where
+  TS: TokenStream,
+  P: Parse<TS>,
+  T: Parse<TS>,
+{
+  fn parse(tokens: &mut TS) -> Result<Self> {
+    Ok(Self(tokens.parse()?, tokens.parse()?))
+  }
+
+  fn maybe(tokens: &mut TS) -> Result<bool> {
+    if P::maybe(tokens)? {
+      let token = tokens.next_token()?;
+      let result = T::maybe(tokens)?;
+      tokens.unread(token);
+      Ok(result)
+    } else {
+      T::maybe(tokens)
+    }
+  }
+}
+
+impl<P, T> Spanned for OptTokenPrefix<P, T>
+where
+  P: Spanned,
+  T: Spanned,
+{
+  fn span(&self) -> Span {
+    match &self.0 {
+      Some(p) => p.span().into_end_updated(self.1.span()),
+      None => self.1.span(),
+    }
+  }
+}
