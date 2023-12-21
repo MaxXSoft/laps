@@ -87,7 +87,7 @@ impl Parse for TokenAstArm {
     // parse if guard
     let guard = if brace_content.peek(Token![if]) {
       brace_content.parse::<Token![if]>()?;
-      Some(input.parse()?)
+      Some(brace_content.parse()?)
     } else {
       None
     };
