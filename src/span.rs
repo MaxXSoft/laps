@@ -630,6 +630,58 @@ where
   }
 }
 
+impl<T> Spanned for (T,)
+where
+  T: Spanned,
+{
+  fn span(&self) -> Span {
+    self.0.span()
+  }
+}
+
+/// Helper macro for implementing [`Spanned`] trait for tuples.
+macro_rules! impl_spanned_for_tuple {
+  ($first:ident $last:ident $($ts:ident)*) => {
+    impl<$first, $($ts,)* $last> Spanned for ($first, $($ts,)* $last)
+    where
+      $first: Spanned,
+      $last: Spanned,
+    {
+      fn span(&self) -> Span {
+        #[allow(non_snake_case, unused_variables)]
+        let ($first, $($ts,)* $last) = self;
+        $first.span().into_end_updated($last.span())
+      }
+    }
+  };
+}
+
+impl_spanned_for_tuple!(A B);
+impl_spanned_for_tuple!(A B C);
+impl_spanned_for_tuple!(A B C D);
+impl_spanned_for_tuple!(A B C D E);
+impl_spanned_for_tuple!(A B C D E F);
+impl_spanned_for_tuple!(A B C D E F G);
+impl_spanned_for_tuple!(A B C D E F G H);
+impl_spanned_for_tuple!(A B C D E F G H I);
+impl_spanned_for_tuple!(A B C D E F G H I J);
+impl_spanned_for_tuple!(A B C D E F G H I J K);
+impl_spanned_for_tuple!(A B C D E F G H I J K L);
+impl_spanned_for_tuple!(A B C D E F G H I J K L M);
+impl_spanned_for_tuple!(A B C D E F G H I J K L M N);
+impl_spanned_for_tuple!(A B C D E F G H I J K L M N O);
+impl_spanned_for_tuple!(A B C D E F G H I J K L M N O P);
+impl_spanned_for_tuple!(A B C D E F G H I J K L M N O P Q);
+impl_spanned_for_tuple!(A B C D E F G H I J K L M N O P Q R);
+impl_spanned_for_tuple!(A B C D E F G H I J K L M N O P Q R S);
+impl_spanned_for_tuple!(A B C D E F G H I J K L M N O P Q R S T);
+impl_spanned_for_tuple!(A B C D E F G H I J K L M N O P Q R S T U);
+impl_spanned_for_tuple!(A B C D E F G H I J K L M N O P Q R S T U V);
+impl_spanned_for_tuple!(A B C D E F G H I J K L M N O P Q R S T U V W);
+impl_spanned_for_tuple!(A B C D E F G H I J K L M N O P Q R S T U V W X);
+impl_spanned_for_tuple!(A B C D E F G H I J K L M N O P Q R S T U V W X Y);
+impl_spanned_for_tuple!(A B C D E F G H I J K L M N O P Q R S T U V W X Y Z);
+
 /// Trait for updating a location with a specific character type.
 pub trait LocationUpdate {
   /// Updates the given location with the current character.
