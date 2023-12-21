@@ -68,3 +68,49 @@ where
     Ok(true)
   }
 }
+
+macro_rules! impl_for_tuple {
+  ($t:ident $($ts:ident)*) => {
+    impl<TS, $t $(,$ts)*> Parse<TS> for ($t, $($ts,)*)
+    where
+      TS: TokenStream,
+      $t: Parse<TS>,
+      $($ts: Parse<TS>,)*
+    {
+      fn parse(tokens: &mut TS) -> Result<Self> {
+        Ok((tokens.parse()?, $(tokens.parse::<$ts>()?,)*))
+      }
+
+      fn maybe(tokens: &mut TS) -> Result<bool> {
+        $t::maybe(tokens)
+      }
+    }
+  };
+}
+
+impl_for_tuple!(A);
+impl_for_tuple!(A B);
+impl_for_tuple!(A B C);
+impl_for_tuple!(A B C D);
+impl_for_tuple!(A B C D E);
+impl_for_tuple!(A B C D E F);
+impl_for_tuple!(A B C D E F G);
+impl_for_tuple!(A B C D E F G H);
+impl_for_tuple!(A B C D E F G H I);
+impl_for_tuple!(A B C D E F G H I J);
+impl_for_tuple!(A B C D E F G H I J K);
+impl_for_tuple!(A B C D E F G H I J K L);
+impl_for_tuple!(A B C D E F G H I J K L M);
+impl_for_tuple!(A B C D E F G H I J K L M N);
+impl_for_tuple!(A B C D E F G H I J K L M N O);
+impl_for_tuple!(A B C D E F G H I J K L M N O P);
+impl_for_tuple!(A B C D E F G H I J K L M N O P Q);
+impl_for_tuple!(A B C D E F G H I J K L M N O P Q R);
+impl_for_tuple!(A B C D E F G H I J K L M N O P Q R S);
+impl_for_tuple!(A B C D E F G H I J K L M N O P Q R S T);
+impl_for_tuple!(A B C D E F G H I J K L M N O P Q R S T U);
+impl_for_tuple!(A B C D E F G H I J K L M N O P Q R S T U V);
+impl_for_tuple!(A B C D E F G H I J K L M N O P Q R S T U V W);
+impl_for_tuple!(A B C D E F G H I J K L M N O P Q R S T U V W X);
+impl_for_tuple!(A B C D E F G H I J K L M N O P Q R S T U V W X Y);
+impl_for_tuple!(A B C D E F G H I J K L M N O P Q R S T U V W X Y Z);
