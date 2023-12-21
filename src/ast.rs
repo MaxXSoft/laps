@@ -38,7 +38,7 @@ macro_rules! impl_into_iterator {
 /// like `T`, `T T`, `T T T`, ...
 ///
 /// The inner [`Vec`] is guaranteed not to be empty.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NonEmptySeq<T>(pub Vec<T>);
 impl_into_iterator!(NonEmptySeq<T>, T);
 
@@ -82,7 +82,7 @@ where
 /// like `<empty>`, `T`, `T S T`, `T S T S T`, ...
 ///
 /// The delimiter will not be stored.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SepSeq<T, S>(pub Vec<T>, PhantomData<S>);
 impl_into_iterator!(SepSeq<T, S>, T);
 
@@ -116,7 +116,7 @@ where
 ///
 /// The delimiter will not be stored, and the inner [`Vec`]
 /// is guaranteed not to be empty.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NonEmptySepSeq<T, S>(pub Vec<T>, PhantomData<S>);
 impl_into_iterator!(NonEmptySepSeq<T, S>, T);
 
@@ -162,7 +162,7 @@ where
 /// like `T`, `T S T`, `T S T S T`, ...
 ///
 /// The delimiter will be stored.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum NonEmptySepList<T, S> {
   /// One element.
   One(T),
