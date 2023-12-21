@@ -69,6 +69,7 @@ where
   }
 }
 
+/// Helper macro for implementing [`Parse`] trait for tuples.
 macro_rules! impl_for_tuple {
   ($t:ident $($ts:ident)*) => {
     impl<TS, $t $(,$ts)*> Parse<TS> for ($t, $($ts,)*)
