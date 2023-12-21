@@ -8,6 +8,10 @@ All notable changes to the `laps` will be documented in this file.
 
 * Improve performance of minimizing DFA.
 
+### Fixed
+
+* Issue about parsing if-guard in `token_ast`.
+
 ## 0.1.5 - 2023-12-17
 
 ### Added
