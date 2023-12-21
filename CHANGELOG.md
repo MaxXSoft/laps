@@ -2,6 +2,12 @@
 
 All notable changes to the `laps` will be documented in this file.
 
+## Unreleased
+
+### Changed
+
+* Improve performance of minimizing DFA.
+
 ## 0.1.5 - 2023-12-17
 
 ### Added
