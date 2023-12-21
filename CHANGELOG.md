@@ -6,7 +6,7 @@ All notable changes to the `laps` will be documented in this file.
 
 ### Added
 
-* Implement `Parse` trait for tuples.
+* Implement `Parse` and `Spanned` trait for tuples.
 * Add AST type `OptPrefix` and `OptTokenPrefix`.
 
 ### Changed
