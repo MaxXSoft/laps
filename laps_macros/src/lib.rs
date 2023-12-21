@@ -213,6 +213,7 @@ pub fn token_kind(attr: TokenStream, item: TokenStream) -> TokenStream {
 ///     // pattern, and prompt for error messages
 ///     [str] => { kind: TokenKind::Str(_), prompt: "string literal" },
 ///     [int] => { kind: TokenKind::Int(_), prompt: "integer literal" },
+///     [0] => { kind: TokenKind::Int(i) if i == 0, prompt: "zero" },
 ///     // use default prompt of the token kind
 ///     [+] => { kind: TokenKind::Other('+') },
 ///     [-] => { kind: TokenKind::Other('-') },
