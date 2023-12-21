@@ -209,9 +209,14 @@ where
 pub type SepList<T, S> = Option<NonEmptySepList<T, S>>;
 
 /// An AST `T` quoted by AST `L` and AST `R`, like `L T R`.
+#[deprecated(
+  since = "0.1.6",
+  note = "will be removed in 0.2.0, please use tuple `(L, T, R)` instead"
+)]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Quoted<L, T, R>(pub L, pub T, pub R);
 
+#[allow(deprecated)]
 impl<TS, L, T, R> Parse<TS> for Quoted<L, T, R>
 where
   TS: TokenStream,
@@ -228,6 +233,7 @@ where
   }
 }
 
+#[allow(deprecated)]
 impl<L, T, R> Spanned for Quoted<L, T, R>
 where
   L: Spanned,
