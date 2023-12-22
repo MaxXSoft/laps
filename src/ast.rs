@@ -145,15 +145,88 @@ where
   T: Spanned,
 {
   fn span(&self) -> Span {
+    let span = self.0.first().unwrap().span();
     if self.0.len() == 1 {
-      self.0.first().unwrap().span()
+      span
     } else {
-      self
-        .0
-        .first()
-        .unwrap()
-        .span()
-        .into_end_updated(self.0.last().unwrap().span())
+      span.into_end_updated(self.0.last().unwrap().span())
+    }
+  }
+}
+
+/// A sequence of AST `T`, separated by AST `S`, ending with an optional `S`,
+/// like `<empty>`, `T`, `T S`, `T S T`, `T S T S`, `T S T S T`, ...
+///
+/// The delimiter will not be stored.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct OptSepSeq<T, S>(pub Vec<T>, PhantomData<S>);
+impl_into_iterator!(OptSepSeq<T, S>, T);
+
+impl<TS, T, S> Parse<TS> for OptSepSeq<T, S>
+where
+  TS: TokenStream,
+  T: Parse<TS>,
+  S: Parse<TS>,
+{
+  fn parse(tokens: &mut TS) -> Result<Self> {
+    let mut ts = Vec::new();
+    while T::maybe(tokens)? {
+      ts.push(tokens.parse()?);
+      if !S::maybe(tokens)? {
+        break;
+      }
+      S::parse(tokens)?;
+    }
+    Ok(Self(ts, PhantomData))
+  }
+
+  fn maybe(_: &mut TS) -> Result<bool> {
+    Ok(true)
+  }
+}
+
+/// A non-empty sequence of AST `T`, separated by AST `S`, ending with an
+/// optional `S`, like `T`, `T S`, `T S T`, `T S T S`, `T S T S T`, ...
+///
+/// The delimiter will not be stored, and the inner [`Vec`]
+/// is guaranteed not to be empty.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct NonEmptyOptSepSeq<T, S>(pub Vec<T>, PhantomData<S>);
+impl_into_iterator!(NonEmptyOptSepSeq<T, S>, T);
+
+impl<TS, T, S> Parse<TS> for NonEmptyOptSepSeq<T, S>
+where
+  TS: TokenStream,
+  T: Parse<TS>,
+  S: Parse<TS>,
+{
+  fn parse(tokens: &mut TS) -> Result<Self> {
+    let mut ts = vec![tokens.parse()?];
+    while S::maybe(tokens)? {
+      S::parse(tokens)?;
+      if !T::maybe(tokens)? {
+        break;
+      }
+      ts.push(tokens.parse()?);
+    }
+    Ok(Self(ts, PhantomData))
+  }
+
+  fn maybe(tokens: &mut TS) -> Result<bool> {
+    T::maybe(tokens)
+  }
+}
+
+impl<T, S> Spanned for NonEmptyOptSepSeq<T, S>
+where
+  T: Spanned,
+{
+  fn span(&self) -> Span {
+    let span = self.0.first().unwrap().span();
+    if self.0.len() == 1 {
+      span
+    } else {
+      span.into_end_updated(self.0.last().unwrap().span())
     }
   }
 }
