@@ -8,6 +8,7 @@ All notable changes to the `laps` will be documented in this file.
 
 * Implement `Parse` and `Spanned` trait for tuples.
 * Add AST type `OptPrefix`, `OptTokenPrefix`, `OptSepSeq` and `NonEmptyOptSepSeq`.
+* Attribute `spanned_start` and `spanned_end` for derive macro `Spanned`.
 
 ### Changed
 
