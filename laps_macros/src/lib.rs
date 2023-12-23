@@ -26,7 +26,16 @@ pub fn derive_parse(item: TokenStream) -> TokenStream {
 }
 
 /// Generates the `Spanned` trait implementation.
-#[proc_macro_derive(Spanned)]
+///
+/// # Helper Attributes
+///
+/// * `#[spanned_start(type)]`: can be applied to structs or enum variants
+///   of length greater than 1, specifies that the struct or variant starts
+///   with the given type. The `type` can only be `Option` or `Vec`.
+/// * `#[spanned_end(type)]`: same as `spanned_end`, but specifies that the
+///   struct or variant ends with the given type. This attribute can not be
+///   used with `spanned_start`.
+#[proc_macro_derive(Spanned, attributes(spanned_start, spanned_end))]
 pub fn derive_spanned(item: TokenStream) -> TokenStream {
   result_to_tokens!(spanned::derive_spanned(item))
 }
