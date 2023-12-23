@@ -204,8 +204,8 @@ where
       };
       (
         quote!(match #first {
-          Some(x) => x.span(),
-          None => #first1.span(),
+          std::option::Option::Some(x) => x.span(),
+          std::option::Option::None => #first1.span(),
         }),
         quote!(#last1.span()),
       )
@@ -218,8 +218,8 @@ where
       (
         quote!(#first0.span()),
         quote!(match #last {
-          Some(x) => x.span(),
-          None => #last0.span(),
+          std::option::Option::Some(x) => x.span(),
+          std::option::Option::None => #last0.span(),
         }),
       )
     }
