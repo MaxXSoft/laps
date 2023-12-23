@@ -471,20 +471,12 @@ struct FuncCall {
   _rpr: Token![rpr],
 }
 
-#[derive(Parse, Debug)]
+#[derive(Parse, Spanned, Debug)]
 #[token(Token)]
+#[spanned_end(Option)]
 struct Access {
   ident: Token![ident],
   index: Option<Index>,
-}
-
-impl Spanned for Access {
-  fn span(&self) -> laps::span::Span {
-    match &self.index {
-      Some(dim) => self.ident.span().into_end_updated(dim.span()),
-      None => self.ident.span(),
-    }
-  }
 }
 
 #[derive(Parse, Spanned, Debug)]
