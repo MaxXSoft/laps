@@ -163,18 +163,19 @@ fn gen_fields_extract<T>(
 where
   T: ToTokens,
 {
-  let (exts, ids): (TokenStream2, _) = if fields.len() < 4 {
-    fields.iter().enumerate().map(gen_field_extract).unzip()
+  if fields.len() < 4 {
+    let (exts, ids): (TokenStream2, _) = fields.iter().enumerate().map(gen_field_extract).unzip();
+    (quote!(#name { #exts }), ids)
   } else {
     let iter = fields.iter().enumerate();
-    iter
+    let (exts, ids): (TokenStream2, _) = iter
       .clone()
       .take(2)
       .chain(iter.skip(fields.len() - 2))
       .map(gen_field_extract)
-      .unzip()
-  };
-  (quote!(#name { #exts }), ids)
+      .unzip();
+    (quote!(#name { #exts .. }), ids)
+  }
 }
 
 /// Generates the extraction of the given field.
