@@ -617,7 +617,7 @@ impl fmt::Display for FileType {
 
 /// Trait for getting span from objects.
 pub trait Spanned {
-  /// Returns a reference to the span of the current object.
+  /// Returns the span of the current object.
   fn span(&self) -> Span;
 }
 
