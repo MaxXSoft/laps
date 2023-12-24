@@ -473,9 +473,9 @@ struct FuncCall {
 
 #[derive(Parse, Spanned, Debug)]
 #[token(Token)]
-#[spanned_end(Option)]
 struct Access {
   ident: Token![ident],
+  #[try_span]
   index: Option<Index>,
 }
 
