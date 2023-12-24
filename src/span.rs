@@ -682,6 +682,42 @@ impl_spanned_for_tuple!(A B C D E F G H I J K L M N O P Q R S T U V W X);
 impl_spanned_for_tuple!(A B C D E F G H I J K L M N O P Q R S T U V W X Y);
 impl_spanned_for_tuple!(A B C D E F G H I J K L M N O P Q R S T U V W X Y Z);
 
+/// Trait for getting span from objects that may not contain a span.
+pub trait TrySpan {
+  /// Returns the span of the current object, or [`None`]
+  /// if the current object does not contain a span.
+  fn try_span(&self) -> Option<Span>;
+}
+
+impl<T> TrySpan for T
+where
+  T: Spanned,
+{
+  fn try_span(&self) -> Option<Span> {
+    Some(self.span())
+  }
+}
+
+impl<T> TrySpan for Option<T>
+where
+  T: TrySpan,
+{
+  fn try_span(&self) -> Option<Span> {
+    self.as_ref().and_then(|x| x.try_span())
+  }
+}
+
+impl<T> TrySpan for Vec<T>
+where
+  T: TrySpan,
+{
+  fn try_span(&self) -> Option<Span> {
+    let first = self.iter().find_map(|x| x.try_span())?;
+    let last = self.iter().rev().find_map(|x| x.try_span()).unwrap();
+    Some(first.into_end_updated(last))
+  }
+}
+
 /// Trait for updating a location with a specific character type.
 pub trait LocationUpdate {
   /// Updates the given location with the current character.
