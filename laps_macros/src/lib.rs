@@ -27,15 +27,86 @@ pub fn derive_parse(item: TokenStream) -> TokenStream {
 
 /// Generates the `Spanned` trait implementation.
 ///
-/// # Helper Attributes
+/// # `#[try_span]`
 ///
-/// * `#[spanned_start(type)]`: can be applied to structs or enum variants
-///   of length greater than 1, specifies that the struct or variant starts
-///   with the given type. The `type` can only be `Option` or `Vec`.
-/// * `#[spanned_end(type)]`: same as `spanned_end`, but specifies that the
-///   struct or variant ends with the given type. This attribute can not be
-///   used with `spanned_start`.
-#[proc_macro_derive(Spanned, attributes(spanned_start, spanned_end))]
+/// Tells the macro that a field implements the `TrySpan` trait.
+/// This may be helpful when:
+///
+/// ```
+/// # use laps_macros::Spanned;
+/// # mod laps {
+/// #   pub mod span {
+/// #     pub type Result<T> = std::result::Result<T, ()>;
+/// #     pub struct Span;
+/// #     impl Span {
+/// #       pub fn into_end_updated(self, span: Self) -> Self { todo!() }
+/// #     }
+/// #     pub trait Spanned {
+/// #       fn span(&self) -> Span;
+/// #     }
+/// #     pub trait TrySpan {
+/// #       fn try_span(&self) -> Option<Span>;
+/// #     }
+/// #     impl<T> TrySpan for T where T: Spanned {
+/// #       fn try_span(&self) -> Option<Span> { todo!() }
+/// #     }
+/// #     impl<T> TrySpan for Option<T> where T: TrySpan {
+/// #       fn try_span(&self) -> Option<Span> { todo!() }
+/// #     }
+/// #   }
+/// # }
+/// # struct Atom;
+/// # impl laps::span::Spanned for Atom {
+/// #   fn span(&self) -> laps::span::Span { todo!() }
+/// # }
+/// # type ReturnKeyword = Atom;
+/// # type Value = Atom;
+/// #[derive(Spanned)]
+/// struct Return {
+///   ret: ReturnKeyword,
+///   #[try_span]
+///   value: Option<Value>,
+/// }
+/// ```
+///
+/// The following deriving fails to compile:
+///
+/// ```compile_fail
+/// # use laps_macros::Spanned;
+/// # mod laps {
+/// #   pub mod span {
+/// #     pub type Result<T> = std::result::Result<T, ()>;
+/// #     pub struct Span;
+/// #     impl Span {
+/// #       pub fn into_end_updated(self, span: Self) -> Self { todo!() }
+/// #     }
+/// #     pub trait Spanned {
+/// #       fn span(&self) -> Span;
+/// #     }
+/// #     pub trait TrySpan {
+/// #       fn try_span(&self) -> Option<Span>;
+/// #     }
+/// #     impl<T> TrySpan for T where T: Spanned {
+/// #       fn try_span(&self) -> Option<Span> { todo!() }
+/// #     }
+/// #     impl<T> TrySpan for Option<T> where T: TrySpan {
+/// #       fn try_span(&self) -> Option<Span> { todo!() }
+/// #     }
+/// #   }
+/// # }
+/// # struct Atom;
+/// # impl laps::span::Spanned for Atom {
+/// #   fn span(&self) -> laps::span::Span { todo!() }
+/// # }
+/// # type ReturnKeyword = Atom;
+/// # type Value = Atom;
+/// #[derive(Spanned)]
+/// struct Return {
+///   ret: ReturnKeyword,
+///   value: Option<Value>,
+/// }
+/// ```
+#[proc_macro_derive(Spanned, attributes(try_span))]
 pub fn derive_spanned(item: TokenStream) -> TokenStream {
   result_to_tokens!(spanned::derive_spanned(item))
 }
