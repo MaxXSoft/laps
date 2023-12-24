@@ -1,7 +1,7 @@
-use crate::utils::return_error;
+use crate::utils::{error, return_error};
 use proc_macro::TokenStream;
 use proc_macro2::{Ident, Literal, TokenStream as TokenStream2};
-use quote::{quote, ToTokens};
+use quote::quote;
 use syn::{
   punctuated::Punctuated, spanned::Spanned, Attribute, Data, DataEnum, DataStruct, DeriveInput,
   Field, Fields, Meta, Result, Token, Variant,
@@ -12,24 +12,18 @@ pub fn derive_spanned(item: TokenStream) -> Result<TokenStream> {
   // parse input tokens
   let input: DeriveInput = syn::parse(item)?;
   // generate trait implementation
-  let fs = FieldSpecifier::new(&input.attrs)?;
   let name = &input.ident;
   let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
   let body = match &input.data {
     Data::Struct(DataStruct {
       fields: Fields::Named(f),
       ..
-    }) if !f.named.is_empty() => gen_struct_body(fs, &f.named)?,
+    }) if !f.named.is_empty() => gen_struct_body(&f.named)?,
     Data::Struct(DataStruct {
       fields: Fields::Unnamed(f),
       ..
-    }) if !f.unnamed.is_empty() => gen_struct_body(fs, &f.unnamed)?,
-    Data::Enum(DataEnum { variants, .. }) if !variants.is_empty() => {
-      if fs.is_some() {
-        return_error!("attribute `spanned_start`/`spanned_end` should be applied to enum variants");
-      }
-      gen_enum_body(variants)?
-    }
+    }) if !f.unnamed.is_empty() => gen_struct_body(&f.unnamed)?,
+    Data::Enum(DataEnum { variants, .. }) if !variants.is_empty() => gen_enum_body(variants)?,
     _ => {
       return_error!("`#[derive(Spanned)]` only supports non-unit and non-empty structs and enums");
     }
@@ -38,73 +32,16 @@ pub fn derive_spanned(item: TokenStream) -> Result<TokenStream> {
     impl #impl_generics laps::span::Spanned
     for #name #ty_generics #where_clause {
       fn span(&self) -> laps::span::Span {
+        use laps::span::TrySpan;
         #body
       }
     }
   }))
 }
 
-/// Field specifier, corresponds to attribute `spanned_start` or `spanned_end`.
-#[derive(Clone, Copy)]
-enum FieldSpecifier {
-  StartsWith(SpecifierType),
-  EndsWith(SpecifierType),
-}
-
-impl FieldSpecifier {
-  /// Parses the field specifier from the given attributes.
-  fn new(attrs: &[Attribute]) -> Result<Option<Self>> {
-    let mut fs = None;
-    for attr in attrs {
-      if let Meta::List(l) = &attr.meta {
-        let is_start = l.path.is_ident("spanned_start");
-        if !is_start && !l.path.is_ident("spanned_end") {
-          continue;
-        }
-        if fs.is_some() {
-          return_error!(
-            l.span(),
-            "attribute `spanned_start/spanned_end` is bound more than once"
-          );
-        }
-        if is_start {
-          fs = Some(Self::StartsWith(SpecifierType::new(l.tokens.clone())?));
-        } else {
-          fs = Some(Self::EndsWith(SpecifierType::new(l.tokens.clone())?));
-        }
-      }
-    }
-    Ok(fs)
-  }
-}
-
-/// Type of field specifier.
-#[derive(Clone, Copy)]
-enum SpecifierType {
-  Option,
-  Vec,
-}
-
-impl SpecifierType {
-  /// Parses the type of field specifier from the given token stream.
-  fn new(tokens: TokenStream2) -> Result<Self> {
-    let ident: Ident = syn::parse2(tokens)?;
-    if ident == "Option" {
-      Ok(Self::Option)
-    } else if ident == "Vec" {
-      Ok(Self::Vec)
-    } else {
-      return_error!(ident.span(), "supports only `Option` or `Vec`");
-    }
-  }
-}
-
 /// Generates body of the `span` method for struct fields.
-fn gen_struct_body(
-  fs: Option<FieldSpecifier>,
-  fields: &Punctuated<Field, Token![,]>,
-) -> Result<TokenStream2> {
-  let arm = gen_fields_span(fs, quote!(Self), fields)?;
+fn gen_struct_body(fields: &Punctuated<Field, Token![,]>) -> Result<TokenStream2> {
+  let arm = gen_fields_span(quote!(Self), fields)?;
   Ok(quote!(match self { #arm }))
 }
 
@@ -112,12 +49,11 @@ fn gen_struct_body(
 fn gen_enum_body(variants: &Punctuated<Variant, Token![,]>) -> Result<TokenStream2> {
   let mut arms = TokenStream2::new();
   for variant in variants {
-    let fs = FieldSpecifier::new(&variant.attrs)?;
     let name = &variant.ident;
     let name = quote!(Self::#name);
     let arm = match &variant.fields {
-      Fields::Named(f) if !f.named.is_empty() => gen_fields_span(fs, name, &f.named)?,
-      Fields::Unnamed(f) if !f.unnamed.is_empty() => gen_fields_span(fs, name, &f.unnamed)?,
+      Fields::Named(f) if !f.named.is_empty() => gen_fields_span(name, &f.named)?,
+      Fields::Unnamed(f) if !f.unnamed.is_empty() => gen_fields_span(name, &f.unnamed)?,
       _ => return_error!(
         variant.span(),
         "`#[derive(Spanned)]` only supports non-unit and non-empty variants in enums"
@@ -129,101 +65,73 @@ fn gen_enum_body(variants: &Punctuated<Variant, Token![,]>) -> Result<TokenStrea
 }
 
 /// Generates span of the given fields.
-fn gen_fields_span<T>(
-  fs: Option<FieldSpecifier>,
-  name: T,
+fn gen_fields_span(
+  name: TokenStream2,
   fields: &Punctuated<Field, Token![,]>,
-) -> Result<TokenStream2>
-where
-  T: ToTokens,
-{
-  if fs.is_some() && fields.len() == 1 {
-    return_error!(
-      fields.span(),
-      "attribute `spanned_start`/`spanned_end` should be applied to \
-      structs/enum variants of length greater than one"
-    );
-  }
-  let (exts, ids) = gen_fields_extract(name, fields);
-  let span = match &ids[..] {
-    [] => unreachable!(),
-    [id] => quote!(#id.span()),
-    [first0, last1] => gen_span(fs, first0, last1, first0, last1),
-    [first0, mid, last1] => gen_span(fs, first0, mid, mid, last1),
-    [first0, first1, .., last0, last1] => gen_span(fs, first0, first1, last0, last1),
-  };
-  Ok(quote!(#exts => #span,))
+) -> Result<TokenStream2> {
+  let (exts, ts_ids) = gen_fields_extract(name, fields)?;
+  let first = gen_first_span(ts_ids.iter())?;
+  let last = gen_first_span(ts_ids.iter().rev())?;
+  Ok(quote!(#exts => #first.into_end_updated(#last),))
 }
 
 /// Generates the extraction of the given fields.
-fn gen_fields_extract<T>(
-  name: T,
+fn gen_fields_extract(
+  name: TokenStream2,
   fields: &Punctuated<Field, Token![,]>,
-) -> (TokenStream2, Vec<Ident>)
-where
-  T: ToTokens,
-{
-  if fields.len() < 4 {
-    let (exts, ids): (TokenStream2, _) = fields.iter().enumerate().map(gen_field_extract).unzip();
-    (quote!(#name { #exts }), ids)
-  } else {
-    let iter = fields.iter().enumerate();
-    let (exts, ids): (TokenStream2, _) = iter
-      .clone()
-      .take(2)
-      .chain(iter.skip(fields.len() - 2))
-      .map(gen_field_extract)
-      .unzip();
-    (quote!(#name { #exts .. }), ids)
+) -> Result<(TokenStream2, Vec<(bool, Ident)>)> {
+  let mut exts = TokenStream2::new();
+  let mut ts_ids = Vec::new();
+  for (i, field) in fields.iter().enumerate() {
+    let ts = has_try_span(&field.attrs)?;
+    let span = field.span();
+    let (ext, ts_id) = if let Some(id) = &field.ident {
+      let new_id = Ident::new(&format!("_{id}"), span);
+      (quote!(#id: #new_id,), (ts, new_id))
+    } else {
+      let index = Literal::usize_unsuffixed(i);
+      let id = Ident::new(&format!("_f{i}"), span);
+      (quote!(#index: #id,), (ts, id))
+    };
+    exts.extend(ext);
+    ts_ids.push(ts_id);
   }
+  Ok((quote!(#name { #exts }), ts_ids))
 }
 
-/// Generates the extraction of the given field.
-fn gen_field_extract((index, field): (usize, &Field)) -> (TokenStream2, Ident) {
-  let span = field.span();
-  if let Some(id) = &field.ident {
-    let new_id = Ident::new(&format!("_{id}"), span);
-    (quote!(#id: #new_id,), new_id)
-  } else {
-    let index = Literal::usize_unsuffixed(index);
-    let id = Ident::new(&format!("_f{index}"), span);
-    (quote!(#index: #id,), id)
+/// Returns `true` if the given attributes contains `try_span`.
+fn has_try_span(attrs: &[Attribute]) -> Result<bool> {
+  let mut result = false;
+  for attr in attrs {
+    match &attr.meta {
+      Meta::Path(path) if path.is_ident("try_span") => {
+        if result {
+          return_error!(attr.span(), "attribute `try_span` is bound more than once");
+        }
+        result = true;
+      }
+      _ => {}
+    }
   }
+  Ok(result)
 }
 
-/// Generates span of the given identifiers by the given field specifier.
-fn gen_span<T>(fs: Option<FieldSpecifier>, first0: T, first1: T, last0: T, last1: T) -> TokenStream2
+/// Generates the first span of the given iterator of `try_span` flag
+/// and identifier.
+fn gen_first_span<'a, I>(mut ts_ids: I) -> Result<TokenStream2>
 where
-  T: ToTokens,
+  I: Iterator<Item = &'a (bool, Ident)>,
 {
-  let (first, last) = match fs {
-    Some(FieldSpecifier::StartsWith(st)) => {
-      let first = match st {
-        SpecifierType::Option => quote!(&#first0),
-        SpecifierType::Vec => quote!(#first0.first()),
-      };
-      (
-        quote!(match #first {
-          std::option::Option::Some(x) => x.span(),
-          std::option::Option::None => #first1.span(),
-        }),
-        quote!(#last1.span()),
-      )
-    }
-    Some(FieldSpecifier::EndsWith(st)) => {
-      let last = match st {
-        SpecifierType::Option => quote!(&#last1),
-        SpecifierType::Vec => quote!(#last1.last()),
-      };
-      (
-        quote!(#first0.span()),
-        quote!(match #last {
-          std::option::Option::Some(x) => x.span(),
-          std::option::Option::None => #last0.span(),
-        }),
-      )
-    }
-    None => (quote!(#first0.span()), quote!(#last1.span())),
-  };
-  quote!(#first.into_end_updated(#last))
+  let (ts, id) = ts_ids.next().ok_or(error!(
+    "attribute `try_span` can not be applied to all the fields"
+  ))?;
+  Ok(if *ts {
+    let span = gen_first_span(ts_ids)?;
+    quote!(match #id.try_span() {
+      std::option::Option::Some(span) => span,
+      std::option::Option::None => #span,
+    })
+  } else {
+    quote!(#id.span())
+  })
 }
