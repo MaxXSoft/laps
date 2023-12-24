@@ -1,13 +1,13 @@
 //! Some common predefined AST structures that can be used in parser.
 
 use crate::parse::Parse;
-use crate::span::{Result, Span, Spanned};
+use crate::span::{Result, Span, Spanned, TrySpan};
 use crate::token::TokenStream;
 use std::marker::PhantomData;
 use std::slice::{Iter, IterMut};
 use std::vec::IntoIter;
 
-/// Implements `IntoIterator` trait for the given wrapper type.
+/// Implements [`IntoIterator`] trait for the given wrapper type.
 macro_rules! impl_into_iterator {
   ($t:ident<$($generic:ident),+>, $item:ident) => {
     impl<'a, $($generic),+> IntoIterator for &'a $t<$($generic),+> {
@@ -111,6 +111,15 @@ where
   }
 }
 
+impl<T, S> TrySpan for SepSeq<T, S>
+where
+  T: TrySpan,
+{
+  fn try_span(&self) -> Option<Span> {
+    self.0.try_span()
+  }
+}
+
 /// A non-empty sequence of AST `T`, separated by AST `S`,
 /// like `T`, `T S T`, `T S T S T`, ...
 ///
@@ -182,6 +191,15 @@ where
 
   fn maybe(_: &mut TS) -> Result<bool> {
     Ok(true)
+  }
+}
+
+impl<T, S> TrySpan for OptSepSeq<T, S>
+where
+  T: TrySpan,
+{
+  fn try_span(&self) -> Option<Span> {
+    self.0.try_span()
   }
 }
 
