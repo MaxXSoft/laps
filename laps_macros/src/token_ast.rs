@@ -173,6 +173,7 @@ fn gen_ast_defs(input: &TokenAst) -> Result<(TokenStream2, Vec<TokenStream2>)> {
         Some(prompt) => quote! {
           let token = tokens.next_token()?;
           match &token.kind {
+            #[allow(unused_parens)]
             #pat #if_guard => std::result::Result::Ok(Self(token)),
             _ => laps::return_error!(token.span, std::concat!("expected ", #prompt, ", found {}"), token),
           }
@@ -222,7 +223,8 @@ fn gen_ast_defs(input: &TokenAst) -> Result<(TokenStream2, Vec<TokenStream2>)> {
             #parse_body
           }
           fn maybe(tokens: &mut TS) -> laps::span::Result<bool> {
-            std::result::Result::Ok(matches!(tokens.peek()?.kind, #pat))
+            #[allow(unused_parens)]
+            std::result::Result::Ok(matches!(tokens.peek()?.kind, #pat #if_guard))
           }
         }
         impl laps::span::Spanned for #name {
@@ -237,7 +239,7 @@ fn gen_ast_defs(input: &TokenAst) -> Result<(TokenStream2, Vec<TokenStream2>)> {
   let mod_name = ident(&format!("__token_ast_{}", input.name));
   let ast_defs = quote! {
     #[doc(hidden)]
-    #[allow(non_snake_case, unused_parens, unused_variables)]
+    #[allow(non_snake_case)]
     #vis mod #mod_name {
       use super::*;
       #(#defs)*
