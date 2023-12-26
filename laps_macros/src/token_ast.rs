@@ -224,7 +224,7 @@ fn gen_ast_defs(input: &TokenAst) -> Result<(TokenStream2, Vec<TokenStream2>)> {
           }
           fn maybe(tokens: &mut TS) -> laps::span::Result<bool> {
             #[allow(unused_parens)]
-            std::result::Result::Ok(matches!(tokens.peek()?.kind, #pat #if_guard))
+            std::result::Result::Ok(matches!(&tokens.peek()?.kind, #pat #if_guard))
           }
         }
         impl laps::span::Spanned for #name {
