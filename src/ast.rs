@@ -471,3 +471,46 @@ where
     }
   }
 }
+
+/// An AST `T` with a prefix `P`, like `T` or `P T`.
+///
+/// The `maybe` method of AST treats `P` as a single token, and returns
+/// `true` if both `P::maybe` returns `true` and `T::maybe` returns `true`.
+///
+/// # Notes
+///
+/// Do not use this AST type if `P` is not a single token.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct TokenPrefix<P, T>(pub P, pub T);
+
+impl<TS, P, T> Parse<TS> for TokenPrefix<P, T>
+where
+  TS: TokenStream,
+  P: Parse<TS>,
+  T: Parse<TS>,
+{
+  fn parse(tokens: &mut TS) -> Result<Self> {
+    Ok(Self(tokens.parse()?, tokens.parse()?))
+  }
+
+  fn maybe(tokens: &mut TS) -> Result<bool> {
+    if P::maybe(tokens)? {
+      let token = tokens.next_token()?;
+      let result = T::maybe(tokens)?;
+      tokens.unread(token);
+      Ok(result)
+    } else {
+      Ok(false)
+    }
+  }
+}
+
+impl<P, T> Spanned for TokenPrefix<P, T>
+where
+  P: Spanned,
+  T: Spanned,
+{
+  fn span(&self) -> Span {
+    self.0.span().into_end_updated(self.1.span())
+  }
+}
