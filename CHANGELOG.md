@@ -4,6 +4,10 @@ All notable changes to the `laps` will be documented in this file.
 
 ## Unreleased
 
+### Added
+
+* AST type `TokenPrefix`.
+
 ### Fixed
 
 * Issue about method `maybe` of ASTs generate by macro `token_ast`.
