@@ -2,7 +2,7 @@
 
 All notable changes to the `laps` will be documented in this file.
 
-## Unreleased
+## 0.1.7 - 2023-12-30
 
 ### Added
 
