@@ -2,6 +2,12 @@
 
 All notable changes to the `laps` will be documented in this file.
 
+## Unreleased
+
+### Added
+
+* AST type `NonEmptyOptSepList` and `OptSepList`.
+
 ## 0.1.7 - 2023-12-30
 
 ### Added
