@@ -299,6 +299,66 @@ where
 /// The delimiter will be stored.
 pub type SepList<T, S> = Option<NonEmptySepList<T, S>>;
 
+/// A non-empty linked list of AST `T`, separated by AST `S`, ending with
+/// an optional `S`, like `T`, `T S`, `T S T`, `T S T S`, `T S T S T`, ...
+///
+/// The delimiter will be stored.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum NonEmptyOptSepList<T, S> {
+  /// One element.
+  One(T),
+  /// One element with a separator.
+  OneWithSep(T, S),
+  /// More than one element.
+  More(T, S, Box<Self>),
+}
+
+impl<TS, T, S> Parse<TS> for NonEmptyOptSepList<T, S>
+where
+  TS: TokenStream,
+  T: Parse<TS>,
+  S: Parse<TS>,
+{
+  fn parse(tokens: &mut TS) -> Result<Self> {
+    let t = tokens.parse()?;
+    Ok(if S::maybe(tokens)? {
+      let s = tokens.parse()?;
+      if T::maybe(tokens)? {
+        Self::More(t, s, tokens.parse()?)
+      } else {
+        Self::OneWithSep(t, s)
+      }
+    } else {
+      Self::One(t)
+    })
+  }
+
+  fn maybe(tokens: &mut TS) -> Result<bool> {
+    T::maybe(tokens)
+  }
+}
+
+impl<T, S> Spanned for NonEmptyOptSepList<T, S>
+where
+  T: Spanned,
+  S: Spanned,
+{
+  fn span(&self) -> Span {
+    match self {
+      Self::One(t) => t.span(),
+      Self::OneWithSep(t, s) => t.span().into_end_updated(s.span()),
+      Self::More(t, _, l) => t.span().into_end_updated(l.span()),
+    }
+  }
+}
+
+/// A linked list of AST `T`, separated by AST `S`, ending with
+/// an optional `S`, like `<empty>`, `T`, `T S`, `T S T`, `T S T S`,
+/// `T S T S T`, ...
+///
+/// The delimiter will be stored.
+pub type OptSepList<T, S> = Option<NonEmptyOptSepList<T, S>>;
+
 /// An AST `T` quoted by AST `L` and AST `R`, like `L T R`.
 #[deprecated(
   since = "0.1.6",
